@@ -363,6 +363,16 @@ input {
   min-width: 0;
 }
 
+/* Holds the avatar plus the compact list's status dot, which the avatar's round clipping would cut off. */
+.avatar-wrap {
+  position: relative;
+  flex: none;
+}
+
+.avatar-status {
+  display: none;
+}
+
 /* The asset's picture, or its initial underneath as the fallback (same idea as the map markers). */
 .avatar {
   position: relative;
@@ -713,4 +723,54 @@ a.button-quiet {
 
 .theme-preview-dog span:nth-child(3) {
   background: #ffc59e;
+}
+
+/* Phones: a single row of pictures (or initials) with a status dot, leaving the screen to the map.
+   The details stay in the page for screen readers, just not visible. */
+@media (max-width: 767px) {
+  .sheet {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .asset-cards {
+    display: flex;
+    gap: 0.75rem;
+    overflow-x: auto;
+    /* Room for the selection ring, which would otherwise be clipped by the scroll area. */
+    padding: 5px;
+  }
+
+  .asset-card,
+  .asset-card-selected {
+    width: auto;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: 50%;
+  }
+
+  .asset-card-body {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .avatar-status {
+    display: block;
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+  }
+
+  .asset-card-selected .avatar {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
 }

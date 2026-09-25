@@ -40,7 +40,11 @@ function AssetCard({ asset, selected, onSelect }: { asset: Asset; selected: bool
       aria-pressed={selected}
       onClick={() => onSelect(asset.id)}
     >
-      <AssetAvatar asset={asset} />
+      <span className="avatar-wrap">
+        <AssetAvatar asset={asset} />
+        {/* Only shown in the compact phone list, where the name and details are hidden. */}
+        <span className={`avatar-status status-${asset.status}`} aria-hidden="true" />
+      </span>
       <span className="asset-card-body">
         <span className="asset-card-title">
           <span className={`status-dot status-${asset.status}`} aria-hidden="true" />
