@@ -98,6 +98,14 @@ function SettingsPage() {
       </section>
 
       <section>
+        <h2>Assets</h2>
+        <Link to="/assets" className="button-quiet">
+          Manage assets
+        </Link>
+        <p className="muted hint">Add or remove trackers, rename them, and change their photos. Saved in Traccar.</p>
+      </section>
+
+      <section>
         <h2>Account</h2>
         <p>
           Signed in as <strong>{user.name}</strong>

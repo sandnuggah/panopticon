@@ -19,6 +19,22 @@ const MAX_CACHED = 50
 type Cached = { bytes: ArrayBuffer; contentType: string; etag: string; expires: number }
 const cache = new Map<string, Cached>()
 
+/**
+ * When panopticon last changed each asset's image. Traccar saves every upload as device.<ext>, so the
+ * filename alone doesn't change the image URL; this goes in the URL too (see assets.server.ts).
+ */
+const versions = new Map<number, number>()
+
+export function assetImageVersion(id: number): number | undefined {
+  return versions.get(id)
+}
+
+/** After an upload or removal: drop the cached copy and give the asset a fresh image URL. */
+export function assetImageChanged(id: number, uniqueId: string): void {
+  versions.set(id, Date.now())
+  for (const key of cache.keys()) if (key.startsWith(`${uniqueId}/`)) cache.delete(key)
+}
+
 export async function assetImageResponse(request: Request, idParam: string): Promise<Response> {
   const id = Number(idParam)
   if (!Number.isInteger(id) || id <= 0) return new Response('Not found', { status: 404 })

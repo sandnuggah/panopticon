@@ -14,6 +14,9 @@ import { Route as SplatRouteImport } from './routes/$'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as AssetsIndexRouteImport } from './routes/assets.index'
+import { Route as AssetsIdRouteImport } from './routes/assets.$id'
+import { Route as AssetsNewRouteImport } from './routes/assets.new'
 import { Route as AuthSsoRouteImport } from './routes/auth.sso'
 import { Route as ImagesAssetIdRouteImport } from './routes/images.asset.$id'
 import { Route as ApiSessionOpenidCallbackRouteImport } from './routes/api.session.openid.callback'
@@ -43,6 +46,21 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssetsIndexRoute = AssetsIndexRouteImport.update({
+  id: '/assets/',
+  path: '/assets/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssetsIdRoute = AssetsIdRouteImport.update({
+  id: '/assets/$id',
+  path: '/assets/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssetsNewRoute = AssetsNewRouteImport.update({
+  id: '/assets/new',
+  path: '/assets/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthSsoRoute = AuthSsoRouteImport.update({
   id: '/auth/sso',
   path: '/auth/sso',
@@ -66,7 +84,10 @@ export interface FileRoutesByFullPath {
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/assets/$id': typeof AssetsIdRoute
+  '/assets/new': typeof AssetsNewRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/assets/': typeof AssetsIndexRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
   '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
@@ -76,7 +97,10 @@ export interface FileRoutesByTo {
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/assets/$id': typeof AssetsIdRoute
+  '/assets/new': typeof AssetsNewRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/assets': typeof AssetsIndexRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
   '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
@@ -87,7 +111,10 @@ export interface FileRoutesById {
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/assets/$id': typeof AssetsIdRoute
+  '/assets/new': typeof AssetsNewRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/assets/': typeof AssetsIndexRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
   '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
@@ -99,7 +126,10 @@ export interface FileRouteTypes {
     | '/live'
     | '/login'
     | '/settings'
+    | '/assets/$id'
+    | '/assets/new'
     | '/auth/sso'
+    | '/assets/'
     | '/images/asset/$id'
     | '/api/session/openid/callback'
   fileRoutesByTo: FileRoutesByTo
@@ -109,7 +139,10 @@ export interface FileRouteTypes {
     | '/live'
     | '/login'
     | '/settings'
+    | '/assets/$id'
+    | '/assets/new'
     | '/auth/sso'
+    | '/assets'
     | '/images/asset/$id'
     | '/api/session/openid/callback'
   id:
@@ -119,7 +152,10 @@ export interface FileRouteTypes {
     | '/live'
     | '/login'
     | '/settings'
+    | '/assets/$id'
+    | '/assets/new'
     | '/auth/sso'
+    | '/assets/'
     | '/images/asset/$id'
     | '/api/session/openid/callback'
   fileRoutesById: FileRoutesById
@@ -130,7 +166,10 @@ export interface RootRouteChildren {
   LiveRoute: typeof LiveRoute
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
+  AssetsIdRoute: typeof AssetsIdRoute
+  AssetsNewRoute: typeof AssetsNewRoute
   AuthSsoRoute: typeof AuthSsoRoute
+  AssetsIndexRoute: typeof AssetsIndexRoute
   ImagesAssetIdRoute: typeof ImagesAssetIdRoute
   ApiSessionOpenidCallbackRoute: typeof ApiSessionOpenidCallbackRoute
 }
@@ -172,6 +211,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/assets/': {
+      id: '/assets/'
+      path: '/assets'
+      fullPath: '/assets/'
+      preLoaderRoute: typeof AssetsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assets/$id': {
+      id: '/assets/$id'
+      path: '/assets/$id'
+      fullPath: '/assets/$id'
+      preLoaderRoute: typeof AssetsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assets/new': {
+      id: '/assets/new'
+      path: '/assets/new'
+      fullPath: '/assets/new'
+      preLoaderRoute: typeof AssetsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/sso': {
       id: '/auth/sso'
       path: '/auth/sso'
@@ -202,7 +262,10 @@ const rootRouteChildren: RootRouteChildren = {
   LiveRoute: LiveRoute,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
+  AssetsIdRoute: AssetsIdRoute,
+  AssetsNewRoute: AssetsNewRoute,
   AuthSsoRoute: AuthSsoRoute,
+  AssetsIndexRoute: AssetsIndexRoute,
   ImagesAssetIdRoute: ImagesAssetIdRoute,
   ApiSessionOpenidCallbackRoute: ApiSessionOpenidCallbackRoute,
 }

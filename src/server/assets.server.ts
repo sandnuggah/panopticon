@@ -1,6 +1,7 @@
 import type { Asset, AssetLocation } from '../lib/asset'
 import type { LiveUpdate } from '../lib/live'
 import type { Trails } from '../lib/trail'
+import { assetImageVersion } from './images.server'
 import {
   getDevices,
   getLatestPositions,
@@ -64,9 +65,11 @@ export function toDeviceUpdate(device: TraccarDevice): LiveUpdate {
   }
 }
 
-/** The filename goes in the query so a re-upload in another format gets a fresh URL. */
-function imageUrl(device: TraccarDevice): string | undefined {
-  return device.image ? `/images/asset/${device.id}?v=${device.image}` : undefined
+/** The filename and panopticon's own upload version go in the query, so a new image gets a fresh URL. */
+export function imageUrl(device: TraccarDevice): string | undefined {
+  if (!device.image) return undefined
+  const version = assetImageVersion(device.id)
+  return `/images/asset/${device.id}?v=${device.image}${version ? `-${version}` : ''}`
 }
 
 export function toPositionUpdate(position: TraccarPosition): LiveUpdate {

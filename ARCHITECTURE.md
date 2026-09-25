@@ -4,6 +4,7 @@ Phone-friendly web UI for a self-hosted Traccar server, tracking a handful (1–
 Replaces Traccar's own UI for daily use; Traccar's UI stays available for admin work.
 
 - **Must:** SSO and password sign-in, live map, last-seen time, battery level (when the tracker reports it, see [Battery](#battery)).
+- **Also:** add, rename and remove assets and change their photos (see [Managing assets](#managing-assets)), so everyday changes don't need Traccar's UI.
 - **Won't:** user management, reports, multi-vehicle features.
 - **Rules:** no secrets in git, no external analytics, minimal dependencies.
 - **Done when:** you can sign in to your Traccar server and see your assets on a map.
@@ -141,9 +142,9 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 
 ## UI
 
-- **Pages:** `/login`, `/` and `/settings`. The selected asset is a search param (`/?asset=12`), so it survives a reload.
+- **Pages:** `/login`, `/`, `/settings`, and `/assets`, `/assets/new` and `/assets/<id>` for [managing assets](#managing-assets). The selected asset is a search param (`/?asset=12`), so it survives a reload.
 - **App name:** the desktop sidebar starts with the app's name as the theme shows it ("Panopticon 👁️", or "Petopticon 🐾" in the pet theme). On phones that heading is hidden visually but kept for screen readers, so the compact list stays one row.
-- **Settings link:** a round cog button (an 8-tooth gear, generated rather than hand-drawn so it's symmetric) in the map's top-left corner, followed by the live indicator. It's a plain link straight to Settings (`SettingsLink.tsx`); an earlier version opened a menu, which was one tap too many. Who's signed in is shown on the Settings page.
+- **Settings link:** a round cog button (an 8-tooth gear, generated rather than hand-drawn so it's symmetric) at the end of the asset list: at the right end of the bottom bar on phones, at the bottom of the sidebar on desktop. The live indicator stays in the map's top-left corner. It's a plain link straight to Settings (`SettingsLink.tsx`); an earlier version opened a menu, which was one tap too many. Who's signed in is shown on the Settings page.
   - A profile picture was considered and dropped. Traccar has no user pictures, and the one Pocket ID sends at sign-in reaches only Traccar, which discards it. Getting it would need either a Pocket ID API key (which can't be scoped, so a full admin key) or a second OIDC client in panopticon.
 - **Layout:** on phones (under 768 px), the map fills the screen and the assets form one compact row along the bottom: each is just its picture or initial, with a status dot on the corner and a ring when selected (about 74 px tall in all). The name and details stay in each button for screen readers but are hidden visually. From 768 px wide, the assets become full cards in a 22 rem side panel. The list never covers the map, so the map needs no padding tricks. Each full card shows:
   - the asset's picture from Traccar, or its initial if there's none or it fails to load (like the map marker);
@@ -157,7 +158,7 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 - **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first, and maplibre stays out of the first-load bundle.
 - **maplibre worker:** v6 looks for its worker script next to its own file, which breaks once bundled. Vite bundles it instead (`?worker&url`, `worker.format: 'es'`), and `setWorkerUrl` points maplibre at the same-origin result.
 - **Data freshness:** the `/` loader reloads when you arrive on the map (`shouldReload: cause !== 'stay'`), not when you select an asset. Live updates keep it current in between.
-- **Settings** (`/settings`): trail length, plus the account section with sign-out. Settings live in `localStorage`, per browser. They're a convenience: without storage, the defaults apply. Server render and hydration use the defaults, so the page waits for the stored value before fetching trail history.
+- **Settings** (`/settings`): theme, trail length, a link to manage assets, and the account section with sign-out. Settings live in `localStorage`, per browser. They're a convenience: without storage, the defaults apply. Server render and hydration use the defaults, so the page waits for the stored value before fetching trail history.
 - **Home screen:** `public/manifest.webmanifest` plus icons (`icon.svg`, 192/512 px maskable PNGs, 180 px `apple-touch-icon`), so the app can be added to the home screen and opens full-screen. No service worker, and no offline use.
 
 ## Asset images
@@ -172,7 +173,24 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
 - **Traccar's media endpoint only accepts a session cookie,** not API tokens. So fetching an image opens a session from the token (`GET /api/session?token=`) for that one request and ends it right after. Images are then kept in memory for 5 minutes (at most 50), and served with `Cache-Control: private, max-age=300` and an ETag, so most loads cost Traccar nothing.
 - **Accepted filenames:** only `device.<ext>` is used; anything else in `deviceImage` is ignored, which also rules out odd paths.
 - **Marker behaviour:** the `<img>` sits on top of the initial and hides itself if it fails to load. Live updates only touch the `<img>` when the URL changes, so it doesn't reload. Markers with a picture are larger (2.75 rem, 3.25 rem when selected), and stale ones turn grey.
-- **Updating a picture:** a new upload with the same file type keeps the same URL, so it can take up to about 10 minutes to show everywhere (5 minutes of server cache, then up to 5 minutes of browser cache).
+- **Updating a picture:** Traccar saves every upload as `device.<ext>`, so the filename alone doesn't change the URL.
+  - Uploaded in panopticon: shows at once. The server drops its cached copy and adds its own version to the URL (`?v=device.jpg-<time>`). That version is kept in memory, so after a restart URLs go back to `?v=<file>`, which only matters within 5 minutes of an upload.
+  - Uploaded in Traccar's UI: can take up to about 10 minutes to show everywhere (5 minutes of server cache, then up to 5 minutes of browser cache).
+
+## Managing assets
+
+Settings → Manage assets lists every device the user can see, including ones disabled in Traccar. From there you can add an asset (name and tracker ID), and on each asset's page change its photo, rename it or remove it. Only these three fields are handled; groups, phone numbers, models and categories stay in Traccar's UI.
+
+- **Traccar calls** (`traccar.server.ts`):
+  - Add: `POST /api/devices` with `{name, uniqueId}`. Traccar links the new device to the user who creates it.
+  - Rename: `PUT /api/devices/<id>`. The PUT replaces the whole record, so the server fetches the device (`GET /api/devices/<id>`), changes `name` on the full JSON and sends all of it back. Fields panopticon doesn't know about survive.
+  - Photo: `POST /api/devices/<id>/image` with the image bytes, which returns `device.<ext>`; then a PUT sets the `deviceImage` attribute, as Traccar's UI does. Removing a photo clears the attribute. Traccar has no endpoint to delete the file, so it stays in its media folder.
+  - Remove: `DELETE /api/devices/<id>`, after a confirmation step on the page.
+- **Who may change what:** Traccar decides (`PermissionsService.checkEdit`). Admins may do anything. Other users are refused when the server or their account is read-only or device-read-only, and adding is refused at their device limit (0 means none). The server reads these from `GET /api/session` and `GET /api/server` only to hide controls that would fail; Traccar still enforces them.
+- **Errors:** Traccar answers refusals with HTTP 400 and the exception message in the body, so a refusal is never mistaken for an expired sign-in. `manage.server.ts` turns them into results the page explains: not allowed, tracker ID already used (the database's unique index), not found, image refused, or unavailable.
+- **Photos:** phone photos are several MB, and Traccar's limit is 500 KB. The browser crops them to a centred square and shrinks them to 512 px JPEG with a canvas (`assetImage.ts`), with no new dependency. The server checks the size again and reads the type from the file's first bytes, not from what the browser declares.
+- **Tracker ID:** the browser sends it once, when adding. It's never sent back: the pages show only name and photo, for the same reason as in [Asset images](#asset-images).
+- **After a change** the pages reload their data (`router.invalidate`), and the map reloads its list when you return to it.
 
 ## Themes
 
@@ -218,7 +236,10 @@ src/
     auth.sso.ts                       server route: start SSO
     images.asset.$id.ts               server route: asset picture
     api.session.openid.callback.ts    server route: SSO return (path fixed by Traccar)
-    settings.tsx                      trail length, sign-out
+    settings.tsx                      theme, trail length, manage assets link, sign-out
+    assets.index.tsx                  list of assets to manage
+    assets.new.tsx                    add an asset
+    assets.$id.tsx                    photo, name, remove
     live.ts                           server route: SSE relay
     $.ts                              Traccar email links → 302 to Traccar; else 404
   server/
@@ -228,6 +249,8 @@ src/
     assets.server.ts                  Traccar → Asset mapping
     auth.functions.ts                 getUser / loginWithPassword / logout
     assets.functions.ts               getAssets
+    manage.server.ts                  add / rename / remove assets and photos; edit access; error mapping
+    manage.functions.ts               server functions for the /assets pages, with input checks
     map.functions.ts                  getMapStyleUrl
     images.server.ts                  /images/asset/<id>: device pictures from Traccar, cached
     theme.server.ts                   theme from the request's cookie
@@ -238,8 +261,9 @@ src/
   components/
     AssetMap.tsx                      maplibre map + markers (browser only, lazy)
     AssetSheet.tsx                    asset cards
+    AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
-    SettingsLink.tsx                  cog link on the map to Settings
+    SettingsLink.tsx                  cog link to Settings, at the end of the asset list
     RelativeTime.tsx
   lib/
     asset.ts                          Asset view model + isStale (shared with the browser)
@@ -248,6 +272,8 @@ src/
     trail.ts                          trail types, extend/prune
     settings.ts                       per-browser settings (localStorage)
     theme.ts                          THEMES, useTheme (cookie)
+    assetImage.ts                     crop + shrink photos (browser), sniff image type (server)
+    editErrors.ts                     messages for failed asset changes
     useLiveAssets.ts                  EventSource + trails + reconnect logic
 ```
 

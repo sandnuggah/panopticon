@@ -9,6 +9,15 @@ export type TraccarUser = {
   email: string
 }
 
+/** What a user may change, from their Traccar user record. */
+export type TraccarUserAccess = {
+  administrator: boolean
+  readonly: boolean
+  deviceReadonly: boolean
+  /** -1 means no limit, 0 means they can't add devices. */
+  deviceLimit: number
+}
+
 export type TraccarDevice = {
   id: number
   name: string
@@ -66,13 +75,20 @@ export async function createPasswordSession(
   return { kind: 'ok', user: parseUser(await response.json()), sessionCookie }
 }
 
-/** Public server info. `openIdEnabled` says whether Traccar has SSO configured. */
-export async function getServerInfo(): Promise<{ openIdEnabled: boolean }> {
+/**
+ * Public server info. `openIdEnabled` says whether Traccar has SSO configured; `readonly` and
+ * `deviceReadonly` are server-wide limits on what non-admin users may change.
+ */
+export async function getServerInfo(): Promise<{ openIdEnabled: boolean; readonly: boolean; deviceReadonly: boolean }> {
   const response = await request('/api/server')
   await ensureOk(response, 'GET /api/server')
   const value: unknown = await response.json()
   if (!isObject(value)) throw unexpected('server is not an object')
-  return { openIdEnabled: value.openIdEnabled === true }
+  return {
+    openIdEnabled: value.openIdEnabled === true,
+    readonly: value.readonly === true,
+    deviceReadonly: value.deviceReadonly === true,
+  }
 }
 
 /** Starts Traccar's OpenID Connect flow. Returns the identity provider URL to send the browser to. */
@@ -103,6 +119,18 @@ export async function getTraccarSessionUser(sessionCookie: string): Promise<Trac
   const response = await request('/api/session', { cookie: sessionCookie })
   await ensureOk(response, 'GET /api/session')
   return parseUser(await response.json())
+}
+
+/** The token's user, with the settings that limit what they may change. */
+export async function getUserAccess(token: string): Promise<TraccarUserAccess> {
+  const value = await getJson('/api/session', token)
+  if (!isObject(value)) throw unexpected('user is not an object')
+  return {
+    administrator: value.administrator === true,
+    readonly: value.readonly === true,
+    deviceReadonly: value.deviceReadonly === true,
+    deviceLimit: typeof value.deviceLimit === 'number' ? value.deviceLimit : -1,
+  }
 }
 
 export async function endSession(sessionCookie: string): Promise<void> {
@@ -158,6 +186,59 @@ export async function getDevices(token: string): Promise<TraccarDevice[]> {
 export async function getDevice(token: string, id: number): Promise<TraccarDevice | null> {
   const devices = parseList(await getJson(`/api/devices?id=${id}`, token), parseDevice)
   return devices.find((device) => device.id === id) ?? null
+}
+
+/** Adds a device. Traccar gives the creating user access to it. */
+export async function createDevice(token: string, name: string, uniqueId: string): Promise<TraccarDevice> {
+  const response = await request('/api/devices', { method: 'POST', token, json: { name, uniqueId } })
+  await ensureOk(response, 'POST /api/devices')
+  return parseDevice(await response.json())
+}
+
+/**
+ * Changes a device. Traccar's PUT replaces the whole record, so this fetches it, lets `edit` change
+ * fields on the full JSON (keeping ones panopticon doesn't know about), and sends it all back.
+ */
+export async function updateDevice(token: string, id: number, edit: (device: Json) => void): Promise<TraccarDevice> {
+  const device = await getJson(`/api/devices/${id}`, token)
+  if (!isObject(device) || device.id !== id) throw unexpected('device is not an object')
+  edit(device)
+  const response = await request(`/api/devices/${id}`, { method: 'PUT', token, json: device })
+  await ensureOk(response, `PUT /api/devices/${id}`)
+  return parseDevice(await response.json())
+}
+
+/** The attributes object of a device's full JSON, created if missing. */
+export function deviceAttributes(device: Json): Json {
+  if (!isObject(device.attributes)) device.attributes = {}
+  return device.attributes as Json
+}
+
+export async function deleteDevice(token: string, id: number): Promise<void> {
+  const response = await request(`/api/devices/${id}`, { method: 'DELETE', token })
+  await ensureOk(response, `DELETE /api/devices/${id}`)
+}
+
+/**
+ * Stores an image in Traccar's media folder for the device, as device.<ext>. Returns that filename;
+ * it still has to be saved in the device's `deviceImage` attribute to be used.
+ */
+export async function uploadDeviceImage(
+  token: string,
+  id: number,
+  bytes: Uint8Array<ArrayBuffer>,
+  contentType: string,
+): Promise<string> {
+  const response = await request(`/api/devices/${id}/image`, {
+    method: 'POST',
+    token,
+    body: bytes,
+    headers: { 'Content-Type': contentType },
+  })
+  await ensureOk(response, `POST /api/devices/${id}/image`)
+  const filename = (await response.text()).trim()
+  if (!/^device\.(jpg|png|gif|webp)$/.test(filename)) throw unexpected(`image upload returned ${filename.slice(0, 40)}`)
+  return filename
 }
 
 /**
@@ -223,11 +304,15 @@ async function getJson(path: string, token: string): Promise<unknown> {
 
 async function request(
   path: string,
-  { token, cookie, ...init }: RequestInit & { token?: string; cookie?: string } = {},
+  { token, cookie, json, ...init }: RequestInit & { token?: string; cookie?: string; json?: unknown } = {},
 ): Promise<Response> {
   const headers = new Headers(init.headers)
   if (token) headers.set('Authorization', `Bearer ${token}`)
   if (cookie) headers.set('Cookie', cookie)
+  if (json !== undefined) {
+    headers.set('Content-Type', 'application/json')
+    init.body = JSON.stringify(json)
+  }
   try {
     return await fetch(env().traccarUrl + path, {
       ...init,
@@ -260,7 +345,7 @@ function readSessionCookie(response: Response): string {
 
 // Response parsing
 
-type Json = Record<string, unknown>
+export type Json = Record<string, unknown>
 
 function isObject(value: unknown): value is Json {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
