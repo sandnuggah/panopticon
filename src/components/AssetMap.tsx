@@ -23,6 +23,7 @@ const ASSET_ZOOM = 15
 const TRAILS = 'trails'
 const PAWS = 'paws'
 const PAW_IMAGE = 'paw-prints'
+const ATTRIBUTION_SECONDS = 5
 
 type Props = {
   assets: Asset[]
@@ -59,13 +60,21 @@ export default function AssetMap({ assets, trails, theme, styleUrl, selectedId, 
       attributionControl: { compact: true },
     })
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
+    // The map data's licence requires visible attribution, but lets it shrink to the (i) button
+    // after a few seconds. Maplibre collapses it on drag; this does the same on a timer, counted
+    // from when the style has loaded and the attribution has something to show.
+    let collapseAttribution: ReturnType<typeof setTimeout> | undefined
     map.on('load', () => {
       addTrailLayers(map)
       setStyleLoaded(true)
+      collapseAttribution = setTimeout(() => {
+        map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show')
+      }, ATTRIBUTION_SECONDS * 1000)
     })
     mapRef.current = map
     const markers = markersRef.current
     return () => {
+      clearTimeout(collapseAttribution)
       markers.clear()
       map.remove()
       mapRef.current = null
