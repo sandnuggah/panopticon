@@ -61,7 +61,7 @@ export async function createPasswordSession(
     const challenge = response.headers.get('WWW-Authenticate') ?? ''
     return challenge.toUpperCase().includes('TOTP') ? { kind: 'code-required' } : { kind: 'invalid' }
   }
-  ensureOk(response, 'POST /api/session')
+  await ensureOk(response, 'POST /api/session')
   const sessionCookie = readSessionCookie(response)
   return { kind: 'ok', user: parseUser(await response.json()), sessionCookie }
 }
@@ -69,7 +69,7 @@ export async function createPasswordSession(
 /** Public server info. `openIdEnabled` says whether Traccar has SSO configured. */
 export async function getServerInfo(): Promise<{ openIdEnabled: boolean }> {
   const response = await request('/api/server')
-  ensureOk(response, 'GET /api/server')
+  await ensureOk(response, 'GET /api/server')
   const value: unknown = await response.json()
   if (!isObject(value)) throw unexpected('server is not an object')
   return { openIdEnabled: value.openIdEnabled === true }
@@ -101,7 +101,7 @@ export async function finishOpenIdLogin(query: URLSearchParams): Promise<OpenIdC
 /** The user a Traccar session cookie belongs to. */
 export async function getTraccarSessionUser(sessionCookie: string): Promise<TraccarUser> {
   const response = await request('/api/session', { cookie: sessionCookie })
-  ensureOk(response, 'GET /api/session')
+  await ensureOk(response, 'GET /api/session')
   return parseUser(await response.json())
 }
 
@@ -117,7 +117,7 @@ export async function exchangeSessionForToken(sessionCookie: string, expiresAt: 
       cookie: sessionCookie,
       body: new URLSearchParams({ expiration: expiresAt.toISOString() }),
     })
-    ensureOk(response, 'POST /api/session/token')
+    await ensureOk(response, 'POST /api/session/token')
     const token = (await response.text()).trim().replace(/^"|"$/g, '')
     if (!token) throw new TraccarError('Traccar returned an empty token')
     return token
@@ -147,7 +147,7 @@ export async function revokeToken(token: string): Promise<void> {
     token,
     body: new URLSearchParams({ token }),
   })
-  ensureOk(response, 'POST /api/session/token/revoke')
+  await ensureOk(response, 'POST /api/session/token/revoke')
 }
 
 export async function getDevices(token: string): Promise<TraccarDevice[]> {
@@ -167,12 +167,12 @@ export async function getDevice(token: string, id: number): Promise<TraccarDevic
  */
 export async function getDeviceImage(token: string, uniqueId: string, filename: string): Promise<ArrayBuffer | null> {
   const login = await request(`/api/session?${new URLSearchParams({ token })}`)
-  ensureOk(login, 'GET /api/session?token')
+  await ensureOk(login, 'GET /api/session?token')
   const sessionCookie = readSessionCookie(login)
   try {
     const response = await request(`/api/media/${encodeURIComponent(uniqueId)}/${filename}`, { cookie: sessionCookie })
     if (response.status === 404) return null
-    ensureOk(response, 'GET /api/media')
+    await ensureOk(response, 'GET /api/media')
     return await response.arrayBuffer()
   } finally {
     await endSession(sessionCookie)
@@ -217,7 +217,7 @@ export function parseSocketMessage(text: string): { devices: TraccarDevice[]; po
 
 async function getJson(path: string, token: string): Promise<unknown> {
   const response = await request(path, { token })
-  ensureOk(response, `GET ${path}`)
+  await ensureOk(response, `GET ${path}`)
   return response.json()
 }
 
@@ -241,10 +241,12 @@ async function request(
   }
 }
 
-function ensureOk(response: Response, what: string): void {
-  if (!response.ok) {
-    throw new TraccarError(`${what} failed with HTTP ${response.status}`, response.status)
-  }
+/** Throws for non-2xx. Traccar puts the reason (a Java exception) in the body; its first line goes in the message. */
+async function ensureOk(response: Response, what: string): Promise<void> {
+  if (response.ok) return
+  const body = await response.text().catch(() => '')
+  const reason = body.split('\n', 1)[0]!.trim().slice(0, 200)
+  throw new TraccarError(`${what} failed with HTTP ${response.status}${reason ? `: ${reason}` : ''}`, response.status)
 }
 
 function readSessionCookie(response: Response): string {
