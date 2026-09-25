@@ -12,7 +12,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // maplibre looks for its worker next to its own file, which breaks once bundled.
 // Let Vite bundle the worker and hand maplibre the resulting same-origin URL.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
-import { isStale, type Asset } from '../lib/asset'
+import { assetInitial, isStale, type Asset } from '../lib/asset'
 import type { ThemeId } from '../lib/theme'
 import type { Trails } from '../lib/trail'
 import { useNow } from '../lib/useNow'
@@ -312,7 +312,7 @@ function updateMarkerElement(element: HTMLElement, asset: Asset, state: { stale:
   element.classList.toggle('marker-stale', state.stale)
   element.classList.toggle('marker-selected', state.selected)
   element.setAttribute('aria-label', `Show ${asset.name}`)
-  element.querySelector('.marker-initial')!.textContent = initial(asset.name)
+  element.querySelector('.marker-initial')!.textContent = assetInitial(asset.name)
   element.querySelector('.marker-label')!.textContent = asset.name
 
   const image = element.querySelector<HTMLImageElement>('.marker-image')!
@@ -330,8 +330,4 @@ function updateMarkerElement(element: HTMLElement, asset: Asset, state: { stale:
   const showImage = Boolean(asset.imageUrl) && !image.dataset.failed
   image.hidden = !showImage
   element.classList.toggle('marker-has-image', showImage)
-}
-
-function initial(name: string): string {
-  return Array.from(name.trim())[0]?.toUpperCase() ?? '?'
 }

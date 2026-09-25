@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { contactIsNewerThanFix, isStale, type Asset } from '../lib/asset'
+import { useState, type ReactNode } from 'react'
+import { assetInitial, contactIsNewerThanFix, isStale, type Asset } from '../lib/asset'
 import { useNow } from '../lib/useNow'
 import { RelativeTime } from './RelativeTime'
 
@@ -7,14 +7,14 @@ type Props = {
   assets: Asset[]
   selectedId: number | undefined
   onSelect: (id: number) => void
-  header: ReactNode
+  header?: ReactNode
 }
 
 /** The list under the map on phones, beside it on wider screens. */
 export function AssetSheet({ assets, selectedId, onSelect, header }: Props) {
   return (
     <section className="sheet" aria-label="Assets">
-      <header className="sheet-header">{header}</header>
+      {header && <header className="sheet-header">{header}</header>}
       {assets.length === 0 ? (
         <p className="muted">No assets on this account yet.</p>
       ) : (
@@ -40,27 +40,52 @@ function AssetCard({ asset, selected, onSelect }: { asset: Asset; selected: bool
       aria-pressed={selected}
       onClick={() => onSelect(asset.id)}
     >
-      <span className="asset-card-title">
-        <span className={`status-dot status-${asset.status}`} aria-hidden="true" />
-        <span className="asset-card-name">{asset.name}</span>
-        <span className="asset-card-status">{statusLabel(asset.status)}</span>
-      </span>
-      <span>
-        {asset.location ? (
-          <>
-            Seen <RelativeTime time={asset.location.fixTime} />
-          </>
-        ) : (
-          'No location yet'
-        )}
-      </span>
-      {asset.lastUpdate && (!asset.location || contactIsNewerThanFix(asset)) && (
-        <span className="muted">
-          Last contact <RelativeTime time={asset.lastUpdate} />
+      <AssetAvatar asset={asset} />
+      <span className="asset-card-body">
+        <span className="asset-card-title">
+          <span className={`status-dot status-${asset.status}`} aria-hidden="true" />
+          <span className="asset-card-name">{asset.name}</span>
+          <span className="asset-card-status">{statusLabel(asset.status)}</span>
         </span>
-      )}
-      <Battery battery={asset.battery} />
+        <span>
+          {asset.location ? (
+            <>
+              Seen <RelativeTime time={asset.location.fixTime} />
+            </>
+          ) : (
+            'No location yet'
+          )}
+        </span>
+        {asset.lastUpdate && (!asset.location || contactIsNewerThanFix(asset)) && (
+          <span className="muted">
+            Last contact <RelativeTime time={asset.lastUpdate} />
+          </span>
+        )}
+        <Battery battery={asset.battery} />
+      </span>
     </button>
+  )
+}
+
+/** The asset's picture from Traccar, or its initial if there's none or it doesn't load. */
+function AssetAvatar({ asset }: { asset: Asset }) {
+  // Remember which URL failed, so a new picture gets a fresh try.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const showImage = asset.imageUrl !== undefined && asset.imageUrl !== failedUrl
+  return (
+    <span className="avatar" aria-hidden="true">
+      <span className="avatar-initial">{assetInitial(asset.name)}</span>
+      {showImage && (
+        <img
+          className="avatar-image"
+          src={asset.imageUrl}
+          alt=""
+          decoding="async"
+          draggable={false}
+          onError={() => setFailedUrl(asset.imageUrl ?? null)}
+        />
+      )}
+    </span>
   )
 }
 

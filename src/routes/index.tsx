@@ -1,7 +1,8 @@
 import { lazy, Suspense, useState } from 'react'
-import { ClientOnly, createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, redirect } from '@tanstack/react-router'
 import { AssetSheet } from '../components/AssetSheet'
 import { LiveIndicator } from '../components/LiveIndicator'
+import { UserMenu } from '../components/UserMenu'
 import { useSettings } from '../lib/settings'
 import { useTheme } from '../lib/theme'
 import { useLiveAssets } from '../lib/useLiveAssets'
@@ -36,6 +37,7 @@ export const Route = createFileRoute('/')({
 
 function Home() {
   const loaderData = Route.useLoaderData()
+  const { user } = Route.useRouteContext()
   const { asset: selectedId } = Route.useSearch()
   const navigate = Route.useNavigate()
   const [focusToken, setFocusToken] = useState(0)
@@ -55,7 +57,13 @@ function Home() {
 
   return (
     <main className="app">
+      {/* The page still needs a heading for screen readers, just not a visible logo. */}
+      <h1 className="visually-hidden">panopticon</h1>
       <div className="map-area">
+        <div className="map-overlay">
+          <UserMenu name={user.name} />
+          <LiveIndicator status={status} />
+        </div>
         <ClientOnly fallback={mapPlaceholder}>
           <Suspense fallback={mapPlaceholder}>
             <AssetMap
@@ -70,20 +78,7 @@ function Home() {
           </Suspense>
         </ClientOnly>
       </div>
-      <AssetSheet
-        assets={assets}
-        selectedId={selectedId}
-        onSelect={select}
-        header={
-          <>
-            <h1>panopticon</h1>
-            <LiveIndicator status={status} />
-            <Link to="/settings" className="button-quiet">
-              Settings
-            </Link>
-          </>
-        }
-      />
+      <AssetSheet assets={assets} selectedId={selectedId} onSelect={select} />
     </main>
   )
 }

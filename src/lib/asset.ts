@@ -30,6 +30,11 @@ export type Asset = {
   imageUrl?: string
 }
 
+/** First letter of the name, shown when there's no picture. */
+export function assetInitial(name: string): string {
+  return Array.from(name.trim())[0]?.toUpperCase() ?? '?'
+}
+
 /** A location older than this is shown greyed out. */
 const STALE_AFTER_MS = 30 * 60 * 1000
 
