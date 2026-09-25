@@ -67,19 +67,31 @@ function SettingsPage() {
 
       <section>
         <h2>Map</h2>
-        <label className="field">
-          Trail
-          <select
-            value={settings.trailMinutes}
-            onChange={(event) => updateSettings({ trailMinutes: Number(event.target.value) })}
-          >
+        <div className="field trail-field">
+          <label htmlFor="trail-minutes" className="trail-label">
+            Trail
+            <output htmlFor="trail-minutes">{trailLabel(settings.trailMinutes)}</output>
+          </label>
+          {/* Steps through the options by position: they aren't evenly spaced in minutes. */}
+          <input
+            id="trail-minutes"
+            className="trail-slider"
+            type="range"
+            min={0}
+            max={TRAIL_MINUTES_OPTIONS.length - 1}
+            step={1}
+            value={Math.max(0, (TRAIL_MINUTES_OPTIONS as readonly number[]).indexOf(settings.trailMinutes))}
+            aria-valuetext={trailLabel(settings.trailMinutes)}
+            onChange={(event) => updateSettings({ trailMinutes: TRAIL_MINUTES_OPTIONS[Number(event.target.value)] })}
+          />
+          <div className="trail-stops" aria-hidden="true">
             {TRAIL_MINUTES_OPTIONS.map((minutes) => (
-              <option key={minutes} value={minutes}>
-                {trailLabel(minutes)}
-              </option>
+              <span key={minutes} className={minutes === settings.trailMinutes ? 'trail-stop-current' : undefined}>
+                {trailStopLabel(minutes)}
+              </span>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
         <p className="muted hint">
           How much recent movement to draw behind each asset. Saved in this browser only.
         </p>
@@ -103,4 +115,10 @@ function trailLabel(minutes: number): string {
   if (minutes < 60) return `Last ${minutes} minutes`
   const hours = minutes / 60
   return hours === 1 ? 'Last hour' : `Last ${hours} hours`
+}
+
+/** The short form under each slider stop. */
+function trailStopLabel(minutes: number): string {
+  if (minutes === 0) return 'Off'
+  return minutes < 60 ? `${minutes}m` : `${minutes / 60}h`
 }
