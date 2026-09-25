@@ -143,7 +143,7 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 
 - **Pages:** `/login`, `/` and `/settings`. The selected asset is a search param (`/?asset=12`), so it survives a reload.
 - **App name:** the desktop sidebar starts with the app's name as the theme shows it ("Panopticon 👁️", or "Petopticon 🐾" in the pet theme). On phones that heading is hidden visually but kept for screen readers, so the compact list stays one row.
-- **Map menu:** a round cog button (an 8-tooth gear, generated rather than hand-drawn so it's symmetric) in the map's top-left corner, followed by the live indicator. It opens a small menu (`UserMenu.tsx`) showing who's signed in and a **Settings** link. The menu focuses its first item when opened; **Escape** or a click outside closes it and returns focus to the button.
+- **Settings link:** a round cog button (an 8-tooth gear, generated rather than hand-drawn so it's symmetric) in the map's top-left corner, followed by the live indicator. It's a plain link straight to Settings (`SettingsLink.tsx`); an earlier version opened a menu, which was one tap too many. Who's signed in is shown on the Settings page.
   - A profile picture was considered and dropped. Traccar has no user pictures, and the one Pocket ID sends at sign-in reaches only Traccar, which discards it. Getting it would need either a Pocket ID API key (which can't be scoped, so a full admin key) or a second OIDC client in panopticon.
 - **Layout:** on phones (under 768 px), the map fills the screen and the assets form one compact row along the bottom: each is just its picture or initial, with a status dot on the corner and a ring when selected (about 74 px tall in all). The name and details stay in each button for screen readers but are hidden visually. From 768 px wide, the assets become full cards in a 22 rem side panel. The list never covers the map, so the map needs no padding tricks. Each full card shows:
   - the asset's picture from Traccar, or its initial if there's none or it fails to load (like the map marker);
@@ -239,7 +239,7 @@ src/
     AssetMap.tsx                      maplibre map + markers (browser only, lazy)
     AssetSheet.tsx                    asset cards
     LiveIndicator.tsx                 Live / Connecting / Offline
-    UserMenu.tsx                      cog menu on the map: signed-in user, Settings
+    SettingsLink.tsx                  cog link on the map to Settings
     RelativeTime.tsx
   lib/
     asset.ts                          Asset view model + isStale (shared with the browser)

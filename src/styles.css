@@ -254,16 +254,11 @@ input {
   pointer-events: auto;
 }
 
-.user-menu {
-  position: relative;
-}
-
-.user-menu-button {
+.settings-link {
   display: grid;
   place-items: center;
   width: 2.5rem;
   height: 2.5rem;
-  padding: 0;
   border: 1px solid var(--border);
   border-radius: 50%;
   background: var(--surface);
@@ -271,52 +266,18 @@ input {
   box-shadow: var(--shadow);
 }
 
-.user-menu-button[aria-expanded='true'] {
+.settings-link:hover {
   background: var(--surface-selected);
-  border-color: var(--accent);
 }
 
-.user-menu-icon {
+.settings-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-link-icon {
   width: 1.35rem;
   height: 1.35rem;
-}
-
-.user-menu-panel {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  left: 0;
-  min-width: 11rem;
-  padding: 0.35rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-}
-
-.user-menu-name {
-  margin: 0;
-  padding: 0.4rem 0.6rem 0.5rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-  border-bottom: 1px solid var(--border);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-menu-item {
-  display: block;
-  margin-top: 0.35rem;
-  padding: 0.5rem 0.6rem;
-  border-radius: calc(var(--radius) - 4px);
-  color: var(--text);
-  text-decoration: none;
-}
-
-.user-menu-item:hover,
-.user-menu-item:focus-visible {
-  background: var(--surface-selected);
-  outline: none;
 }
 
 .map-overlay .live-indicator {

@@ -2,7 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { ClientOnly, createFileRoute, redirect } from '@tanstack/react-router'
 import { AssetSheet } from '../components/AssetSheet'
 import { LiveIndicator } from '../components/LiveIndicator'
-import { UserMenu } from '../components/UserMenu'
+import { SettingsLink } from '../components/SettingsLink'
 import { useSettings } from '../lib/settings'
 import { appName, useTheme } from '../lib/theme'
 import { useLiveAssets } from '../lib/useLiveAssets'
@@ -37,7 +37,6 @@ export const Route = createFileRoute('/')({
 
 function Home() {
   const loaderData = Route.useLoaderData()
-  const { user } = Route.useRouteContext()
   const { asset: selectedId } = Route.useSearch()
   const navigate = Route.useNavigate()
   const [focusToken, setFocusToken] = useState(0)
@@ -59,7 +58,7 @@ function Home() {
     <main className="app">
       <div className="map-area">
         <div className="map-overlay">
-          <UserMenu name={user.name} />
+          <SettingsLink />
           <LiveIndicator status={status} />
         </div>
         <ClientOnly fallback={mapPlaceholder}>
