@@ -26,6 +26,8 @@ export type Asset = {
   location: AssetLocation | null
   /** Only present when the tracker reports battery. */
   battery?: AssetBattery
+  /** Picture uploaded for the device in Traccar, served through this app (see images.server.ts). */
+  imageUrl?: string
 }
 
 /** A location older than this is shown greyed out. */

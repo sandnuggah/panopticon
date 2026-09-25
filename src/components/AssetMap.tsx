@@ -185,7 +185,18 @@ function createMarkerElement(assetId: number, onSelectRef: { current: (id: numbe
   const element = document.createElement('button')
   element.type = 'button'
   element.className = 'marker'
-  element.innerHTML = '<span class="marker-dot"></span><span class="marker-label"></span>'
+  element.innerHTML =
+    '<span class="marker-dot"><span class="marker-initial"></span><img class="marker-image" alt="" hidden></span>' +
+    '<span class="marker-label"></span>'
+  const image = element.querySelector<HTMLImageElement>('.marker-image')!
+  image.decoding = 'async'
+  image.draggable = false
+  // No picture after all (deleted, or Traccar unreachable): the initial underneath shows through.
+  image.addEventListener('error', () => {
+    image.hidden = true
+    image.dataset.failed = 'true'
+    element.classList.remove('marker-has-image')
+  })
   element.addEventListener('click', (event) => {
     event.stopPropagation()
     onSelectRef.current(assetId)
@@ -197,8 +208,24 @@ function updateMarkerElement(element: HTMLElement, asset: Asset, state: { stale:
   element.classList.toggle('marker-stale', state.stale)
   element.classList.toggle('marker-selected', state.selected)
   element.setAttribute('aria-label', `Show ${asset.name}`)
-  element.querySelector('.marker-dot')!.textContent = initial(asset.name)
+  element.querySelector('.marker-initial')!.textContent = initial(asset.name)
   element.querySelector('.marker-label')!.textContent = asset.name
+
+  const image = element.querySelector<HTMLImageElement>('.marker-image')!
+  if (image.dataset.src !== asset.imageUrl) {
+    // Only touch the <img> when the picture changes, so live updates don't reload it.
+    delete image.dataset.failed
+    if (asset.imageUrl) {
+      image.dataset.src = asset.imageUrl
+      image.src = asset.imageUrl
+    } else {
+      delete image.dataset.src
+      image.removeAttribute('src')
+    }
+  }
+  const showImage = Boolean(asset.imageUrl) && !image.dataset.failed
+  image.hidden = !showImage
+  element.classList.toggle('marker-has-image', showImage)
 }
 
 function initial(name: string): string {

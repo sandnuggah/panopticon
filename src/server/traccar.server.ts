@@ -12,9 +12,13 @@ export type TraccarUser = {
 export type TraccarDevice = {
   id: number
   name: string
+  /** The tracker's own ID (often its IMEI). Server-only: never send it to the browser. */
+  uniqueId: string
   status: 'online' | 'offline' | 'unknown'
   lastUpdate: string | null
   disabled: boolean
+  /** Filename of the image uploaded in Traccar's UI (attribute `deviceImage`), if any. */
+  image: string | null
 }
 
 export type TraccarPosition = {
@@ -150,6 +154,31 @@ export async function getDevices(token: string): Promise<TraccarDevice[]> {
   return parseList(await getJson('/api/devices', token), parseDevice)
 }
 
+/** One device, if the user may see it. */
+export async function getDevice(token: string, id: number): Promise<TraccarDevice | null> {
+  const devices = parseList(await getJson(`/api/devices?id=${id}`, token), parseDevice)
+  return devices.find((device) => device.id === id) ?? null
+}
+
+/**
+ * A device image from Traccar's media store. That endpoint only accepts a session cookie, not an
+ * API token, so this opens a session from the token for the one request and ends it again.
+ * Returns null if Traccar has no such file.
+ */
+export async function getDeviceImage(token: string, uniqueId: string, filename: string): Promise<ArrayBuffer | null> {
+  const login = await request(`/api/session?${new URLSearchParams({ token })}`)
+  ensureOk(login, 'GET /api/session?token')
+  const sessionCookie = readSessionCookie(login)
+  try {
+    const response = await request(`/api/media/${encodeURIComponent(uniqueId)}/${filename}`, { cookie: sessionCookie })
+    if (response.status === 404) return null
+    ensureOk(response, 'GET /api/media')
+    return await response.arrayBuffer()
+  } finally {
+    await endSession(sessionCookie)
+  }
+}
+
 /** Latest position of every device the user can see. */
 export async function getLatestPositions(token: string): Promise<TraccarPosition[]> {
   return parseList(await getJson('/api/positions', token), parsePosition)
@@ -256,9 +285,18 @@ function parseDevice(value: unknown): TraccarDevice {
     id: number(value, 'id', 'device'),
     name: string(value, 'name', 'device'),
     status: status === 'online' || status === 'offline' ? status : 'unknown',
+    uniqueId: string(value, 'uniqueId', 'device'),
     lastUpdate: optionalString(value, 'lastUpdate', 'device'),
     disabled: value.disabled === true,
+    image: readDeviceImage(value.attributes),
   }
+}
+
+/** Traccar always stores uploads as device.<ext>; anything else is ignored, which also rules out odd paths. */
+function readDeviceImage(attributes: unknown): string | null {
+  if (!isObject(attributes)) return null
+  const image = attributes.deviceImage
+  return typeof image === 'string' && /^device\.(jpg|png|gif|webp)$/.test(image) ? image : null
 }
 
 function parsePosition(value: unknown): TraccarPosition {

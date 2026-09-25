@@ -156,6 +156,20 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 - **Settings** (`/settings`): trail length, plus the account section with sign-out. Settings live in `localStorage`, per browser. They're a convenience: without storage, the defaults apply. Server render and hydration use the defaults, so the page waits for the stored value before fetching trail history.
 - **Home screen:** `public/manifest.webmanifest` plus icons (`icon.svg`, 192/512 px maskable PNGs, 180 px `apple-touch-icon`), so the app can be added to the home screen and opens full-screen. No service worker, and no offline use.
 
+## Asset images
+
+Markers show the picture uploaded for a device in Traccar's own UI (device settings → image), with the initial letter as the fallback.
+
+- **Where Traccar keeps them:** Traccar stores an upload as `<uniqueId>/device.<jpg|png|gif|webp>` (up to 500 KB). Its web UI saves the filename in the device attribute `deviceImage`, and the file is served at `/api/media/<uniqueId>/<file>`.
+- **Serving:** the browser gets `imageUrl: /images/asset/<id>?v=<file>` and nothing else. The server route:
+  - looks the device up with the user's token (`GET /api/devices?id=`), which is also Traccar's permission check;
+  - fetches the file and returns it with a content type derived from the extension.
+  The device's `uniqueId` stays on the server. It's often the IMEI, and h02 trackers send positions without authentication, so knowing it would let someone fake positions.
+- **Traccar's media endpoint only accepts a session cookie,** not API tokens. So fetching an image opens a session from the token (`GET /api/session?token=`) for that one request and ends it right after. Images are then kept in memory for 5 minutes (at most 50), and served with `Cache-Control: private, max-age=300` and an ETag, so most loads cost Traccar nothing.
+- **Accepted filenames:** only `device.<ext>` is used; anything else in `deviceImage` is ignored, which also rules out odd paths.
+- **Marker behaviour:** the `<img>` sits on top of the initial and hides itself if it fails to load. Live updates only touch the `<img>` when the URL changes, so it doesn't reload. Markers with a picture are larger (2.75 rem, 3.25 rem when selected), and stale ones turn grey.
+- **Updating a picture:** a new upload with the same file type keeps the same URL, so it can take up to about 10 minutes to show everywhere (5 minutes of server cache, then up to 5 minutes of browser cache).
+
 ## Map tiles
 
 - `MAP_STYLE_URL` is optional. The default is OpenFreeMap's `liberty` style: free, no API key, no analytics. OpenFreeMap does see which map areas you load.
@@ -176,6 +190,7 @@ src/
     login.tsx
     index.tsx                         map + asset sheet (protected)
     auth.sso.ts                       server route: start SSO
+    images.asset.$id.ts               server route: asset picture
     api.session.openid.callback.ts    server route: SSO return (path fixed by Traccar)
     settings.tsx                      trail length, sign-out
     live.ts                           server route: SSE relay
@@ -188,6 +203,7 @@ src/
     auth.functions.ts                 getUser / loginWithPassword / logout
     assets.functions.ts               getAssets
     map.functions.ts                  getMapStyleUrl
+    images.server.ts                  /images/asset/<id>: device pictures from Traccar, cached
     trails.functions.ts               getTrails (position history)
     security.server.ts                CSP nonce + security headers
     live.server.ts                    /live: WebSocket → SSE relay

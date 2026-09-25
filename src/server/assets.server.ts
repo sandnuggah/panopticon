@@ -48,6 +48,7 @@ export function toAsset(device: TraccarDevice, position: TraccarPosition | undef
     lastUpdate: device.lastUpdate,
     location: position ? toLocation(position) : null,
     battery: position ? readBattery(position.attributes) : undefined,
+    imageUrl: imageUrl(device),
   }
 }
 
@@ -59,7 +60,13 @@ export function toDeviceUpdate(device: TraccarDevice): LiveUpdate {
     status: device.status,
     lastUpdate: device.lastUpdate,
     disabled: device.disabled,
+    imageUrl: imageUrl(device),
   }
+}
+
+/** The filename goes in the query so a re-upload in another format gets a fresh URL. */
+function imageUrl(device: TraccarDevice): string | undefined {
+  return device.image ? `/images/asset/${device.id}?v=${device.image}` : undefined
 }
 
 export function toPositionUpdate(position: TraccarPosition): LiveUpdate {

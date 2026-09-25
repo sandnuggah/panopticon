@@ -15,6 +15,7 @@ import { Route as LiveRouteImport } from './routes/live'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AuthSsoRouteImport } from './routes/auth.sso'
+import { Route as ImagesAssetIdRouteImport } from './routes/images.asset.$id'
 import { Route as ApiSessionOpenidCallbackRouteImport } from './routes/api.session.openid.callback'
 
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +48,11 @@ const AuthSsoRoute = AuthSsoRouteImport.update({
   path: '/auth/sso',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImagesAssetIdRoute = ImagesAssetIdRouteImport.update({
+  id: '/images/asset/$id',
+  path: '/images/asset/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionOpenidCallbackRoute =
   ApiSessionOpenidCallbackRouteImport.update({
     id: '/api/session/openid/callback',
@@ -61,6 +67,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/images/asset/$id': typeof ImagesAssetIdRoute
   '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -70,6 +77,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/images/asset/$id': typeof ImagesAssetIdRoute
   '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
 export interface FileRoutesById {
@@ -80,6 +88,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/images/asset/$id': typeof ImagesAssetIdRoute
   '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
 export interface FileRouteTypes {
@@ -91,6 +100,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/auth/sso'
+    | '/images/asset/$id'
     | '/api/session/openid/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -100,6 +110,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/auth/sso'
+    | '/images/asset/$id'
     | '/api/session/openid/callback'
   id:
     | '__root__'
@@ -109,6 +120,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/auth/sso'
+    | '/images/asset/$id'
     | '/api/session/openid/callback'
   fileRoutesById: FileRoutesById
 }
@@ -119,6 +131,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
   AuthSsoRoute: typeof AuthSsoRoute
+  ImagesAssetIdRoute: typeof ImagesAssetIdRoute
   ApiSessionOpenidCallbackRoute: typeof ApiSessionOpenidCallbackRoute
 }
 
@@ -166,6 +179,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSsoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/images/asset/$id': {
+      id: '/images/asset/$id'
+      path: '/images/asset/$id'
+      fullPath: '/images/asset/$id'
+      preLoaderRoute: typeof ImagesAssetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/session/openid/callback': {
       id: '/api/session/openid/callback'
       path: '/api/session/openid/callback'
@@ -183,6 +203,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
   AuthSsoRoute: AuthSsoRoute,
+  ImagesAssetIdRoute: ImagesAssetIdRoute,
   ApiSessionOpenidCallbackRoute: ApiSessionOpenidCallbackRoute,
 }
 export const routeTree = rootRouteImport

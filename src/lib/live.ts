@@ -10,6 +10,7 @@ export type LiveUpdate =
       status: Asset['status']
       lastUpdate: string | null
       disabled: boolean
+      imageUrl?: string
     }
   | {
       kind: 'position'
@@ -35,7 +36,13 @@ export function applyUpdates(assets: Asset[], updates: LiveUpdate[]): { assets: 
     if (update.kind === 'device') {
       replacement = update.disabled
         ? null
-        : { ...current, name: update.name, status: update.status, lastUpdate: update.lastUpdate }
+        : {
+            ...current,
+            name: update.name,
+            status: update.status,
+            lastUpdate: update.lastUpdate,
+            imageUrl: update.imageUrl,
+          }
     } else {
       // Trackers can deliver buffered positions late; never move backwards in time.
       if (current.location && Date.parse(update.location.fixTime) < Date.parse(current.location.fixTime)) continue
