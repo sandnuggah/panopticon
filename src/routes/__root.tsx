@@ -1,8 +1,16 @@
 import type { ReactNode } from 'react'
 import { createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
+import { createIsomorphicFn } from '@tanstack/react-start'
+import { themeFromCookieHeader, useTheme } from '../lib/theme'
+import { requestTheme } from '../server/theme.server'
 import '../styles.css'
 
+const currentTheme = createIsomorphicFn()
+  .server(() => requestTheme())
+  .client(() => themeFromCookieHeader(document.cookie))
+
 export const Route = createRootRoute({
+  beforeLoad: () => ({ theme: currentTheme() }),
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
@@ -22,8 +30,9 @@ export const Route = createRootRoute({
 })
 
 function RootDocument({ children }: { children: ReactNode }) {
+  const [theme] = useTheme()
   return (
-    <html lang="en">
+    <html lang="en" data-theme={theme}>
       <head>
         <HeadContent />
       </head>

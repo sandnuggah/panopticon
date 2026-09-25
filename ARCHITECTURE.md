@@ -170,6 +170,28 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
 - **Marker behaviour:** the `<img>` sits on top of the initial and hides itself if it fails to load. Live updates only touch the `<img>` when the URL changes, so it doesn't reload. Markers with a picture are larger (2.75 rem, 3.25 rem when selected), and stale ones turn grey.
 - **Updating a picture:** a new upload with the same file type keeps the same URL, so it can take up to about 10 minutes to show everywhere (5 minutes of server cache, then up to 5 minutes of browser cache).
 
+## Themes
+
+Pick a theme on the Settings page, from a list with a colour preview for each. Two themes so far:
+- **Classic** (default): the original look, following the device's light or dark mode.
+- **Dog park:** always light, with bright pastels, rounder corners, a rounded system font where available (`ui-rounded`, i.e. Apple devices), a 🐾 after the title, a gently softened map, and trails drawn as paw prints.
+
+- **Storage:** the choice lives in the `panopticon-theme` cookie (one year, `SameSite=Lax`, `Secure` over HTTPS), per browser.
+  - A cookie rather than `localStorage`, so the server can render `<html data-theme>` straight away: no flash of the default theme on load.
+  - The root route's `beforeLoad` reads it on the server (`theme.server.ts`) or from `document.cookie` in the browser. `useTheme` keeps `<html>` in step when it changes. Unknown values fall back to Classic.
+- **Styling:** each theme is a set of CSS variables in `styles.css`, keyed on `:root[data-theme='…']`, which outranks the default and dark-mode rules.
+  - The CSP forbids inline `style` attributes, so everything theme-specific is done with classes, including the picker's colour previews.
+  - `--trail` is the trail colour. The map reads it via `getComputedStyle`, because map paint properties can't use CSS variables.
+- **Paw prints** (`AssetMap.tsx`):
+  - The icon is a staggered left-and-right pair, drawn on a canvas in the theme's `--trail` colour, so there's no image file.
+  - maplibre places the icons along each trail (`symbol-placement: line`, every 44 px) and turns them to face the direction of travel.
+  - A symbol layer can't fade along a line the way `line-gradient` does, so each trail is split into up to five pieces with rising opacity.
+  - The line and paw layers both exist; the theme decides which is visible, so switching themes needs no reload.
+- **Adding a theme:**
+  1. Add an entry to `THEMES` in `src/lib/theme.ts`.
+  2. Add a `:root[data-theme='<id>']` block of variables, plus `.theme-preview-<id>` swatches, to `styles.css`.
+  3. Optionally, give it special map behaviour in `AssetMap`, as the dog theme's paws do.
+
 ## Map tiles
 
 - `MAP_STYLE_URL` is optional. The default is OpenFreeMap's `liberty` style: free, no API key, no analytics. OpenFreeMap does see which map areas you load.
@@ -204,6 +226,7 @@ src/
     assets.functions.ts               getAssets
     map.functions.ts                  getMapStyleUrl
     images.server.ts                  /images/asset/<id>: device pictures from Traccar, cached
+    theme.server.ts                   theme from the request's cookie
     trails.functions.ts               getTrails (position history)
     security.server.ts                CSP nonce + security headers
     live.server.ts                    /live: WebSocket → SSE relay
@@ -219,6 +242,7 @@ src/
     live.ts                           LiveUpdate type + applyUpdates (shared with the server)
     trail.ts                          trail types, extend/prune
     settings.ts                       per-browser settings (localStorage)
+    theme.ts                          THEMES, useTheme (cookie)
     useLiveAssets.ts                  EventSource + trails + reconnect logic
 ```
 

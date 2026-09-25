@@ -12,9 +12,12 @@
   --stale: #8d8a82;
   --error: #b3261e;
   --warning: #9a5b00;
+  /* Colour of the movement trail on the map (read by AssetMap, which can't use CSS variables). */
+  --trail: #2f6b4f;
   --radius: 12px;
   --shadow: 0 1px 3px rgb(0 0 0 / 0.25);
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font);
   line-height: 1.4;
   color: var(--text);
   background: var(--bg);
@@ -35,7 +38,42 @@
     --stale: #77746c;
     --error: #f2b8b5;
     --warning: #f0b35c;
+    --trail: #6fbf95;
   }
+}
+
+/* Dog park theme: always light, bright pastels, rounder everything. `:root[data-theme]` outranks the
+   plain `:root` rules above, including the dark-mode ones. */
+:root[data-theme='dog'] {
+  color-scheme: light;
+  --bg: #fff6ee;
+  --surface: #ffffff;
+  --surface-selected: #ffe3ec;
+  --text: #4b3833;
+  --muted: #8f7a73;
+  --border: #f4d9cc;
+  --accent: #ff8fab;
+  --accent-text: #3d2522;
+  --online: #3fb57c;
+  --offline: #ff9f6b;
+  --stale: #c9bcb6;
+  --error: #c93c3c;
+  --warning: #b86e00;
+  --trail: #e0648a;
+  --radius: 20px;
+  --shadow: 0 2px 8px rgb(224 100 138 / 0.3);
+  /* Rounded where the system has it (Apple devices); the default font elsewhere. */
+  --font: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+:root[data-theme='dog'] .sheet-header h1::after,
+:root[data-theme='dog'] .login h1::after {
+  content: ' 🐾';
+}
+
+/* Softer, sunnier map tiles to match the pastels. */
+:root[data-theme='dog'] .maplibregl-canvas {
+  filter: saturate(0.75) brightness(1.06);
 }
 
 * {
@@ -446,4 +484,100 @@ a.button-quiet {
 
 .login .divider + form {
   margin-top: 0.75rem;
+}
+
+/* Theme picker (settings) */
+
+.theme-picker {
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.theme-picker legend {
+  padding: 0;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.theme-option-selected {
+  background: var(--surface-selected);
+  border-color: var(--accent);
+}
+
+.theme-option input {
+  /* Not the full-width text-input style. */
+  flex: none;
+  width: auto;
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.theme-text {
+  display: grid;
+  gap: 0.1rem;
+  font-size: 0.9rem;
+}
+
+/* Fixed colours, so each preview shows its own theme whatever theme is active. */
+.theme-preview {
+  display: flex;
+  flex: none;
+  gap: 3px;
+  padding: 5px;
+  border-radius: 10px;
+}
+
+.theme-preview span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.theme-preview-classic {
+  background: #f6f5f2;
+  border: 1px solid #dedbd3;
+}
+
+.theme-preview-classic span:nth-child(1) {
+  background: #2f6b4f;
+}
+
+.theme-preview-classic span:nth-child(2) {
+  background: #2f8f5b;
+}
+
+.theme-preview-classic span:nth-child(3) {
+  background: #1c1b19;
+}
+
+.theme-preview-dog {
+  background: #fff6ee;
+  border: 1px solid #f4d9cc;
+}
+
+.theme-preview-dog span:nth-child(1) {
+  background: #ff8fab;
+}
+
+.theme-preview-dog span:nth-child(2) {
+  background: #7fd8b0;
+}
+
+.theme-preview-dog span:nth-child(3) {
+  background: #ffc59e;
 }

@@ -3,6 +3,7 @@ import { ClientOnly, createFileRoute, Link, redirect } from '@tanstack/react-rou
 import { AssetSheet } from '../components/AssetSheet'
 import { LiveIndicator } from '../components/LiveIndicator'
 import { useSettings } from '../lib/settings'
+import { useTheme } from '../lib/theme'
 import { useLiveAssets } from '../lib/useLiveAssets'
 import { getAssets } from '../server/assets.functions'
 import { getUser } from '../server/auth.functions'
@@ -39,6 +40,7 @@ function Home() {
   const navigate = Route.useNavigate()
   const [focusToken, setFocusToken] = useState(0)
   const [settings, , settingsLoaded] = useSettings()
+  const [theme] = useTheme()
   const { assets, trails, status } = useLiveAssets(
     loaderData.assets,
     settingsLoaded ? settings.trailMinutes : null,
@@ -59,6 +61,7 @@ function Home() {
             <AssetMap
               assets={assets}
               trails={trails}
+              theme={theme}
               styleUrl={loaderData.mapStyleUrl}
               selectedId={selectedId}
               focusToken={focusToken}

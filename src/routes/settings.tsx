@@ -1,5 +1,6 @@
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
 import { useSettings } from '../lib/settings'
+import { THEMES, useTheme } from '../lib/theme'
 import { TRAIL_MINUTES_OPTIONS } from '../lib/trail'
 import { getUser, logout } from '../server/auth.functions'
 
@@ -17,6 +18,7 @@ function SettingsPage() {
   const { user } = Route.useRouteContext()
   const router = useRouter()
   const [settings, updateSettings] = useSettings()
+  const [theme, setTheme] = useTheme()
 
   async function onLogout() {
     await logout()
@@ -31,6 +33,37 @@ function SettingsPage() {
         </Link>
         <h1>Settings</h1>
       </header>
+
+      <section>
+        <h2>Appearance</h2>
+        <fieldset className="theme-picker">
+          <legend>Theme</legend>
+          {THEMES.map((option) => (
+            <label
+              key={option.id}
+              className={`theme-option${option.id === theme ? ' theme-option-selected' : ''}`}
+            >
+              <input
+                type="radio"
+                name="theme"
+                value={option.id}
+                checked={option.id === theme}
+                onChange={() => setTheme(option.id)}
+              />
+              <span className={`theme-preview theme-preview-${option.id}`} aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+              <span className="theme-text">
+                <strong>{option.label}</strong>
+                <span className="muted">{option.description}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <p className="muted hint">Saved in this browser only.</p>
+      </section>
 
       <section>
         <h2>Map</h2>
