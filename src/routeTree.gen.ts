@@ -10,13 +10,21 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SplatRouteImport } from './routes/$'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as AuthSsoRouteImport } from './routes/auth.sso'
+import { Route as ApiSessionOpenidCallbackRouteImport } from './routes/api.session.openid.callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SplatRoute = SplatRouteImport.update({
+  id: '/$',
+  path: '/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LiveRoute = LiveRouteImport.update({
@@ -34,39 +42,84 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthSsoRoute = AuthSsoRouteImport.update({
+  id: '/auth/sso',
+  path: '/auth/sso',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionOpenidCallbackRoute =
+  ApiSessionOpenidCallbackRouteImport.update({
+    id: '/api/session/openid/callback',
+    path: '/api/session/openid/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/$': typeof SplatRoute
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/auth/sso': typeof AuthSsoRoute
+  '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/$': typeof SplatRoute
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/auth/sso': typeof AuthSsoRoute
+  '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/$': typeof SplatRoute
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
+  '/auth/sso': typeof AuthSsoRoute
+  '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/live' | '/login' | '/settings'
+  fullPaths:
+    | '/'
+    | '/$'
+    | '/live'
+    | '/login'
+    | '/settings'
+    | '/auth/sso'
+    | '/api/session/openid/callback'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/live' | '/login' | '/settings'
-  id: '__root__' | '/' | '/live' | '/login' | '/settings'
+  to:
+    | '/'
+    | '/$'
+    | '/live'
+    | '/login'
+    | '/settings'
+    | '/auth/sso'
+    | '/api/session/openid/callback'
+  id:
+    | '__root__'
+    | '/'
+    | '/$'
+    | '/live'
+    | '/login'
+    | '/settings'
+    | '/auth/sso'
+    | '/api/session/openid/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SplatRoute: typeof SplatRoute
   LiveRoute: typeof LiveRoute
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
+  AuthSsoRoute: typeof AuthSsoRoute
+  ApiSessionOpenidCallbackRoute: typeof ApiSessionOpenidCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -76,6 +129,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$': {
+      id: '/$'
+      path: '/$'
+      fullPath: '/$'
+      preLoaderRoute: typeof SplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/live': {
@@ -99,14 +159,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/sso': {
+      id: '/auth/sso'
+      path: '/auth/sso'
+      fullPath: '/auth/sso'
+      preLoaderRoute: typeof AuthSsoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/openid/callback': {
+      id: '/api/session/openid/callback'
+      path: '/api/session/openid/callback'
+      fullPath: '/api/session/openid/callback'
+      preLoaderRoute: typeof ApiSessionOpenidCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SplatRoute: SplatRoute,
   LiveRoute: LiveRoute,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
+  AuthSsoRoute: AuthSsoRoute,
+  ApiSessionOpenidCallbackRoute: ApiSessionOpenidCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

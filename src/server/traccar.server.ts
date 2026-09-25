@@ -62,6 +62,49 @@ export async function createPasswordSession(
   return { kind: 'ok', user: parseUser(await response.json()), sessionCookie }
 }
 
+/** Public server info. `openIdEnabled` says whether Traccar has SSO configured. */
+export async function getServerInfo(): Promise<{ openIdEnabled: boolean }> {
+  const response = await request('/api/server')
+  ensureOk(response, 'GET /api/server')
+  const value: unknown = await response.json()
+  if (!isObject(value)) throw unexpected('server is not an object')
+  return { openIdEnabled: value.openIdEnabled === true }
+}
+
+/** Starts Traccar's OpenID Connect flow. Returns the identity provider URL to send the browser to. */
+export async function startOpenIdLogin(): Promise<string> {
+  const response = await request('/api/session/openid/auth')
+  const location = response.headers.get('Location')
+  if (response.status < 300 || response.status >= 400 || !location) {
+    throw new TraccarError(`GET /api/session/openid/auth failed with HTTP ${response.status}`, response.status)
+  }
+  return new URL(location).href
+}
+
+export type OpenIdCallbackResult = { kind: 'ok'; sessionCookie: string } | { kind: 'refused'; reason: string }
+
+/** Hands the identity provider's callback to Traccar. On success Traccar has created a session. */
+export async function finishOpenIdLogin(query: URLSearchParams): Promise<OpenIdCallbackResult> {
+  const response = await request(`/api/session/openid/callback?${query}`)
+  if (response.status >= 300 && response.status < 400) {
+    return { kind: 'ok', sessionCookie: readSessionCookie(response) }
+  }
+  // Traccar puts the exception in the body, e.g. "java.lang.SecurityException: Registration disabled".
+  const body = await response.text().catch(() => '')
+  return { kind: 'refused', reason: body.split('\n', 1)[0]?.trim() || `HTTP ${response.status}` }
+}
+
+/** The user a Traccar session cookie belongs to. */
+export async function getTraccarSessionUser(sessionCookie: string): Promise<TraccarUser> {
+  const response = await request('/api/session', { cookie: sessionCookie })
+  ensureOk(response, 'GET /api/session')
+  return parseUser(await response.json())
+}
+
+export async function endSession(sessionCookie: string): Promise<void> {
+  await request('/api/session', { method: 'DELETE', cookie: sessionCookie }).catch(() => {})
+}
+
 /** Mints an API token from a Traccar session, then ends that session. */
 export async function exchangeSessionForToken(sessionCookie: string, expiresAt: Date): Promise<string> {
   try {
@@ -75,8 +118,23 @@ export async function exchangeSessionForToken(sessionCookie: string, expiresAt: 
     if (!token) throw new TraccarError('Traccar returned an empty token')
     return token
   } finally {
-    await request('/api/session', { method: 'DELETE', cookie: sessionCookie }).catch(() => {})
+    await endSession(sessionCookie)
   }
+}
+
+/**
+ * After a failed call: does it mean the token is no good, so the user must sign in again?
+ * Expired or revoked tokens give 401. A token Traccar can't verify at all (from another server, or
+ * after its signing key changed) makes its auth filter throw, giving 400 or 500, even on the
+ * public /api/server. So compare /api/server with and without the token.
+ */
+export async function tokenWasRejected(token: string, error: unknown): Promise<boolean> {
+  if (!(error instanceof TraccarError) || error.status === undefined) return false
+  if (error.status === 401) return true
+  const withToken = await request('/api/server', { token }).catch(() => null)
+  if (!withToken || withToken.ok) return false
+  const withoutToken = await request('/api/server').catch(() => null)
+  return withoutToken?.ok === true
 }
 
 export async function revokeToken(token: string): Promise<void> {

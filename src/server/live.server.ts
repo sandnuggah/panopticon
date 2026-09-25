@@ -1,7 +1,7 @@
 import type { LiveUpdate } from '../lib/live'
 import { toDeviceUpdate, toPositionUpdate } from './assets.server'
 import { clearSession, getSessionToken } from './session.server'
-import { getDevices, openSocket, parseSocketMessage, TraccarError } from './traccar.server'
+import { getDevices, openSocket, parseSocketMessage, tokenWasRejected } from './traccar.server'
 
 // GET /live: relays Traccar's WebSocket to the browser as Server-Sent Events. The browser never
 // talks to Traccar and never sees the token. One upstream socket per open tab.
@@ -96,7 +96,7 @@ async function failureResponse(token: string): Promise<Response> {
   try {
     await getDevices(token)
   } catch (error) {
-    if (error instanceof TraccarError && error.status === 401) {
+    if (await tokenWasRejected(token, error)) {
       await clearSession()
       return new Response('Not signed in', { status: 401 })
     }

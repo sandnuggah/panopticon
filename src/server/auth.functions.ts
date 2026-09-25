@@ -1,12 +1,23 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getSessionUser, signIn, signOut } from './session.server'
-import { createPasswordSession, TraccarError } from './traccar.server'
+import { createPasswordSession, getServerInfo, TraccarError } from './traccar.server'
 
 export type LoginResult =
   | { ok: true }
   | { ok: false; error: 'invalid' | 'code-required' | 'unavailable' }
 
 export const getUser = createServerFn({ method: 'GET' }).handler(() => getSessionUser())
+
+/** Whether to offer SSO on the login page. False if Traccar is unreachable; password sign-in then reports it. */
+export const getLoginOptions = createServerFn({ method: 'GET' }).handler(async () => {
+  try {
+    const { openIdEnabled } = await getServerInfo()
+    return { sso: openIdEnabled }
+  } catch (error) {
+    console.warn('Could not read Traccar server info:', error instanceof Error ? error.message : error)
+    return { sso: false }
+  }
+})
 
 export const loginWithPassword = createServerFn({ method: 'POST' })
   .validator(parseLoginInput)

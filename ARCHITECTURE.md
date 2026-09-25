@@ -47,12 +47,20 @@ This reuses the OpenID setup already configured in Traccar, so the identity prov
 
 1. `GET /auth/sso` fetches Traccar's `/api/session/openid/auth` with `redirect: 'manual'`. It saves the `state` from the returned identity-provider URL in a short-lived sealed cookie, then 302s the browser to the identity provider.
 2. The identity provider returns to `GET /api/session/openid/callback` **on this app**. That path is fixed, because Traccar builds its redirect URI as `web.url + /api/session/openid/callback`. The app:
-   - rejects the request if `state` doesn't match the saved one (Traccar sends a `state` but never checks it);
-   - forwards the query string to Traccar's callback;
-   - takes the `JSESSIONID` from the response and runs the token exchange above;
+   - rejects the request if `state` doesn't match the saved one (Traccar sends a `state` but never checks it). The saved state is cleared on first use, so a callback URL can't be replayed;
+   - forwards the query string to Traccar's callback, minus any `redirect_uri` (Traccar treats that as a Traccar Manager app override);
+   - takes the `JSESSIONID` from Traccar's 303, reads the user (`GET /api/session`) and runs the token exchange above;
    - redirects to `/`.
 
-The login page reads the public `GET /api/server` endpoint and shows the SSO button when `openIdEnabled` is true. The password form is always shown.
+The login page reads the public `GET /api/server` endpoint and shows "Sign in with SSO" when `openIdEnabled` is true. The password form is always shown.
+
+When Traccar refuses a sign-in it answers 400 with the Java exception as the body. The app logs it and sends the browser to `/login?error=…`, where it shows one of:
+- **`sso-no-account`:** no Traccar account has that email (`Registration disabled`).
+- **`sso-not-allowed`:** blocked by `openid.allowGroup`.
+- **`sso-unavailable`:** Traccar unreachable, or SSO not configured.
+- **`sso-failed`:** anything else, including a state mismatch.
+
+Tested end to end against a fake Traccar and identity provider, and confirmed with Pocket ID on the real server.
 
 ### Traccar config changes
 
@@ -61,16 +69,24 @@ The login page reads the public `GET /api/server` endpoint and shows the SSO but
 <!-- openid.force must be absent or false, or password login stops working -->
 ```
 
-In your identity provider, change the allowed redirect URI to `https://panopticon.example.com/api/session/openid/callback`.
+In your identity provider, add `https://panopticon.example.com/api/session/openid/callback` to the client's callback URLs. Pocket ID allows several, so keep Traccar's own while switching over.
+
+**Traccar 6.15.3 quirks found while setting up Pocket ID:**
+- `openid.clientId` is the ID the provider generated (a UUID in Pocket ID), not the client's display name.
+- Traccar only requests the `groups` scope when `openid.adminGroup` is set. So `openid.allowGroup` on its own always fails with "Your OpenID Groups do not permit access". Recommended: set neither. With registration off, only emails that already have a Traccar account can sign in.
+- With `openid.adminGroup` set, every SSO sign-in rewrites the account's admin flag from group membership, so an admin outside that group loses admin rights.
+- Every SSO sign-in overwrites the Traccar display name with the provider's.
+- Traccar doesn't send PKCE, so the provider must not require it for this client.
 
 Consequences of pointing `web.url` at this app:
 
 - **SSO in Traccar's own UI stops working.** Password login there is unaffected.
-- **Traccar's emails build their links from `web.url`.** These are `/event/:id`, `/settings/notifications?token=…`, `/reset-password?passwordReset=…`, report links and `/api/media/…`. The app therefore has a catch-all route: any path it doesn't own gets a 302 to `TRACCAR_URL` with the same path and query. Email links keep opening Traccar's UI.
+- **Traccar's emails build their links from `web.url`.** These are `/event/:id`, `/settings/notifications?token=…`, `/reset-password?passwordReset=…`, report links and `/api/media/…`. The app's catch-all route (`$.ts`) sends exactly those path prefixes (`/event/`, `/settings/`, `/reset-password`, `/reports/`, `/api/media/`) on to `TRACCAR_URL` with the same path and query, so email links keep opening Traccar's UI. Every other unknown path is a normal 404, so typos don't reveal Traccar's address. The redirect is built by string concatenation, so a path like `//evil.example` can't leave Traccar's host; Start also normalises such paths first.
 
 ### Session protection
 
 - Protected routes check the session in `beforeLoad` and redirect to `/login`.
+- **When a stored token counts as dead:** Traccar answers 401 for expired or revoked tokens. For tokens it can't verify at all (issued by another Traccar, or before its signing key changed) it answers **400 or 500**, even on public endpoints. So after any failed call, `tokenWasRejected` treats the token as dead if the call was a 401, or if `/api/server` fails with the token but works without it. A dead token clears the session and sends you to `/login`; other failures stay errors. (Found on the real server: a token from the fake Traccar produced an error page instead of the sign-in page.)
 - Server functions are POST-only and the cookie is `SameSite=Lax`, which protects against cross-site request forgery.
 - Server-side calls to Traccar send no `Origin` header, which Traccar's session origin check accepts.
 
@@ -155,11 +171,11 @@ src/
     __root.tsx
     login.tsx
     index.tsx                         map + asset sheet (protected)
-    auth.sso.ts                       server route: start SSO                        (step 4)
-    api.session.openid.callback.ts    server route: SSO return (path fixed by Traccar) (step 4)
+    auth.sso.ts                       server route: start SSO
+    api.session.openid.callback.ts    server route: SSO return (path fixed by Traccar)
     settings.tsx                      trail length, sign-out
     live.ts                           server route: SSE relay
-    $.ts                              catch-all: 302 to TRACCAR_URL + same path       (step 4)
+    $.ts                              Traccar email links → 302 to Traccar; else 404
   server/
     env.server.ts                     read + validate env once
     traccar.server.ts                 typed fetch client for the endpoints above
@@ -170,6 +186,7 @@ src/
     map.functions.ts                  getMapStyleUrl
     trails.functions.ts               getTrails (position history)
     live.server.ts                    /live: WebSocket → SSE relay
+    sso.server.ts                     /auth/sso, callback, Traccar email-link redirects
   components/
     AssetMap.tsx                      maplibre map + markers (browser only, lazy)
     AssetSheet.tsx                    asset cards
@@ -226,5 +243,5 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 1. ✅ **Setup and a test against your server.** *Confirmed on the real server 2026-09-25.* `git init` with `.gitignore` (before `.env` exists), `.env.example`, env validation and the Traccar client. Then: password login → token exchange → `getAssets()` against your server, and print one real position's attributes (protocol, battery fields).
 2. ✅ **Map and asset cards** from the first load. *Meets "done when". Confirmed on the real server 2026-09-25.*
 3. ✅ **Live updates** over SSE, plus the **trail** and the **settings** page. *Tested against a fake Traccar; committed 2026-09-25 at your request before a full real-server check.*
-4. **SSO**, including the catch-all redirect and the Traccar config change.
+4. ✅ **SSO**, including the catch-all redirect and the Traccar config change. *Confirmed with Pocket ID on the real server 2026-09-25.*
 5. **Polish:** manifest, CSP, Dockerfile.

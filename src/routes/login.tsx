@@ -1,17 +1,32 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
-import { getUser, loginWithPassword } from '../server/auth.functions'
+import { getLoginOptions, getUser, loginWithPassword } from '../server/auth.functions'
+import type { SsoError } from '../server/sso.server'
+
+const ssoMessages: Record<SsoError, string> = {
+  'sso-unavailable': "Single sign-on isn't available right now. Try again, or sign in with your password.",
+  'sso-failed': "Single sign-on didn't complete. Try again.",
+  'sso-no-account': 'No Traccar account uses the email from your sign-in provider.',
+  'sso-not-allowed': "Your sign-in provider account isn't in a group allowed to use Traccar.",
+}
+
+type Search = { error?: SsoError }
 
 export const Route = createFileRoute('/login')({
+  validateSearch: (search: Record<string, unknown>): Search =>
+    typeof search.error === 'string' && search.error in ssoMessages ? { error: search.error as SsoError } : {},
   beforeLoad: async () => {
     if (await getUser()) throw redirect({ to: '/' })
   },
+  loader: () => getLoginOptions(),
   head: () => ({ meta: [{ title: 'Sign in · panopticon' }] }),
   component: LoginPage,
 })
 
 function LoginPage() {
   const router = useRouter()
+  const { sso } = Route.useLoaderData()
+  const { error: ssoError } = Route.useSearch()
   const [needsCode, setNeedsCode] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -45,9 +60,20 @@ function LoginPage() {
     }
   }
 
+  const shownError = error ?? (ssoError ? ssoMessages[ssoError] : null)
+
   return (
     <main className="login">
       <h1>panopticon</h1>
+      {sso && (
+        <>
+          {/* A full page load, not client routing: /auth/sso redirects to the identity provider. */}
+          <a className="button-primary" href="/auth/sso">
+            Sign in with SSO
+          </a>
+          <p className="divider">or with your Traccar password</p>
+        </>
+      )}
       {/* method="post" keeps credentials out of the URL if someone submits before hydration */}
       <form method="post" onSubmit={onSubmit}>
         <label>
@@ -72,9 +98,9 @@ function LoginPage() {
             />
           </label>
         )}
-        {error && (
+        {shownError && (
           <p className="error" role="alert">
-            {error}
+            {shownError}
           </p>
         )}
         <button type="submit" disabled={pending}>

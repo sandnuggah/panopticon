@@ -1,7 +1,7 @@
 import { redirect } from '@tanstack/react-router'
 import { useSession } from '@tanstack/react-start/server'
 import { env } from './env.server'
-import { exchangeSessionForToken, revokeToken, TraccarError, type TraccarUser } from './traccar.server'
+import { exchangeSessionForToken, revokeToken, tokenWasRejected, type TraccarUser } from './traccar.server'
 
 // The app's only state: a sealed, httpOnly cookie holding the user's Traccar API token.
 
@@ -27,6 +27,39 @@ function appSession() {
       path: '/',
     },
   })
+}
+
+/**
+ * Short-lived cookie holding the OpenID `state` between /auth/sso and the callback. Traccar sends
+ * a state but never checks it; checking it here stops a login-CSRF (being signed in as someone else).
+ */
+function ssoStateSession() {
+  return useSession<{ state: string }>({
+    name: 'panopticon-sso',
+    password: env().sessionSecret,
+    maxAge: 10 * 60,
+    sessionHeader: false,
+    cookie: {
+      httpOnly: true,
+      secure: !import.meta.env.DEV,
+      // Lax still sends it on the identity provider's top-level redirect back to us.
+      sameSite: 'lax',
+      path: '/',
+    },
+  })
+}
+
+export async function rememberSsoState(state: string): Promise<void> {
+  const session = await ssoStateSession()
+  await session.update({ state })
+}
+
+/** Returns the remembered state and forgets it, so each state works once. */
+export async function takeSsoState(): Promise<string | undefined> {
+  const session = await ssoStateSession()
+  const { state } = session.data
+  await session.clear()
+  return state
 }
 
 /** Finishes any sign-in: swaps the Traccar session for a token and stores it in the cookie. */
@@ -73,7 +106,7 @@ export async function withToken<T>(call: (token: string) => Promise<T>): Promise
   try {
     return await call(token)
   } catch (error) {
-    if (error instanceof TraccarError && error.status === 401) {
+    if (await tokenWasRejected(token, error)) {
       await clearSession()
       throw redirect({ to: '/login' })
     }
