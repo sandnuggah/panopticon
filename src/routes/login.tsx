@@ -6,7 +6,7 @@ export const Route = createFileRoute('/login')({
   beforeLoad: async () => {
     if (await getUser()) throw redirect({ to: '/' })
   },
-  head: () => ({ meta: [{ title: 'Sign in · tracpet' }] }),
+  head: () => ({ meta: [{ title: 'Sign in · panopticon' }] }),
   component: LoginPage,
 })
 
@@ -47,7 +47,7 @@ function LoginPage() {
 
   return (
     <main className="login">
-      <h1>tracpet</h1>
+      <h1>panopticon</h1>
       {/* method="post" keeps credentials out of the URL if someone submits before hydration */}
       <form method="post" onSubmit={onSubmit}>
         <label>

@@ -1,12 +1,12 @@
-# tracpet architecture
+# panopticon architecture
 
-Phone-friendly web UI for a self-hosted Traccar server, tracking 1–5 pets.
+Phone-friendly web UI for a self-hosted Traccar server, tracking a handful (1–5) of assets: anything with a tracker on it, such as a pet.
 Replaces Traccar's own UI for daily use; Traccar's UI stays available for admin work.
 
 - **Must:** SSO and password sign-in, live map, last-seen time, battery level (when the tracker reports it, see [Battery](#battery)).
 - **Won't:** user management, reports, multi-vehicle features.
 - **Rules:** no secrets in git, no external analytics, minimal dependencies.
-- **Done when:** you can sign in to your Traccar server and see your pets on a map.
+- **Done when:** you can sign in to your Traccar server and see your assets on a map.
 
 Target: Traccar `:latest`, which is **v6.15.3** (released 2026-08-26). Every Traccar behavior below was checked against that version's source.
 
@@ -16,10 +16,10 @@ The TanStack Start server sits between the browser and Traccar. The browser only
 
 ```
 phone                          TanStack Start server               Traccar
-map + pet list   ── server fn ──▶ login / logout / getPets  ──REST──▶ /api/*
-EventSource      ◀──── SSE ───── /live relay            ◀── WS ──── /api/socket?token=
-SSO button       ──────────────▶ /auth/sso, OIDC callback ─────────▶ OpenID
-email links      ──────────────▶ catch-all 302 ───────────────────▶ Traccar UI
+map + asset list ── server fn ──▶ login / logout / getAssets ──REST──▶ /api/*
+EventSource      ◀──── SSE ───── /live relay             ◀── WS ──── /api/socket?token=
+SSO button       ──────────────▶ /auth/sso, OIDC callback ──────────▶ OpenID
+email links      ──────────────▶ catch-all 302 ────────────────────▶ Traccar UI
 ```
 
 ## Authentication
@@ -57,11 +57,11 @@ The login page reads the public `GET /api/server` endpoint and shows the SSO but
 ### Traccar config changes
 
 ```xml
-<entry key='web.url'>https://pets.example.com</entry>
+<entry key='web.url'>https://panopticon.example.com</entry>
 <!-- openid.force must be absent or false, or password login stops working -->
 ```
 
-In your identity provider, change the allowed redirect URI to `https://pets.example.com/api/session/openid/callback`.
+In your identity provider, change the allowed redirect URI to `https://panopticon.example.com/api/session/openid/callback`.
 
 Consequences of pointing `web.url` at this app:
 
@@ -76,9 +76,9 @@ Consequences of pointing `web.url` at this app:
 
 ## Live data
 
-- **First load:** the `/` route loader calls `getPets()`, which calls `GET /api/devices` and `GET /api/positions` (latest position per device). They are merged into a view model; the browser never gets raw Traccar objects:
+- **First load:** the `/` route loader calls `getAssets()`, which calls `GET /api/devices` and `GET /api/positions` (latest position per device). They are merged into a view model; the browser never gets raw Traccar objects:
   ```ts
-  type Pet = {
+  type Asset = {
     id: number; name: string; status: 'online' | 'offline' | 'unknown'
     lastUpdate: string | null   // last contact from the tracker
     location: { lat: number; lon: number; accuracy?: number; fixTime: string } | null  // null until the first fix
@@ -88,8 +88,8 @@ Consequences of pointing `web.url` at this app:
   Devices disabled in Traccar are left out.
 - **Updates:** the `/live` server route opens a WebSocket to `TRACCAR_URL/api/socket?token=…` using Node's built-in WebSocket client. It passes only the `devices` and `positions` messages on to the browser as Server-Sent Events. Traccar sends the latest positions as soon as the socket connects.
   - Why SSE: it's plain HTTP (the Start server needs no WebSocket support), `EventSource` reconnects on its own, and the token stays on the server.
-- **Phones:** background tabs get suspended, so when the page becomes visible again it reruns `getPets()` and reopens the stream.
-- **Scale:** one upstream socket per open tab. At 1–5 pets and a handful of users that's fine.
+- **Phones:** background tabs get suspended, so when the page becomes visible again it reruns `getAssets()` and reopens the stream.
+- **Scale:** one upstream socket per open tab. At 1–5 assets and a handful of users that's fine.
 
 ## Battery
 
@@ -108,16 +108,16 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 
 ## UI
 
-- **Pages:** `/login` and `/`. The selected pet is a search param (`/?pet=12`), so it survives a reload.
-- **Layout:** full-screen map with a bottom sheet of pet cards. Each card shows:
+- **Pages:** `/login` and `/`. The selected asset is a search param (`/?asset=12`), so it survives a reload.
+- **Layout:** full-screen map with a bottom sheet of asset cards. Each card shows:
   - the name;
   - an online/offline dot;
   - "seen 4 min ago", from `fixTime` using `Intl.RelativeTimeFormat` and re-rendered every 30 s;
   - "last contact …" when it differs from the fix time by more than a few minutes;
   - battery, when available.
-- **Map:** tap a card to fly to that pet. On load the map fits all pets.
+- **Map:** tap a card to fly to that asset. On load the map fits all assets.
 - **Markers:** maplibre DOM markers (enough for ≤5), greyed out when the fix is stale, with an accuracy circle when the position reports accuracy.
-- **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the pet list first.
+- **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first.
 - **Home screen:** a web app manifest so the app can be added to the home screen. No service worker for now.
 
 ## Map tiles
@@ -134,7 +134,7 @@ src/
   routes/
     __root.tsx
     login.tsx
-    index.tsx                         map + pet sheet (protected)
+    index.tsx                         map + asset sheet (protected)
     auth.sso.ts                       server route: start SSO                        (step 4)
     api.session.openid.callback.ts    server route: SSO return (path fixed by Traccar) (step 4)
     live.ts                           server route: SSE relay                        (step 3)
@@ -143,13 +143,13 @@ src/
     env.server.ts                     read + validate env once
     traccar.server.ts                 typed fetch client for the endpoints above
     session.server.ts                 sealed cookie, token exchange, withToken()
-    pets.server.ts                    Traccar → Pet mapping
+    assets.server.ts                  Traccar → Asset mapping
     auth.functions.ts                 getUser / loginWithPassword / logout
-    pets.functions.ts                 getPets
+    assets.functions.ts               getAssets
   components/
-    RelativeTime.tsx  PetMap.tsx (step 2)  PetSheet.tsx (step 2)
+    RelativeTime.tsx  AssetMap.tsx (step 2)  AssetSheet.tsx (step 2)
   lib/
-    pet.ts                            Pet view model (shared with the browser)
+    asset.ts                          Asset view model (shared with the browser)
     live.ts                           EventSource → store (useSyncExternalStore)  (step 3)
 ```
 
@@ -191,8 +191,8 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 
 ## Build order
 
-1. ✅ **Setup and a test against your server.** *Confirmed on the real server 2026-09-25.* `git init` with `.gitignore` (before `.env` exists), `.env.example`, env validation and the Traccar client. Then: password login → token exchange → `getPets()` against your server, and print one real position's attributes (protocol, battery fields).
-2. **Map and pet cards** from the first load. *Meets "done when".*
+1. ✅ **Setup and a test against your server.** *Confirmed on the real server 2026-09-25.* `git init` with `.gitignore` (before `.env` exists), `.env.example`, env validation and the Traccar client. Then: password login → token exchange → `getAssets()` against your server, and print one real position's attributes (protocol, battery fields).
+2. **Map and asset cards** from the first load. *Meets "done when".*
 3. **Live updates** over SSE.
 4. **SSO**, including the catch-all redirect and the Traccar config change.
 5. **Polish:** manifest, CSP, Dockerfile.

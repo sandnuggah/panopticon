@@ -1,6 +1,6 @@
 import { env } from './env.server'
 
-// Typed client for the few Traccar endpoints tracpet uses. Responses are checked
+// Typed client for the few Traccar endpoints panopticon uses. Responses are checked
 // field by field so a changed Traccar API fails loudly instead of rendering nonsense.
 
 export type TraccarUser = {

@@ -14,7 +14,7 @@ function NotFound() {
   return (
     <main className="home">
       <p>Page not found.</p>
-      <Link to="/">Back to your pets</Link>
+      <Link to="/">Back to your assets</Link>
     </main>
   )
 }

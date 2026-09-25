@@ -8,7 +8,7 @@ export const Route = createRootRoute({
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       { name: 'color-scheme', content: 'light dark' },
-      { title: 'tracpet' },
+      { title: 'panopticon' },
     ],
   }),
   shellComponent: RootDocument,

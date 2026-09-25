@@ -1,4 +1,4 @@
-import type { Pet } from '../lib/pet'
+import type { Asset } from '../lib/asset'
 import {
   getDevices,
   getLatestPositions,
@@ -6,16 +6,16 @@ import {
   type TraccarPosition,
 } from './traccar.server'
 
-export async function loadPets(token: string): Promise<Pet[]> {
+export async function loadAssets(token: string): Promise<Asset[]> {
   const [devices, positions] = await Promise.all([getDevices(token), getLatestPositions(token)])
   const positionByDevice = new Map(positions.map((position) => [position.deviceId, position]))
   return devices
     .filter((device) => !device.disabled)
-    .map((device) => toPet(device, positionByDevice.get(device.id)))
+    .map((device) => toAsset(device, positionByDevice.get(device.id)))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export function toPet(device: TraccarDevice, position: TraccarPosition | undefined): Pet {
+export function toAsset(device: TraccarDevice, position: TraccarPosition | undefined): Asset {
   return {
     id: device.id,
     name: device.name,
@@ -33,7 +33,7 @@ export function toPet(device: TraccarDevice, position: TraccarPosition | undefin
   }
 }
 
-function readBattery(attributes: Record<string, unknown>): Pet['battery'] {
+function readBattery(attributes: Record<string, unknown>): Asset['battery'] {
   const percent = typeof attributes.batteryLevel === 'number' ? attributes.batteryLevel : undefined
   const volts = typeof attributes.battery === 'number' ? attributes.battery : undefined
   return percent === undefined && volts === undefined ? undefined : { percent, volts }

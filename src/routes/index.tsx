@@ -1,8 +1,8 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { RelativeTime } from '../components/RelativeTime'
-import type { Pet } from '../lib/pet'
+import type { Asset } from '../lib/asset'
+import { getAssets } from '../server/assets.functions'
 import { getUser, logout } from '../server/auth.functions'
-import { getPets } from '../server/pets.functions'
 
 export const Route = createFileRoute('/')({
   beforeLoad: async () => {
@@ -10,13 +10,13 @@ export const Route = createFileRoute('/')({
     if (!user) throw redirect({ to: '/login' })
     return { user }
   },
-  loader: () => getPets(),
+  loader: () => getAssets(),
   component: Home,
 })
 
 // Step 1: a plain list to prove sign-in and data loading. The map and bottom sheet come in step 2.
 function Home() {
-  const pets = Route.useLoaderData()
+  const assets = Route.useLoaderData()
   const { user } = Route.useRouteContext()
   const router = useRouter()
 
@@ -28,18 +28,18 @@ function Home() {
   return (
     <main className="home">
       <header>
-        <h1>tracpet</h1>
+        <h1>panopticon</h1>
         <span className="muted">{user.name}</span>
         <button type="button" onClick={onLogout}>
           Sign out
         </button>
       </header>
-      {pets.length === 0 ? (
-        <p className="muted">No trackers on this account yet.</p>
+      {assets.length === 0 ? (
+        <p className="muted">No assets on this account yet.</p>
       ) : (
-        <ul className="pets">
-          {pets.map((pet) => (
-            <PetRow key={pet.id} pet={pet} />
+        <ul className="assets">
+          {assets.map((asset) => (
+            <AssetRow key={asset.id} asset={asset} />
           ))}
         </ul>
       )}
@@ -47,34 +47,34 @@ function Home() {
   )
 }
 
-function PetRow({ pet }: { pet: Pet }) {
+function AssetRow({ asset }: { asset: Asset }) {
   return (
     <li>
-      <strong>{pet.name}</strong>
-      <span className={`status status-${pet.status}`}>{pet.status}</span>
+      <strong>{asset.name}</strong>
+      <span className={`status status-${asset.status}`}>{asset.status}</span>
       <span>
-        {pet.location ? (
+        {asset.location ? (
           <>
-            Seen <RelativeTime time={pet.location.fixTime} />
+            Seen <RelativeTime time={asset.location.fixTime} />
           </>
         ) : (
           'No location yet'
         )}
       </span>
-      {pet.lastUpdate && (
+      {asset.lastUpdate && (
         <span className="muted">
-          Last contact <RelativeTime time={pet.lastUpdate} />
+          Last contact <RelativeTime time={asset.lastUpdate} />
         </span>
       )}
-      {pet.location && (
+      {asset.location && (
         <span className="muted">
-          {pet.location.lat.toFixed(5)}, {pet.location.lon.toFixed(5)}
-          {pet.location.accuracy !== undefined && ` ±${Math.round(pet.location.accuracy)} m`}
+          {asset.location.lat.toFixed(5)}, {asset.location.lon.toFixed(5)}
+          {asset.location.accuracy !== undefined && ` ±${Math.round(asset.location.accuracy)} m`}
         </span>
       )}
-      {pet.battery?.percent !== undefined && <span>Battery {pet.battery.percent}%</span>}
-      {pet.battery?.percent === undefined && pet.battery?.volts !== undefined && (
-        <span>Battery {pet.battery.volts} V</span>
+      {asset.battery?.percent !== undefined && <span>Battery {asset.battery.percent}%</span>}
+      {asset.battery?.percent === undefined && asset.battery?.volts !== undefined && (
+        <span>Battery {asset.battery.volts} V</span>
       )}
     </li>
   )

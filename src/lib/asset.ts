@@ -1,5 +1,8 @@
-/** What the browser gets for each tracker. Built on the server from a Traccar device and its latest position. */
-export type Pet = {
+/**
+ * Anything being tracked (a pet, a bike, a bag…). Built on the server from a Traccar device
+ * and its latest position; this is all the browser ever gets.
+ */
+export type Asset = {
   id: number
   name: string
   status: 'online' | 'offline' | 'unknown'
@@ -11,7 +14,7 @@ export type Pet = {
     lon: number
     /** Metres, when the tracker reports it. */
     accuracy?: number
-    /** When the pet was at this location (ISO time). */
+    /** When the asset was at this location (ISO time). */
     fixTime: string
   } | null
   /** Only present when the tracker reports battery. */

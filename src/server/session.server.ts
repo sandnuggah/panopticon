@@ -16,7 +16,7 @@ export type SessionUser = { name: string }
 function appSession() {
   const { sessionSecret, sessionDays } = env()
   return useSession<SessionData>({
-    name: 'tracpet',
+    name: 'panopticon',
     password: sessionSecret,
     maxAge: sessionDays * 24 * 60 * 60,
     sessionHeader: false,
