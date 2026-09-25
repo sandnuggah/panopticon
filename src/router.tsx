@@ -12,7 +12,7 @@ export function getRouter() {
 
 function NotFound() {
   return (
-    <main className="home">
+    <main className="page">
       <p>Page not found.</p>
       <Link to="/">Back to your assets</Link>
     </main>

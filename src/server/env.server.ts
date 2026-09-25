@@ -2,7 +2,10 @@ type Env = {
   traccarUrl: string
   sessionSecret: string
   sessionDays: number
+  mapStyleUrl: string
 }
+
+const DEFAULT_MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
 
 let cached: Env | undefined
 
@@ -12,6 +15,7 @@ export function env(): Env {
     traccarUrl: readTraccarUrl(),
     sessionSecret: readSessionSecret(),
     sessionDays: readSessionDays(),
+    mapStyleUrl: readMapStyleUrl(),
   }
   return cached
 }
@@ -44,6 +48,21 @@ function readSessionSecret(): string {
     throw new Error('SESSION_SECRET must be at least 32 characters. Generate one with: openssl rand -base64 32')
   }
   return secret
+}
+
+function readMapStyleUrl(): string {
+  const raw = process.env.MAP_STYLE_URL?.trim()
+  if (!raw) return DEFAULT_MAP_STYLE_URL
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    throw new Error(`MAP_STYLE_URL is not a valid URL: ${raw}`)
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error(`MAP_STYLE_URL must start with https:// or http://, got ${raw}`)
+  }
+  return url.href
 }
 
 function readSessionDays(): number {

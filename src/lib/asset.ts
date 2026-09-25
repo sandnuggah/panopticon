@@ -23,3 +23,16 @@ export type Asset = {
     volts?: number
   }
 }
+
+/** A location older than this is shown greyed out. */
+const STALE_AFTER_MS = 30 * 60 * 1000
+
+export function isStale(asset: Asset, now: number): boolean {
+  return !asset.location || now - Date.parse(asset.location.fixTime) > STALE_AFTER_MS
+}
+
+/** True when the tracker has been in contact since its last location fix (e.g. no GPS indoors). */
+export function contactIsNewerThanFix(asset: Asset): boolean {
+  if (!asset.lastUpdate || !asset.location) return false
+  return Date.parse(asset.lastUpdate) - Date.parse(asset.location.fixTime) > 5 * 60 * 1000
+}

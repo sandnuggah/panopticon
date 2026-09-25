@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useNow } from '../lib/useNow'
 
 const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
@@ -26,13 +26,4 @@ function describe(seconds: number): string {
     if (Math.abs(seconds) >= size) return format.format(Math.trunc(seconds / size), unit)
   }
   return 'just now'
-}
-
-function useNow(intervalMs: number): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs)
-    return () => clearInterval(id)
-  }, [intervalMs])
-  return now
 }

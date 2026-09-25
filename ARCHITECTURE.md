@@ -109,15 +109,17 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 ## UI
 
 - **Pages:** `/login` and `/`. The selected asset is a search param (`/?asset=12`), so it survives a reload.
-- **Layout:** full-screen map with a bottom sheet of asset cards. Each card shows:
-  - the name;
-  - an online/offline dot;
-  - "seen 4 min ago", from `fixTime` using `Intl.RelativeTimeFormat` and re-rendered every 30 s;
-  - "last contact …" when it differs from the fix time by more than a few minutes;
-  - battery, when available.
-- **Map:** tap a card to fly to that asset. On load the map fits all assets.
-- **Markers:** maplibre DOM markers (enough for ≤5), greyed out when the fix is stale, with an accuracy circle when the position reports accuracy.
-- **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first.
+- **Layout:** on phones, the map fills the top and a sheet of asset cards sits below it (up to 45% of the screen, scrolls). From 768px wide, the cards move to a 22rem side panel. The sheet doesn't cover the map, so the map needs no padding tricks. Each card shows:
+  - the name, an online/offline dot and a status label;
+  - "Seen 4 minutes ago", from `fixTime` using `Intl.RelativeTimeFormat` and re-rendered every 30 s;
+  - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
+  - battery, when available (highlighted at 20% or below).
+- **Map:** tapping a card or marker selects that asset and flies to it; tapping it again re-centres. On load the map shows the asset in `?asset=`, or fits all assets.
+- **Markers:** maplibre DOM markers (enough for ≤5): a dot with the asset's initial and a name label. Greyed out when the fix is older than 30 minutes; larger with a ring when selected.
+  - No accuracy circle yet: the ST-904L reports no accuracy, so it would never show. Add it when a tracker does.
+- **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first, and maplibre stays out of the first-load bundle.
+- **maplibre worker:** v6 looks for its worker script next to its own file, which breaks once bundled. Vite bundles it instead (`?worker&url`, `worker.format: 'es'`), and `setWorkerUrl` points maplibre at the same-origin result.
+- **Data freshness:** the `/` loader has `staleTime: 30s`, so selecting an asset (a URL change) doesn't re-query Traccar. Live updates in step 3 replace this.
 - **Home screen:** a web app manifest so the app can be added to the home screen. No service worker for now.
 
 ## Map tiles
@@ -146,10 +148,14 @@ src/
     assets.server.ts                  Traccar → Asset mapping
     auth.functions.ts                 getUser / loginWithPassword / logout
     assets.functions.ts               getAssets
+    map.functions.ts                  getMapStyleUrl
   components/
-    RelativeTime.tsx  AssetMap.tsx (step 2)  AssetSheet.tsx (step 2)
+    AssetMap.tsx                      maplibre map + markers (browser only, lazy)
+    AssetSheet.tsx                    asset cards
+    RelativeTime.tsx
   lib/
-    asset.ts                          Asset view model (shared with the browser)
+    asset.ts                          Asset view model + isStale (shared with the browser)
+    useNow.ts                         ticking clock for relative times
     live.ts                           EventSource → store (useSyncExternalStore)  (step 3)
 ```
 
@@ -174,7 +180,7 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 - **Content-Security-Policy:**
   - `default-src 'self'`
   - `connect-src` / `img-src`: `'self'` plus the map origin
-  - `worker-src blob:` (needed by maplibre)
+  - `worker-src 'self'`: the maplibre worker is served from the app's own origin, so no `blob:` is needed
 - No analytics or third-party scripts.
 - **Traccar `:latest` moves.** `traccar.ts` checks the fields it reads and fails loudly instead of rendering nonsense. I'd recommend pinning the Traccar image tag in your deployment.
 
@@ -192,7 +198,7 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 ## Build order
 
 1. ✅ **Setup and a test against your server.** *Confirmed on the real server 2026-09-25.* `git init` with `.gitignore` (before `.env` exists), `.env.example`, env validation and the Traccar client. Then: password login → token exchange → `getAssets()` against your server, and print one real position's attributes (protocol, battery fields).
-2. **Map and asset cards** from the first load. *Meets "done when".*
+2. ✅ **Map and asset cards** from the first load. *Meets "done when". Confirmed on the real server 2026-09-25.*
 3. **Live updates** over SSE.
 4. **SSO**, including the catch-all redirect and the Traccar config change.
 5. **Polish:** manifest, CSP, Dockerfile.
