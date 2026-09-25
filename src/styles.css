@@ -733,16 +733,32 @@ a.button-quiet {
 /* Phones: a single row of pictures (or initials) with a status dot, leaving the screen to the map.
    The details stay in the page for screen readers, just not visible. */
 @media (max-width: 767px) {
-  /* One row: the avatars scroll sideways, the footer stays at the right end. */
+  /* Like an app's toolbar: one fixed row that never scrolls or bounces. The avatars and the cog
+     sit --toolbar-space from its edges; part of that is --ring-space, the padding around the
+     avatars and the cog that leaves room for the selection ring. */
   .sheet {
+    --toolbar-space: 12px;
+    --ring-space: 5px;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    gap: calc(var(--toolbar-space) - 2 * var(--ring-space));
+    max-height: none;
+    overflow: hidden;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-user-select: none;
+    padding: calc(var(--toolbar-space) - var(--ring-space));
+    padding-bottom: calc(var(--toolbar-space) - var(--ring-space) + env(safe-area-inset-bottom));
+  }
+
+  /* Swiping on the toolbar would otherwise drag the whole page on iOS. */
+  html:has(.sheet) {
+    overscroll-behavior: none;
   }
 
   .sheet-footer {
     margin-left: auto;
+    padding: var(--ring-space);
   }
 
   /* Same size as the avatars beside it, with the icon scaled to match. */
@@ -760,10 +776,13 @@ a.button-quiet {
     flex: 1;
     min-width: 0;
     display: flex;
-    gap: 0.75rem;
+    gap: var(--toolbar-space);
+    /* Only if there are more assets than fit; the bar itself stays put. */
     overflow-x: auto;
-    /* Room for the selection ring, which would otherwise be clipped by the scroll area. */
-    padding: 5px;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    padding: var(--ring-space);
   }
 
   .asset-card,
