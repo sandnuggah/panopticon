@@ -39,7 +39,7 @@ podman build --platform linux/amd64,linux/arm64 --manifest ghcr.io/<github-user>
 podman manifest push --all ghcr.io/<github-user>/panopticon:2
 ```
 
-This builds for both x86-64 servers (like Unraid) and ARM. A plain `podman build` on an Apple
+This builds for both x86-64 servers and ARM. A plain `podman build` on an Apple
 Silicon Mac makes an ARM-only image, which fails on x86 with `exec format error`. The app build runs
 natively either way; see the Dockerfile.
 
