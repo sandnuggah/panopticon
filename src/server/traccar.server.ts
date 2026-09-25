@@ -121,9 +121,16 @@ export async function getTraccarSessionUser(sessionCookie: string): Promise<Trac
   return parseUser(await response.json())
 }
 
-/** The token's user, with the settings that limit what they may change. */
+/**
+ * The token's user, with the settings that limit what they may change. GET /api/session ignores the
+ * Authorization header (it only reads the HTTP session), so this signs in with `?token=`, which
+ * returns the user, and ends that session again.
+ */
 export async function getUserAccess(token: string): Promise<TraccarUserAccess> {
-  const value = await getJson('/api/session', token)
+  const response = await request(`/api/session?${new URLSearchParams({ token })}`)
+  await ensureOk(response, 'GET /api/session?token')
+  await endSession(readSessionCookie(response))
+  const value: unknown = await response.json()
   if (!isObject(value)) throw unexpected('user is not an object')
   return {
     administrator: value.administrator === true,
