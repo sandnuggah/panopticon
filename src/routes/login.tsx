@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { getLoginOptions, getUser, loginWithPassword } from '../server/auth.functions'
+import { appName, useTheme } from '../lib/theme'
 import type { SsoError } from '../server/sso.server'
 
 const ssoMessages: Record<SsoError, string> = {
@@ -19,7 +20,7 @@ export const Route = createFileRoute('/login')({
     if (await getUser()) throw redirect({ to: '/' })
   },
   loader: () => getLoginOptions(),
-  head: () => ({ meta: [{ title: 'Sign in · panopticon' }] }),
+  head: ({ match }) => ({ meta: [{ title: `Sign in · ${appName(match.context.theme)}` }] }),
   component: LoginPage,
 })
 
@@ -27,6 +28,7 @@ function LoginPage() {
   const router = useRouter()
   const { sso } = Route.useLoaderData()
   const { error: ssoError } = Route.useSearch()
+  const [theme] = useTheme()
   const [needsCode, setNeedsCode] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -64,7 +66,7 @@ function LoginPage() {
 
   return (
     <main className="login">
-      <h1>panopticon</h1>
+      <h1>{appName(theme)}</h1>
       {sso && (
         <>
           {/* A full page load, not client routing: /auth/sso redirects to the identity provider. */}

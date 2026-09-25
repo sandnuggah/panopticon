@@ -142,7 +142,7 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 ## UI
 
 - **Pages:** `/login`, `/` and `/settings`. The selected asset is a search param (`/?asset=12`), so it survives a reload.
-- **No visible logo:** the map page has only a screen-reader heading. The list has no header row.
+- **App name:** the desktop sidebar starts with the app's name as the theme shows it ("Panopticon 👁️", or "Petopticon 🐾" in the pet theme). On phones that heading is hidden visually but kept for screen readers, so the compact list stays one row.
 - **Map menu:** a round cog button (an 8-tooth gear, generated rather than hand-drawn so it's symmetric) in the map's top-left corner, followed by the live indicator. It opens a small menu (`UserMenu.tsx`) showing who's signed in and a **Settings** link. The menu focuses its first item when opened; **Escape** or a click outside closes it and returns focus to the button.
   - A profile picture was considered and dropped. Traccar has no user pictures, and the one Pocket ID sends at sign-in reaches only Traccar, which discards it. Getting it would need either a Pocket ID API key (which can't be scoped, so a full admin key) or a second OIDC client in panopticon.
 - **Layout:** on phones (under 768 px), the map fills the screen and the assets form one compact row along the bottom: each is just its picture or initial, with a status dot on the corner and a ring when selected (about 74 px tall in all). The name and details stay in each button for screen readers but are hidden visually. From 768 px wide, the assets become full cards in a 22 rem side panel. The list never covers the map, so the map needs no padding tricks. Each full card shows:
@@ -178,7 +178,7 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
 
 Pick a theme on the Settings page, from a list with a colour preview for each. Two themes so far:
 - **Classic** (default): the original look, following the device's light or dark mode.
-- **Dog park:** always light, with bright pastels, rounder corners, a rounded system font where available (`ui-rounded`, i.e. Apple devices), a 🐾 after the title, a gently softened map, and trails drawn as paw prints.
+- **Petopticon** (theme id `pet`; formerly "Dog park" with id `dog`, which is still read as `pet` so saved choices carry over): renames the app to "Petopticon" on the login page and browser tab, and follows the device's light or dark mode (a pastel light palette, and a dark one with deep warm backgrounds and the same pastel accents), with rounder corners, a rounded system font where available (`ui-rounded`, i.e. Apple devices), a 🐾 after the login title, a gently softened map, and trails drawn as paw prints.
 
 - **Storage:** the choice lives in the `panopticon-theme` cookie (one year, `SameSite=Lax`, `Secure` over HTTPS), per browser.
   - A cookie rather than `localStorage`, so the server can render `<html data-theme>` straight away: no flash of the default theme on load.
@@ -194,7 +194,7 @@ Pick a theme on the Settings page, from a list with a colour preview for each. T
 - **Adding a theme:**
   1. Add an entry to `THEMES` in `src/lib/theme.ts`.
   2. Add a `:root[data-theme='<id>']` block of variables, plus `.theme-preview-<id>` swatches, to `styles.css`.
-  3. Optionally, give it special map behaviour in `AssetMap`, as the dog theme's paws do.
+  3. Optionally, give it special map behaviour in `AssetMap`, as the pet theme's paws do.
 
 ## Map tiles
 

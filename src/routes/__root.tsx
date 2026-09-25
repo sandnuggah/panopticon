@@ -17,8 +17,8 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       { name: 'color-scheme', content: 'light dark' },
       { name: 'theme-color', content: '#2f6b4f' },
-      { name: 'apple-mobile-web-app-title', content: 'panopticon' },
-      { title: 'panopticon' },
+      { name: 'apple-mobile-web-app-title', content: 'Panopticon' },
+      { title: 'Panopticon' },
     ],
     links: [
       { rel: 'manifest', href: '/manifest.webmanifest' },

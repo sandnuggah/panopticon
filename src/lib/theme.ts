@@ -9,12 +9,15 @@ export const THEMES = [
   {
     id: 'classic',
     label: 'Classic',
+    /** The app's name as this theme shows it (login title, browser tab). */
+    appName: 'Panopticon',
     description: 'Calm greens. Follows your device’s light or dark mode.',
   },
   {
-    id: 'dog',
-    label: 'Dog park',
-    description: 'Bright pastels, rounder shapes, and paw prints for trails.',
+    id: 'pet',
+    label: 'Petopticon',
+    appName: 'Petopticon',
+    description: 'Bright pastels, rounder shapes, and paw prints for trails. Follows your device’s light or dark mode.',
   },
 ] as const
 
@@ -23,8 +26,17 @@ export type ThemeId = (typeof THEMES)[number]['id']
 export const DEFAULT_THEME: ThemeId = 'classic'
 export const THEME_COOKIE = 'panopticon-theme'
 
+/** Ids that were renamed, so browsers that saved the old one keep their theme. */
+const RENAMED_THEMES: Record<string, ThemeId> = { dog: 'pet' }
+
 export function parseTheme(value: string | undefined | null): ThemeId {
-  return THEMES.some((theme) => theme.id === value) ? (value as ThemeId) : DEFAULT_THEME
+  const id = (value && RENAMED_THEMES[value]) || value
+  return THEMES.some((theme) => theme.id === id) ? (id as ThemeId) : DEFAULT_THEME
+}
+
+/** The app's name in the given theme, e.g. "Petopticon" in the pet theme. */
+export function appName(theme: ThemeId): string {
+  return THEMES.find((option) => option.id === theme)?.appName ?? 'Panopticon'
 }
 
 export function themeFromCookieHeader(cookieHeader: string): ThemeId {

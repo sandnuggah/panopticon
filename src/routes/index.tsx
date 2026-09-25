@@ -4,7 +4,7 @@ import { AssetSheet } from '../components/AssetSheet'
 import { LiveIndicator } from '../components/LiveIndicator'
 import { UserMenu } from '../components/UserMenu'
 import { useSettings } from '../lib/settings'
-import { useTheme } from '../lib/theme'
+import { appName, useTheme } from '../lib/theme'
 import { useLiveAssets } from '../lib/useLiveAssets'
 import { getAssets } from '../server/assets.functions'
 import { getUser } from '../server/auth.functions'
@@ -57,8 +57,6 @@ function Home() {
 
   return (
     <main className="app">
-      {/* The page still needs a heading for screen readers, just not a visible logo. */}
-      <h1 className="visually-hidden">panopticon</h1>
       <div className="map-area">
         <div className="map-overlay">
           <UserMenu name={user.name} />
@@ -78,7 +76,13 @@ function Home() {
           </Suspense>
         </ClientOnly>
       </div>
-      <AssetSheet assets={assets} selectedId={selectedId} onSelect={select} />
+      <AssetSheet
+        assets={assets}
+        selectedId={selectedId}
+        onSelect={select}
+        // Shown in the desktop sidebar; on phones it's hidden visually but kept for screen readers.
+        header={<h1 className="sheet-title">{appName(theme)}</h1>}
+      />
     </main>
   )
 }

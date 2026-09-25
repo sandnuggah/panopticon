@@ -1,6 +1,6 @@
 {
-  "name": "panopticon",
-  "short_name": "panopticon",
+  "name": "Panopticon",
+  "short_name": "Panopticon",
   "description": "Where your tracked assets are right now.",
   "start_url": "/",
   "scope": "/",

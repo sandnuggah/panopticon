@@ -10,7 +10,7 @@ export const Route = createFileRoute('/settings')({
     if (!user) throw redirect({ to: '/login' })
     return { user }
   },
-  head: () => ({ meta: [{ title: 'Settings · panopticon' }] }),
+  head: () => ({ meta: [{ title: 'Settings · Panopticon' }] }),
   component: SettingsPage,
 })
 

@@ -27,7 +27,7 @@ const PAW_IMAGE = 'paw-prints'
 type Props = {
   assets: Asset[]
   trails: Trails
-  /** Dog park draws trails as paw prints instead of a line. */
+  /** Petopticon (the pet theme) draws trails as paw prints instead of a line. */
   theme: ThemeId
   styleUrl: string
   selectedId: number | undefined
@@ -89,7 +89,7 @@ export default function AssetMap({ assets, trails, theme, styleUrl, selectedId, 
     const rgb = trailRgb()
     map.setPaintProperty(TRAILS, 'line-gradient', trailGradient(rgb))
     map.updateImage(PAW_IMAGE, drawPawPrints(rgb))
-    const paws = theme === 'dog'
+    const paws = theme === 'pet'
     map.setLayoutProperty(TRAILS, 'visibility', paws ? 'none' : 'visible')
     map.setLayoutProperty(PAWS, 'visibility', paws ? 'visible' : 'none')
   }, [theme, styleLoaded])

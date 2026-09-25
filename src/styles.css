@@ -42,10 +42,9 @@
   }
 }
 
-/* Dog park theme: always light, bright pastels, rounder everything. `:root[data-theme]` outranks the
-   plain `:root` rules above, including the dark-mode ones. */
-:root[data-theme='dog'] {
-  color-scheme: light;
+/* Petopticon (pet) theme: bright pastels, rounder everything; follows the device's light or dark mode.
+   `:root[data-theme]` outranks the plain `:root` rules above, including the dark-mode ones. */
+:root[data-theme='pet'] {
   --bg: #fff6ee;
   --surface: #ffffff;
   --surface-selected: #ffe3ec;
@@ -66,12 +65,40 @@
   --font: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-:root[data-theme='dog'] .login h1::after {
+:root[data-theme='pet'] .login h1::after,
+:root[data-theme='pet'] .sheet-title::after {
   content: ' 🐾';
 }
 
+/* Classic's mark after the app name, like the pet theme's paw. */
+:root[data-theme='classic'] .login h1::after,
+:root[data-theme='classic'] .sheet-title::after {
+  content: ' 👁️';
+}
+
+/* Dark mode: deep warm backgrounds, same pastel accents. The map tiles stay light (as in Classic),
+   so the near-black paw prints keep their colour. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='pet'] {
+    --bg: #1f1a1d;
+    --surface: #2a2327;
+    --surface-selected: #3d2a33;
+    --text: #f6ece8;
+    --muted: #b9a8a3;
+    --border: #43383c;
+    --accent: #ff9fb6;
+    --accent-text: #2b1a1f;
+    --online: #7fd8b0;
+    --offline: #ffb38a;
+    --stale: #7d7176;
+    --error: #f2b8b5;
+    --warning: #f0c27a;
+    --shadow: 0 2px 8px rgb(0 0 0 / 0.5);
+  }
+}
+
 /* Softer, sunnier map tiles to match the pastels. */
-:root[data-theme='dog'] .maplibregl-canvas {
+:root[data-theme='pet'] .maplibregl-canvas {
   filter: saturate(0.75) brightness(1.06);
 }
 
@@ -209,10 +236,6 @@ input {
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
-}
-
-.sheet-header {
-  justify-content: flex-end;
 }
 
 /* Floats over the map's top-left corner (zoom controls are top-right): user menu, then Live. */
@@ -708,20 +731,20 @@ a.button-quiet {
   background: #1c1b19;
 }
 
-.theme-preview-dog {
+.theme-preview-pet {
   background: #fff6ee;
   border: 1px solid #f4d9cc;
 }
 
-.theme-preview-dog span:nth-child(1) {
+.theme-preview-pet span:nth-child(1) {
   background: #ff8fab;
 }
 
-.theme-preview-dog span:nth-child(2) {
+.theme-preview-pet span:nth-child(2) {
   background: #7fd8b0;
 }
 
-.theme-preview-dog span:nth-child(3) {
+.theme-preview-pet span:nth-child(3) {
   background: #ffc59e;
 }
 
@@ -747,6 +770,17 @@ a.button-quiet {
     background: none;
     border: 0;
     border-radius: 50%;
+  }
+
+  /* The app name: shown in the desktop sidebar, kept only for screen readers on phones. */
+  .sheet-header {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .asset-card-body {
