@@ -1,0 +1,146 @@
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --text: #1c1b19;
+  --muted: #6b6860;
+  --border: #dedbd3;
+  --accent: #2f6b4f;
+  --accent-text: #ffffff;
+  --online: #2f8f5b;
+  --offline: #b0522d;
+  --error: #b3261e;
+  --radius: 12px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161614;
+    --surface: #22211e;
+    --text: #edebe6;
+    --muted: #a19d93;
+    --border: #3a3833;
+    --accent: #6fbf95;
+    --accent-text: #10170f;
+    --online: #6fcf97;
+    --offline: #e0895f;
+    --error: #f2b8b5;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  padding: 0.6rem 1rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+input {
+  font: inherit;
+  font-size: max(16px, 1rem); /* stops iOS zooming in on focus */
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--error);
+  margin: 0;
+}
+
+.login {
+  max-width: 22rem;
+  margin: 15vh auto 0;
+  padding: 0 16px;
+}
+
+.login form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.login label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.home {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.home header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.home header h1 {
+  margin-right: auto;
+}
+
+.pets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.pets li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.status {
+  font-size: 0.85rem;
+}
+
+.status-online {
+  color: var(--online);
+}
+
+.status-offline,
+.status-unknown {
+  color: var(--offline);
+}
