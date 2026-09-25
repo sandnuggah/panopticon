@@ -8,10 +8,12 @@ type Props = {
   selectedId: number | undefined
   onSelect: (id: number) => void
   header?: ReactNode
+  /** Controls at the end of the list: its bottom on wider screens, its right end on phones. */
+  footer?: ReactNode
 }
 
 /** The list under the map on phones, beside it on wider screens. */
-export function AssetSheet({ assets, selectedId, onSelect, header }: Props) {
+export function AssetSheet({ assets, selectedId, onSelect, header, footer }: Props) {
   return (
     <section className="sheet" aria-label="Assets">
       {header && <header className="sheet-header">{header}</header>}
@@ -26,6 +28,7 @@ export function AssetSheet({ assets, selectedId, onSelect, header }: Props) {
           ))}
         </ul>
       )}
+      {footer && <footer className="sheet-footer">{footer}</footer>}
     </section>
   )
 }

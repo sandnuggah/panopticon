@@ -236,7 +236,18 @@ input {
   margin-bottom: 0.75rem;
 }
 
-/* Floats over the map's top-left corner (zoom controls are top-right): user menu, then Live. */
+.sheet-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* On the sheet's own background, not floating over the map. */
+.sheet .settings-link {
+  box-shadow: none;
+}
+
+/* Floats over the map's top-left corner (zoom controls are top-right). */
 .map-overlay {
   position: absolute;
   top: calc(10px + env(safe-area-inset-top));
@@ -306,11 +317,25 @@ input {
     flex-direction: row-reverse;
   }
 
+  /* Title on top, the list scrolling in between, and the footer pinned to the bottom. */
   .sheet {
+    display: flex;
+    flex-direction: column;
     width: 22rem;
     max-height: none;
+    overflow: hidden;
     box-shadow: 1px 0 0 var(--border);
     padding-bottom: 16px;
+  }
+
+  .asset-cards {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .sheet-footer {
+    margin-top: auto;
+    padding-top: 12px;
   }
 }
 
@@ -708,11 +733,21 @@ a.button-quiet {
 /* Phones: a single row of pictures (or initials) with a status dot, leaving the screen to the map.
    The details stay in the page for screen readers, just not visible. */
 @media (max-width: 767px) {
+  /* One row: the avatars scroll sideways, the footer stays at the right end. */
   .sheet {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
   }
 
+  .sheet-footer {
+    margin-left: auto;
+  }
+
   .asset-cards {
+    flex: 1;
+    min-width: 0;
     display: flex;
     gap: 0.75rem;
     overflow-x: auto;

@@ -58,7 +58,6 @@ function Home() {
     <main className="app">
       <div className="map-area">
         <div className="map-overlay">
-          <SettingsLink />
           <LiveIndicator status={status} />
         </div>
         <ClientOnly fallback={mapPlaceholder}>
@@ -81,6 +80,7 @@ function Home() {
         onSelect={select}
         // Shown in the desktop sidebar; on phones it's hidden visually but kept for screen readers.
         header={<h1 className="sheet-title">{appName(theme)}</h1>}
+        footer={<SettingsLink />}
       />
     </main>
   )
