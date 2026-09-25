@@ -1,18 +1,28 @@
-import { useEffect, useRef } from 'react'
-import { LngLatBounds, MapLibreMap, Marker, NavigationControl, setWorkerUrl } from 'maplibre-gl'
+import { useEffect, useRef, useState } from 'react'
+import {
+  type GeoJSONSource,
+  LngLatBounds,
+  MapLibreMap,
+  Marker,
+  NavigationControl,
+  setWorkerUrl,
+} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 // maplibre looks for its worker next to its own file, which breaks once bundled.
 // Let Vite bundle the worker and hand maplibre the resulting same-origin URL.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { isStale, type Asset } from '../lib/asset'
+import type { Trails } from '../lib/trail'
 import { useNow } from '../lib/useNow'
 
 setWorkerUrl(workerUrl)
 
 const ASSET_ZOOM = 15
+const TRAILS = 'trails'
 
 type Props = {
   assets: Asset[]
+  trails: Trails
   styleUrl: string
   selectedId: number | undefined
   /** Changes on every selection, so tapping the already-selected asset re-centres on it. */
@@ -21,12 +31,13 @@ type Props = {
 }
 
 /** Browser-only: load with React.lazy inside <ClientOnly>. */
-export default function AssetMap({ assets, styleUrl, selectedId, focusToken, onSelect }: Props) {
+export default function AssetMap({ assets, trails, styleUrl, selectedId, focusToken, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const markersRef = useRef(new Map<number, Marker>())
   const onSelectRef = useRef(onSelect)
   const cameraPlacedRef = useRef(false)
+  const [styleLoaded, setStyleLoaded] = useState(false)
   const now = useNow(30_000)
 
   useEffect(() => {
@@ -42,6 +53,10 @@ export default function AssetMap({ assets, styleUrl, selectedId, focusToken, onS
       attributionControl: { compact: true },
     })
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
+    map.on('load', () => {
+      addTrailLayer(map)
+      setStyleLoaded(true)
+    })
     mapRef.current = map
     const markers = markersRef.current
     return () => {
@@ -49,8 +64,14 @@ export default function AssetMap({ assets, styleUrl, selectedId, focusToken, onS
       map.remove()
       mapRef.current = null
       cameraPlacedRef.current = false
+      setStyleLoaded(false)
     }
   }, [styleUrl])
+
+  useEffect(() => {
+    if (!styleLoaded) return
+    void mapRef.current?.getSource<GeoJSONSource>(TRAILS)?.setData(toTrailFeatures(trails))
+  }, [trails, styleLoaded])
 
   // Keep one marker per located asset.
   useEffect(() => {
@@ -102,6 +123,54 @@ export default function AssetMap({ assets, styleUrl, selectedId, focusToken, onS
   }, [selectedId, focusToken])
 
   return <div ref={containerRef} className="map" />
+}
+
+/** One line per asset. Markers are DOM elements, so they always sit above it. */
+function addTrailLayer(map: MapLibreMap) {
+  const [r, g, b] = accentRgb()
+  map.addSource(TRAILS, { type: 'geojson', data: toTrailFeatures({}), lineMetrics: true })
+  map.addLayer({
+    id: TRAILS,
+    type: 'line',
+    source: TRAILS,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-width': 4,
+      // Oldest point transparent, newest solid, so the direction of travel reads at a glance.
+      'line-gradient': [
+        'interpolate',
+        ['linear'],
+        ['line-progress'],
+        0,
+        `rgba(${r}, ${g}, ${b}, 0)`,
+        1,
+        `rgba(${r}, ${g}, ${b}, 0.9)`,
+      ],
+    },
+  })
+}
+
+type TrailData = Parameters<GeoJSONSource['setData']>[0]
+
+function toTrailFeatures(trails: Trails): TrailData {
+  return {
+    type: 'FeatureCollection',
+    features: Object.entries(trails)
+      .filter(([, points]) => points.length >= 2)
+      .map(([id, points]) => ({
+        type: 'Feature',
+        properties: { id: Number(id) },
+        geometry: { type: 'LineString', coordinates: points.map((point) => [point.lon, point.lat]) },
+      })),
+  }
+}
+
+/** The theme's --accent as RGB; the map's paint properties can't read CSS variables. */
+function accentRgb(): [number, number, number] {
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value)
+  if (!match) return [47, 107, 79]
+  return [parseInt(match[1]!, 16), parseInt(match[2]!, 16), parseInt(match[3]!, 16)]
 }
 
 function fitAll(map: MapLibreMap, assets: Asset[]) {

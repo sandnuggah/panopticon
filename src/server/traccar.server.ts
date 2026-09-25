@@ -20,6 +20,8 @@ export type TraccarDevice = {
 export type TraccarPosition = {
   deviceId: number
   protocol: string | null
+  /** False when the tracker had no GPS fix and repeated an old location. */
+  valid: boolean
   fixTime: string
   latitude: number
   longitude: number
@@ -93,6 +95,37 @@ export async function getDevices(token: string): Promise<TraccarDevice[]> {
 /** Latest position of every device the user can see. */
 export async function getLatestPositions(token: string): Promise<TraccarPosition[]> {
   return parseList(await getJson('/api/positions', token), parsePosition)
+}
+
+/** Positions of one device between two times, oldest first. Fails for users with reports disabled. */
+export async function getPositionHistory(
+  token: string,
+  deviceId: number,
+  from: Date,
+  to: Date,
+): Promise<TraccarPosition[]> {
+  const query = new URLSearchParams({
+    deviceId: String(deviceId),
+    from: from.toISOString(),
+    to: to.toISOString(),
+  })
+  return parseList(await getJson(`/api/positions?${query}`, token), parsePosition)
+}
+
+/** Opens Traccar's live WebSocket. It sends `{devices, positions, events}` messages as things change. */
+export function openSocket(token: string): WebSocket {
+  const url = env().traccarUrl.replace(/^http/, 'ws') + `/api/socket?token=${encodeURIComponent(token)}`
+  return new WebSocket(url)
+}
+
+/** Devices and positions from one socket message. Keepalives (`{}`) and events yield empty lists. */
+export function parseSocketMessage(text: string): { devices: TraccarDevice[]; positions: TraccarPosition[] } {
+  const message: unknown = JSON.parse(text)
+  if (!isObject(message)) throw unexpected('socket message is not an object')
+  return {
+    devices: message.devices == null ? [] : parseList(message.devices, parseDevice),
+    positions: message.positions == null ? [] : parseList(message.positions, parsePosition),
+  }
 }
 
 async function getJson(path: string, token: string): Promise<unknown> {
@@ -177,6 +210,7 @@ function parsePosition(value: unknown): TraccarPosition {
   return {
     deviceId: number(value, 'deviceId', 'position'),
     protocol: optionalString(value, 'protocol', 'position'),
+    valid: value.valid !== false,
     fixTime: string(value, 'fixTime', 'position'),
     latitude: number(value, 'latitude', 'position'),
     longitude: number(value, 'longitude', 'position'),

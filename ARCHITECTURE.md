@@ -86,10 +86,27 @@ Consequences of pointing `web.url` at this app:
   }
   ```
   Devices disabled in Traccar are left out.
-- **Updates:** the `/live` server route opens a WebSocket to `TRACCAR_URL/api/socket?token=…` using Node's built-in WebSocket client. It passes only the `devices` and `positions` messages on to the browser as Server-Sent Events. Traccar sends the latest positions as soon as the socket connects.
+- **Updates:** the `/live` server route opens a WebSocket to `TRACCAR_URL/api/socket?token=…` using Node's built-in WebSocket client. It turns Traccar's `devices` and `positions` messages into `LiveUpdate`s (`src/lib/live.ts`) and sends them to the browser as Server-Sent Events. Events, logs and Traccar's `{}` keepalives are dropped. Traccar sends the latest positions as soon as the socket connects.
   - Why SSE: it's plain HTTP (the Start server needs no WebSocket support), `EventSource` reconnects on its own, and the token stays on the server.
-- **Phones:** background tabs get suspended, so when the page becomes visible again it reruns `getAssets()` and reopens the stream.
+  - The stream sends a comment line every 25 s so proxies don't close it, and `retry: 5000` for reconnects. It also sends `X-Accel-Buffering: no` so nginx-style proxies don't buffer it.
+  - When the browser disconnects, the upstream socket is closed too.
+- **Applying updates** (`applyUpdates`): device updates change name, status and last contact. Position updates never move an asset backwards in time, and a position without battery keeps the last known value. An update for an unknown asset (added in Traccar) reloads the list; a disabled one is removed.
+- **When things go wrong:**
+  - The stream ends (Traccar closed the socket): the browser reconnects after 5 s, then reloads the list and trail history to fill the gap.
+  - The stream is refused: `/live` can't tell from the socket why, so it checks the token with a REST call. If the token is dead it clears the session and returns 401, and the page goes to `/login`. Otherwise it returns 502; the page keeps what it has, shows "Offline, retrying" and retries with backoff (5 s doubling to 60 s).
+- **Phones:** background tabs get suspended, so when the page becomes visible again it reloads the list and trail history and reopens the stream.
+- **Header indicator:** "Live", "Connecting…" or "Offline, retrying", so a still map isn't mistaken for a still asset.
 - **Scale:** one upstream socket per open tab. At 1–5 assets and a handful of users that's fine.
+
+## Trail
+
+A line behind each asset showing where it went in the last N minutes, fading from transparent (oldest) to solid (newest).
+
+- **History:** after the map loads, `getTrails({ minutes, assetIds })` calls `GET /api/positions?deviceId&from&to` once per asset. Positions Traccar marks invalid (no GPS fix, repeated old location) are left out.
+  - Traccar refuses this endpoint for users with "disable reports" set. Those users just get no trail.
+- **Live:** each valid live position is appended; points older than the window are dropped every 30 s.
+- **Drawing:** one GeoJSON `LineString` per asset in a single maplibre line layer with `line-gradient` (needs `lineMetrics`). The colour is the theme's `--accent`, read once when the map loads.
+- **Length:** set in Settings: Off, 5, 10 (default), 15, 30 or 60 minutes, or 3 hours. Longer means more history per asset on each load.
 
 ## Battery
 
@@ -102,13 +119,13 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 **Confirmed from real data (2026-09-25):** the ST-904L reports protocol `h02` with no `batteryLevel` or `battery`. It does send eight extra values after the status field, which Traccar stores unnamed as `io1`–`io8`:
 
 - `io1`–`io4` look like cell info (MCC `240` = Sweden, MNC `01`, then area and cell IDs).
-- On SinoTrack 4G models, `io5` is reported to be battery %. It read `0` on a tracker that had gone offline, which is consistent with an empty battery but not proof.
+- On SinoTrack 4G models, `io5` is reported to be battery %. It read `0` on a tracker that had gone offline, then `13` once it was back online the same day. That fits a recharged battery, but isn't proof yet. `io6` also changed (`16` → `26`); `io7` and `io8` stayed the same.
 
 **Plan:** map it in Traccar, not in the app. A computed attribute `batteryLevel` = `io5` (as a number), linked to the SinoTrack devices, makes Traccar store a real battery level. The app then shows it with no code change, and other tracker models aren't affected. Confirm `io5` is battery first: charge the tracker and check that `io5` rises.
 
 ## UI
 
-- **Pages:** `/login` and `/`. The selected asset is a search param (`/?asset=12`), so it survives a reload.
+- **Pages:** `/login`, `/` and `/settings`. The selected asset is a search param (`/?asset=12`), so it survives a reload.
 - **Layout:** on phones, the map fills the top and a sheet of asset cards sits below it (up to 45% of the screen, scrolls). From 768px wide, the cards move to a 22rem side panel. The sheet doesn't cover the map, so the map needs no padding tricks. Each card shows:
   - the name, an online/offline dot and a status label;
   - "Seen 4 minutes ago", from `fixTime` using `Intl.RelativeTimeFormat` and re-rendered every 30 s;
@@ -119,7 +136,8 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
   - No accuracy circle yet: the ST-904L reports no accuracy, so it would never show. Add it when a tracker does.
 - **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first, and maplibre stays out of the first-load bundle.
 - **maplibre worker:** v6 looks for its worker script next to its own file, which breaks once bundled. Vite bundles it instead (`?worker&url`, `worker.format: 'es'`), and `setWorkerUrl` points maplibre at the same-origin result.
-- **Data freshness:** the `/` loader has `staleTime: 30s`, so selecting an asset (a URL change) doesn't re-query Traccar. Live updates in step 3 replace this.
+- **Data freshness:** the `/` loader reloads when you arrive on the map (`shouldReload: cause !== 'stay'`), not when you select an asset. Live updates keep it current in between.
+- **Settings** (`/settings`): trail length, plus the account section with sign-out. Settings live in `localStorage`, per browser. They're a convenience: without storage, the defaults apply. Server render and hydration use the defaults, so the page waits for the stored value before fetching trail history.
 - **Home screen:** a web app manifest so the app can be added to the home screen. No service worker for now.
 
 ## Map tiles
@@ -139,7 +157,8 @@ src/
     index.tsx                         map + asset sheet (protected)
     auth.sso.ts                       server route: start SSO                        (step 4)
     api.session.openid.callback.ts    server route: SSO return (path fixed by Traccar) (step 4)
-    live.ts                           server route: SSE relay                        (step 3)
+    settings.tsx                      trail length, sign-out
+    live.ts                           server route: SSE relay
     $.ts                              catch-all: 302 to TRACCAR_URL + same path       (step 4)
   server/
     env.server.ts                     read + validate env once
@@ -149,14 +168,20 @@ src/
     auth.functions.ts                 getUser / loginWithPassword / logout
     assets.functions.ts               getAssets
     map.functions.ts                  getMapStyleUrl
+    trails.functions.ts               getTrails (position history)
+    live.server.ts                    /live: WebSocket → SSE relay
   components/
     AssetMap.tsx                      maplibre map + markers (browser only, lazy)
     AssetSheet.tsx                    asset cards
+    LiveIndicator.tsx                 Live / Connecting / Offline
     RelativeTime.tsx
   lib/
     asset.ts                          Asset view model + isStale (shared with the browser)
     useNow.ts                         ticking clock for relative times
-    live.ts                           EventSource → store (useSyncExternalStore)  (step 3)
+    live.ts                           LiveUpdate type + applyUpdates (shared with the server)
+    trail.ts                          trail types, extend/prune
+    settings.ts                       per-browser settings (localStorage)
+    useLiveAssets.ts                  EventSource + trails + reconnect logic
 ```
 
 - `*.server.ts` files are server-only; TanStack Start's import protection fails the build if browser code imports them.
@@ -177,6 +202,7 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 ## Security
 
 - The app calls only the Traccar endpoints listed here; there's no `/api/*` pass-through. The catch-all only redirects the browser and never proxies.
+- `/live` needs the session cookie. It's a same-origin GET with `SameSite=Lax`, so other sites can't open it with your cookie. Traccar only accepts the token as a URL parameter on its socket, which may put the token in Traccar's access logs. That's server to server and never visible to the browser.
 - **Content-Security-Policy:**
   - `default-src 'self'`
   - `connect-src` / `img-src`: `'self'` plus the map origin
@@ -199,6 +225,6 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 
 1. ✅ **Setup and a test against your server.** *Confirmed on the real server 2026-09-25.* `git init` with `.gitignore` (before `.env` exists), `.env.example`, env validation and the Traccar client. Then: password login → token exchange → `getAssets()` against your server, and print one real position's attributes (protocol, battery fields).
 2. ✅ **Map and asset cards** from the first load. *Meets "done when". Confirmed on the real server 2026-09-25.*
-3. **Live updates** over SSE.
+3. ✅ **Live updates** over SSE, plus the **trail** and the **settings** page. *Tested against a fake Traccar; committed 2026-09-25 at your request before a full real-server check.*
 4. **SSO**, including the catch-all redirect and the Traccar config change.
 5. **Polish:** manifest, CSP, Dockerfile.

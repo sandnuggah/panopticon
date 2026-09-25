@@ -45,10 +45,22 @@ export async function signOut(): Promise<void> {
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
+  if (!(await getSessionToken())) return null
   const session = await appSession()
-  const { token, expiresAt, name } = session.data
+  return { name: session.data.name ?? '' }
+}
+
+/** The signed-in user's Traccar token, or null when signed out or expired. */
+export async function getSessionToken(): Promise<string | null> {
+  const session = await appSession()
+  const { token, expiresAt } = session.data
   if (!token || !expiresAt || expiresAt <= Date.now()) return null
-  return { name: name ?? '' }
+  return token
+}
+
+export async function clearSession(): Promise<void> {
+  const session = await appSession()
+  await session.clear()
 }
 
 /**
@@ -56,16 +68,13 @@ export async function getSessionUser(): Promise<SessionUser | null> {
  * no valid token, including when Traccar rejects it (expired or revoked).
  */
 export async function withToken<T>(call: (token: string) => Promise<T>): Promise<T> {
-  const session = await appSession()
-  const { token, expiresAt } = session.data
-  if (!token || !expiresAt || expiresAt <= Date.now()) {
-    throw redirect({ to: '/login' })
-  }
+  const token = await getSessionToken()
+  if (!token) throw redirect({ to: '/login' })
   try {
     return await call(token)
   } catch (error) {
     if (error instanceof TraccarError && error.status === 401) {
-      await session.clear()
+      await clearSession()
       throw redirect({ to: '/login' })
     }
     throw error

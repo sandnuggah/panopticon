@@ -1,8 +1,11 @@
 import { lazy, Suspense, useState } from 'react'
-import { ClientOnly, createFileRoute, redirect, useRouter } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { AssetSheet } from '../components/AssetSheet'
+import { LiveIndicator } from '../components/LiveIndicator'
+import { useSettings } from '../lib/settings'
+import { useLiveAssets } from '../lib/useLiveAssets'
 import { getAssets } from '../server/assets.functions'
-import { getUser, logout } from '../server/auth.functions'
+import { getUser } from '../server/auth.functions'
 import { getMapStyleUrl } from '../server/map.functions'
 
 // maplibre needs a browser; keep it out of the server render and the initial bundle.
@@ -24,27 +27,26 @@ export const Route = createFileRoute('/')({
     const [assets, mapStyleUrl] = await Promise.all([getAssets(), getMapStyleUrl()])
     return { assets, mapStyleUrl }
   },
-  // Selecting an asset changes the URL; don't refetch from Traccar for that.
-  staleTime: 30_000,
+  // Reload when arriving (e.g. back from settings). Selecting an asset only changes the search
+  // params ('stay'); live updates keep the list current meanwhile.
+  shouldReload: ({ cause }) => cause !== 'stay',
   component: Home,
 })
 
 function Home() {
-  const { assets, mapStyleUrl } = Route.useLoaderData()
-  const { user } = Route.useRouteContext()
+  const loaderData = Route.useLoaderData()
   const { asset: selectedId } = Route.useSearch()
   const navigate = Route.useNavigate()
-  const router = useRouter()
   const [focusToken, setFocusToken] = useState(0)
+  const [settings, , settingsLoaded] = useSettings()
+  const { assets, trails, status } = useLiveAssets(
+    loaderData.assets,
+    settingsLoaded ? settings.trailMinutes : null,
+  )
 
   function select(id: number) {
     setFocusToken((token) => token + 1)
     void navigate({ search: { asset: id }, replace: true })
-  }
-
-  async function onLogout() {
-    await logout()
-    await router.navigate({ to: '/login' })
   }
 
   const mapPlaceholder = <div className="map map-placeholder" />
@@ -56,7 +58,8 @@ function Home() {
           <Suspense fallback={mapPlaceholder}>
             <AssetMap
               assets={assets}
-              styleUrl={mapStyleUrl}
+              trails={trails}
+              styleUrl={loaderData.mapStyleUrl}
               selectedId={selectedId}
               focusToken={focusToken}
               onSelect={select}
@@ -71,10 +74,10 @@ function Home() {
         header={
           <>
             <h1>panopticon</h1>
-            <span className="muted sheet-user">{user.name}</span>
-            <button type="button" className="button-quiet" onClick={onLogout}>
-              Sign out
-            </button>
+            <LiveIndicator status={status} />
+            <Link to="/settings" className="button-quiet">
+              Settings
+            </Link>
           </>
         }
       />

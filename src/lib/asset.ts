@@ -1,3 +1,17 @@
+export type AssetLocation = {
+  lat: number
+  lon: number
+  /** Metres, when the tracker reports it. */
+  accuracy?: number
+  /** When the asset was at this location (ISO time). */
+  fixTime: string
+}
+
+export type AssetBattery = {
+  percent?: number
+  volts?: number
+}
+
 /**
  * Anything being tracked (a pet, a bike, a bag…). Built on the server from a Traccar device
  * and its latest position; this is all the browser ever gets.
@@ -9,19 +23,9 @@ export type Asset = {
   /** Last contact from the tracker (ISO time), null if it has never connected. */
   lastUpdate: string | null
   /** Latest known location, null until the tracker's first position. */
-  location: {
-    lat: number
-    lon: number
-    /** Metres, when the tracker reports it. */
-    accuracy?: number
-    /** When the asset was at this location (ISO time). */
-    fixTime: string
-  } | null
+  location: AssetLocation | null
   /** Only present when the tracker reports battery. */
-  battery?: {
-    percent?: number
-    volts?: number
-  }
+  battery?: AssetBattery
 }
 
 /** A location older than this is shown greyed out. */
