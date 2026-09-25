@@ -1,0 +1,49 @@
+# panopticon on the Traccar server, as its own compose project.
+# Copy this folder to the server, copy .env.example to .env and fill it in, then:
+#   docker compose up -d
+# Your reverse proxy forwards https://<panopticon domain> to 127.0.0.1:3000 (see README.md).
+
+name: panopticon
+
+services:
+  panopticon:
+    image: ${PANOPTICON_IMAGE:?set PANOPTICON_IMAGE in .env}
+    restart: unless-stopped
+    environment:
+      # Traccar's service name on its compose network. Its web port needn't be published.
+      TRACCAR_URL: ${TRACCAR_URL:-http://traccar:8082}
+      TRACCAR_PUBLIC_URL: ${TRACCAR_PUBLIC_URL:-}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      SESSION_DAYS: ${SESSION_DAYS:-30}
+      MAP_STYLE_URL: ${MAP_STYLE_URL:-}
+      MAP_EXTRA_ORIGINS: ${MAP_EXTRA_ORIGINS:-}
+    ports:
+      # Only the reverse proxy on this host should reach it. If your proxy runs in Docker,
+      # drop this and put both on a shared network instead.
+      - "127.0.0.1:3000:3000"
+    networks:
+      - traccar
+    # The app writes nothing to disk and needs no Linux capabilities.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/login').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  traccar:
+    # Traccar's compose network; `docker network ls` shows its name.
+    external: true
+    name: ${TRACCAR_NETWORK:-traccar_default}

@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24-alpine AS build
+# The build runs on the builder's own CPU; its output is plain JavaScript, so it works on any
+# target platform. Only the final stage (which just copies files) is target-specific, so
+# cross-building (e.g. amd64 on an Apple Silicon Mac) needs no emulation.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
