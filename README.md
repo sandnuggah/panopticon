@@ -37,7 +37,10 @@ after `podman login ghcr.io` with a token that has `write:packages`:
 ```bash
 podman build --platform linux/amd64,linux/arm64 --manifest ghcr.io/<github-user>/panopticon:2 .
 podman manifest push --all ghcr.io/<github-user>/panopticon:2
+podman manifest push --all ghcr.io/<github-user>/panopticon:2 ghcr.io/<github-user>/panopticon:latest
 ```
+
+The numbered tag lets you pin a release or roll back; `:latest` always points at the newest one.
 
 This builds for both x86-64 servers and ARM. A plain `podman build` on an Apple
 Silicon Mac makes an ARM-only image, which fails on x86 with `exec format error`. The app build runs
