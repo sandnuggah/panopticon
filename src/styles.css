@@ -745,6 +745,17 @@ a.button-quiet {
     margin-left: auto;
   }
 
+  /* Same size as the avatars beside it, with the icon scaled to match. */
+  .sheet .settings-link {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .sheet .settings-link-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
   .asset-cards {
     flex: 1;
     min-width: 0;
