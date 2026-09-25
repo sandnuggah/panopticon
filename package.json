@@ -8,14 +8,16 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start": "node --env-file-if-exists=.env server.mjs"
   },
   "dependencies": {
     "@tanstack/react-router": "1.170.39",
     "@tanstack/react-start": "1.168.58",
     "maplibre-gl": "6.11.2",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "srvx": "0.11.22"
   },
   "devDependencies": {
     "@types/node": "24.13.6",

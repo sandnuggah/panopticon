@@ -1,0 +1,11 @@
+node_modules
+dist
+.output
+.tanstack
+.git
+.claude
+.env
+.env.*
+!.env.example
+*.local
+.DS_Store

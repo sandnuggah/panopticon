@@ -60,7 +60,7 @@ export function traccarLinkRedirect(request: Request): Response | null {
   const url = new URL(request.url)
   if (!TRACCAR_UI_PATHS.some((prefix) => url.pathname.startsWith(prefix))) return null
   // String concatenation, not new URL(path, base): a path like //evil.example must stay on Traccar.
-  return redirect(env().traccarUrl + url.pathname + url.search)
+  return redirect(env().traccarPublicUrl + url.pathname + url.search)
 }
 
 function errorFor(reason: string): SsoError {

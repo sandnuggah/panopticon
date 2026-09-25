@@ -154,7 +154,7 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 - **maplibre worker:** v6 looks for its worker script next to its own file, which breaks once bundled. Vite bundles it instead (`?worker&url`, `worker.format: 'es'`), and `setWorkerUrl` points maplibre at the same-origin result.
 - **Data freshness:** the `/` loader reloads when you arrive on the map (`shouldReload: cause !== 'stay'`), not when you select an asset. Live updates keep it current in between.
 - **Settings** (`/settings`): trail length, plus the account section with sign-out. Settings live in `localStorage`, per browser. They're a convenience: without storage, the defaults apply. Server render and hydration use the defaults, so the page waits for the stored value before fetching trail history.
-- **Home screen:** a web app manifest so the app can be added to the home screen. No service worker for now.
+- **Home screen:** `public/manifest.webmanifest` plus icons (`icon.svg`, 192/512 px maskable PNGs, 180 px `apple-touch-icon`), so the app can be added to the home screen and opens full-screen. No service worker, and no offline use.
 
 ## Map tiles
 
@@ -165,8 +165,12 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
 ## Project layout
 
 ```
+server.mjs                            production server: srvx + static files + Start handler
+Dockerfile, .dockerignore
+public/                               manifest + icons, copied to dist/client
 src/
-  router.tsx
+  start.ts                            request middleware: CSRF for server functions, security headers
+  router.tsx                          also sets the per-request CSP nonce for Start's inline scripts
   routes/
     __root.tsx
     login.tsx
@@ -185,6 +189,7 @@ src/
     assets.functions.ts               getAssets
     map.functions.ts                  getMapStyleUrl
     trails.functions.ts               getTrails (position history)
+    security.server.ts                CSP nonce + security headers
     live.server.ts                    /live: WebSocket → SSE relay
     sso.server.ts                     /auth/sso, callback, Traccar email-link redirects
   components/
@@ -209,10 +214,13 @@ src/
 
 | Env var | Required | Purpose |
 |---|---|---|
-| `TRACCAR_URL` | yes | Traccar base URL, server-only |
+| `TRACCAR_URL` | yes | Traccar base URL as this app's server reaches it; can be an internal Docker address |
+| `TRACCAR_PUBLIC_URL` | no | Where browsers reach Traccar's UI, for email-link redirects; default `TRACCAR_URL` |
 | `SESSION_SECRET` | yes | ≥ 32 chars; encrypts the session cookie |
 | `SESSION_DAYS` | no | Token and cookie lifetime, default `30` |
 | `MAP_STYLE_URL` | no | maplibre style, default OpenFreeMap `liberty` |
+| `MAP_EXTRA_ORIGINS` | no | Comma-separated extra origins the map style loads from (CSP) |
+| `PORT`, `HOST` | no | Production server listen address, default `3000` on all interfaces |
 
 There is no Traccar token in env: each user's own sign-in is the only way to reach Traccar data. `.env` is gitignored and `.env.example` is committed. No env var uses the `VITE_` prefix, so nothing server-side can land in the client bundle.
 
@@ -220,23 +228,36 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 
 - The app calls only the Traccar endpoints listed here; there's no `/api/*` pass-through. The catch-all only redirects the browser and never proxies.
 - `/live` needs the session cookie. It's a same-origin GET with `SameSite=Lax`, so other sites can't open it with your cookie. Traccar only accepts the token as a URL parameter on its socket, which may put the token in Traccar's access logs. That's server to server and never visible to the browser.
-- **Content-Security-Policy:**
-  - `default-src 'self'`
-  - `connect-src` / `img-src`: `'self'` plus the map origin
-  - `worker-src 'self'`: the maplibre worker is served from the app's own origin, so no `blob:` is needed
+- **Content-Security-Policy** (production only; Vite's dev server needs inline scripts):
+  - `script-src 'self' 'nonce-…'`: TanStack Start writes a few inline scripts into every page (hydration data, scroll restoration). `security.server.ts` makes a random nonce per request, and `getRouter` passes it to `ssr.nonce` so every one of those scripts carries it. No `'unsafe-inline'`.
+  - `style-src 'self'`: CSS is only loaded from files. maplibre's inline styles are set from JavaScript, which CSP allows.
+  - `connect-src` / `img-src`: `'self'` plus the map style's origin and `MAP_EXTRA_ORIGINS`; `img-src` also allows `data:` and `blob:` for the map.
+  - `worker-src 'self'`: the maplibre worker is served from the app's own origin, so no `blob:` is needed.
+  - `object-src 'none'`, `base-uri 'none'`, `form-action 'self'`, `frame-ancestors 'none'`.
+  - Checked in a production build: map, worker, trail and live stream all load with no violations.
+- **Other headers** (dev and production): `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` (the tile server never sees app URLs), `Cross-Origin-Opener-Policy: same-origin`, and a `Permissions-Policy` turning off camera, microphone, geolocation and payment. HSTS belongs on the HTTPS proxy.
+- **`src/start.ts` and CSRF:** having a `start.ts` switches off TanStack Start's default CSRF protection for server functions, so it's registered there explicitly. Checked in production: cross-site calls get 403. Behind an HTTPS proxy it still works, because modern browsers send `Sec-Fetch-Site`, which is checked before `Origin`.
 - No analytics or third-party scripts.
 - **Traccar `:latest` moves.** `traccar.ts` checks the fields it reads and fails loudly instead of rendering nonsense. I'd recommend pinning the Traccar image tag in your deployment.
 
 ## Dependencies
 
-- **Runtime:** `react`, `react-dom`, `@tanstack/react-start`, `@tanstack/react-router`, `maplibre-gl`.
+- **Runtime:** `react`, `react-dom`, `@tanstack/react-start`, `@tanstack/react-router`, `maplibre-gl`, `srvx` (production HTTP server; already part of TanStack Start, so no extra code).
 - **Dev:** `vite`, `@vitejs/plugin-react`, `typescript`, plus `@types/react`, `@types/react-dom`, `@types/node` (type definitions only).
 - **Node:** 24 LTS, pinned in `mise.toml`.
 - **Deliberately not added:** auth library, state library, date library, CSS framework, `ws`, zod, `pmtiles`.
 
 ## Deployment
 
-`vite build` produces a Node server, packaged as a small Docker image next to Traccar on its own subdomain. It needs HTTPS for the `Secure` cookie and for OIDC.
+- **Build:** `vite build` bundles the server together with all its dependencies (`ssr.noExternal`, builds only) into `dist/server` (about 1 MB), and the browser files into `dist/client`.
+- **Server:** `server.mjs` runs `srvx`. It serves `dist/client`, with year-long immutable caching for hashed `/assets/`, and hands everything else to the Start handler. `npm start` runs it locally, reading `.env`.
+- **Docker image:** runs as the non-root `node` user and contains only `dist`, `server.mjs`, `package.json` and `srvx`: about 3 MB on top of `node:24-alpine`.
+  - Built and tested with Podman 6.1 (rootless): 172 MB image, of which 3.3 MB is the app. It contains no `.env`.
+    - Against a fake Traccar: password sign-in, SSO, map, live stream and trail all work, with no CSP violations.
+    - Against the real Traccar: it reaches the server and shows the SSO button.
+  - On stop, srvx waits 5 s for open connections, then closes the live streams and exits with code 0. That's within the default 10 s stop timeout, and browsers reconnect by themselves.
+- **Hosting:** the image runs next to Traccar on its own subdomain, behind an HTTPS reverse proxy (HTTPS is needed for the `Secure` cookie and for OIDC). See the README for a compose service and a Caddy example.
+- **Private Traccar:** `TRACCAR_URL` can be Traccar's internal address, so only panopticon needs to be reachable. Traccar's device port must stay reachable for the trackers.
 
 ## Build order
 
@@ -244,4 +265,4 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 2. ✅ **Map and asset cards** from the first load. *Meets "done when". Confirmed on the real server 2026-09-25.*
 3. ✅ **Live updates** over SSE, plus the **trail** and the **settings** page. *Tested against a fake Traccar; committed 2026-09-25 at your request before a full real-server check.*
 4. ✅ **SSO**, including the catch-all redirect and the Traccar config change. *Confirmed with Pocket ID on the real server 2026-09-25.*
-5. **Polish:** manifest, CSP, Dockerfile.
+5. ✅ **Polish:** manifest, CSP, production server, Dockerfile. *Built and tested; the container image was run with Podman against the fake and the real Traccar.*

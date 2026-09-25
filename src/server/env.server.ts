@@ -1,8 +1,12 @@
 type Env = {
   traccarUrl: string
+  /** Where browsers reach Traccar's own UI (email-link redirects). Defaults to traccarUrl. */
+  traccarPublicUrl: string
   sessionSecret: string
   sessionDays: number
   mapStyleUrl: string
+  /** Origins the map may load from (CSP): the style's own, plus MAP_EXTRA_ORIGINS. */
+  mapOrigins: string[]
 }
 
 const DEFAULT_MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
@@ -11,13 +15,32 @@ let cached: Env | undefined
 
 /** Server config from environment variables, validated once. Throws with a readable message when misconfigured. */
 export function env(): Env {
-  cached ??= {
-    traccarUrl: readTraccarUrl(),
-    sessionSecret: readSessionSecret(),
-    sessionDays: readSessionDays(),
-    mapStyleUrl: readMapStyleUrl(),
+  if (!cached) {
+    const mapStyleUrl = readMapStyleUrl()
+    const traccarUrl = readUrl('TRACCAR_URL', true)!
+    cached = {
+      traccarUrl,
+      traccarPublicUrl: readUrl('TRACCAR_PUBLIC_URL', false) ?? traccarUrl,
+      sessionSecret: readSessionSecret(),
+      sessionDays: readSessionDays(),
+      mapStyleUrl,
+      mapOrigins: [new URL(mapStyleUrl).origin, ...readMapExtraOrigins()],
+    }
   }
   return cached
+}
+
+/** For styles that load tiles, fonts or sprites from other hosts than the style itself. */
+function readMapExtraOrigins(): string[] {
+  const raw = process.env.MAP_EXTRA_ORIGINS?.trim()
+  if (!raw) return []
+  return raw.split(',').map((value) => {
+    try {
+      return new URL(value.trim()).origin
+    } catch {
+      throw new Error(`MAP_EXTRA_ORIGINS has an invalid URL: ${value.trim()}`)
+    }
+  })
 }
 
 function required(name: string): string {
@@ -28,16 +51,17 @@ function required(name: string): string {
   return value
 }
 
-function readTraccarUrl(): string {
-  const raw = required('TRACCAR_URL')
+function readUrl(name: string, isRequired: boolean): string | undefined {
+  const raw = isRequired ? required(name) : process.env[name]?.trim()
+  if (!raw) return undefined
   let url: URL
   try {
     url = new URL(raw)
   } catch {
-    throw new Error(`TRACCAR_URL is not a valid URL: ${raw}`)
+    throw new Error(`${name} is not a valid URL: ${raw}`)
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new Error(`TRACCAR_URL must start with https:// or http://, got ${raw}`)
+    throw new Error(`${name} must start with https:// or http://, got ${raw}`)
   }
   return url.origin + url.pathname.replace(/\/+$/, '')
 }

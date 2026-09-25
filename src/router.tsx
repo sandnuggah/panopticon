@@ -1,5 +1,12 @@
 import { createRouter, Link } from '@tanstack/react-router'
+import { createIsomorphicFn } from '@tanstack/react-start'
 import { routeTree } from './routeTree.gen'
+import { requestNonce } from './server/security.server'
+
+// On the server, the inline scripts Start writes into the page need the request's CSP nonce.
+const scriptNonce = createIsomorphicFn()
+  .server(() => requestNonce())
+  .client(() => undefined)
 
 export function getRouter() {
   return createRouter({
@@ -7,6 +14,7 @@ export function getRouter() {
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultNotFoundComponent: NotFound,
+    ssr: { nonce: scriptNonce() },
   })
 }
 
