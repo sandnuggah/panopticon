@@ -17,7 +17,7 @@ export const THEMES = [
     id: 'pet',
     label: 'Petopticon',
     appName: 'Petopticon',
-    description: 'Bright pastels, rounder shapes, and paw prints for trails. Follows your device’s light or dark mode.',
+    description: 'Bright pastels and paw prints for trails. Follows your device’s light or dark mode.',
   },
 ] as const
 

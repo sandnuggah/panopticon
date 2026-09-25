@@ -42,7 +42,7 @@
   }
 }
 
-/* Petopticon (pet) theme: bright pastels, rounder everything; follows the device's light or dark mode.
+/* Petopticon (pet) theme: bright pastels; follows the device's light or dark mode.
    `:root[data-theme]` outranks the plain `:root` rules above, including the dark-mode ones. */
 :root[data-theme='pet'] {
   --bg: #fff6ee;
@@ -59,10 +59,7 @@
   --error: #c93c3c;
   --warning: #b86e00;
   --trail: #1a1614;
-  --radius: 20px;
   --shadow: 0 2px 8px rgb(224 100 138 / 0.3);
-  /* Rounded where the system has it (Apple devices); the default font elsewhere. */
-  --font: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 :root[data-theme='pet'] .login h1::after,

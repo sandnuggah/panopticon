@@ -178,7 +178,7 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
 
 Pick a theme on the Settings page, from a list with a colour preview for each. Two themes so far:
 - **Classic** (default): the original look, following the device's light or dark mode.
-- **Petopticon** (theme id `pet`; formerly "Dog park" with id `dog`, which is still read as `pet` so saved choices carry over): renames the app to "Petopticon" on the login page and browser tab, and follows the device's light or dark mode (a pastel light palette, and a dark one with deep warm backgrounds and the same pastel accents), with rounder corners, a rounded system font where available (`ui-rounded`, i.e. Apple devices), a 🐾 after the login title, a gently softened map, and trails drawn as paw prints.
+- **Petopticon** (theme id `pet`; formerly "Dog park" with id `dog`, which is still read as `pet` so saved choices carry over): renames the app to "Petopticon" on the login page and browser tab, and follows the device's light or dark mode (a pastel light palette, and a dark one with deep warm backgrounds and the same pastel accents), with a 🐾 after the login title, a gently softened map, and trails drawn as paw prints.
 
 - **Storage:** the choice lives in the `panopticon-theme` cookie (one year, `SameSite=Lax`, `Secure` over HTTPS), per browser.
   - A cookie rather than `localStorage`, so the server can render `<html data-theme>` straight away: no flash of the default theme on load.
