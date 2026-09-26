@@ -145,13 +145,24 @@ The trail is split using only the tracker's own reports: speed between fixes, ga
 - **Limits:** a bus, a car and an above-ground train all read as "vehicle". A car in a road tunnel (Norra länken) reads as "underground", which is literally true. Telling subway from train or tram would need stop locations from OpenStreetMap for a configurable area; not built.
 - **Tests:** `npm test` runs `segments.test.ts` with Node's own test runner (Node 24 runs TypeScript directly). The data is a made-up trip in the same shape; real location data never goes in the repo.
 
+### Follow roads (map matching)
+
+Optional: with `MAP_MATCHING_URL` set, Settings offers **Follow roads** (off by default, per browser). Walks are then drawn along the streets and paths they most likely took, instead of straight lines between GPS fixes. Rides and stays are unchanged.
+
+- **Engine:** [Valhalla](https://github.com/valhalla/valhalla), self-hosted next to Traccar (see README.md), built from an OpenStreetMap extract. `trace_route` with pedestrian costing, so footpaths and parks count. Only panopticon's server talks to it; trail points never go to a third party, and the browser and CSP are unchanged.
+- **Which walks** (`src/lib/matching.ts`, in the browser): `move` pieces from the classifier that end at least 75 m from where they started (wandering around a yard never qualifies), with standing-still jitter (points within 15 m of the previous) dropped, and at least 3 points left.
+- **Snapping** (`matchWalks` → `matching.server.ts`): at most 20 walks of 400 points per request, signed-in users only. A snapped line is used only when the real points lie on average within 15 m of it and 90% within 30 m; otherwise that walk is drawn as recorded. One bad fix (the first after coming out of the metro was 38 m off) doesn't sink a whole walk.
+- **Caching:** the server keeps 500 results in memory; the browser keeps results per walk (first fix, last fix, point count), so a walk that grows gets re-snapped, debounced by a second.
+- **Failures:** if Valhalla is unreachable or slow (5 s), walks are drawn as recorded and the server logs why; nothing is cached, so it's tried again.
+- **Measured on the experiment:** a Stockholm extract built in seconds and used ~190 MB of RAM; a match takes ~3 ms. The real Stockholm walks snapped with an average deviation of 7–8 m.
+
 ### Drawing
 
 - **Walking:** a 4 px line in `--trail`, in pieces of 3 hops so it can fade with age (opacity 0.2 at the oldest fix, 0.9 at the newest). In the pet theme, paw prints instead.
 - **Rides:** straight from the last fix before to the first fix after, since where exactly it went isn't known. Dashed for a vehicle, dotted for underground.
 - **Stays:** a soft filled circle with a thin outline.
 - All of it is one GeoJSON source with a `kind` property and a layer per kind; paw prints have their own source with longer pieces, since they're spaced 44 px apart.
-- **Length:** set in Settings: Off, 5, 10 (default), 15, 30 or 60 minutes, or 3 hours. Longer means more history per asset on each load.
+- **Length:** set in Settings: Off, 5, 10 (default), 15, 30 or 60 minutes, 3 hours, or 24 hours. Longer means more history per asset on each load: a day of reports every 30 s is about 2,900 points per asset.
 
 ## Battery
 
@@ -199,7 +210,7 @@ In the app:
 - **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first, and maplibre stays out of the first-load bundle.
 - **maplibre worker:** v6 looks for its worker script next to its own file, which breaks once bundled. Vite bundles it instead (`?worker&url`, `worker.format: 'es'`), and `setWorkerUrl` points maplibre at the same-origin result.
 - **Data freshness:** the `/` loader reloads when you arrive on the map (`shouldReload: cause !== 'stay'`), not when you select an asset. Live updates keep it current in between.
-- **Settings** (`/settings`): theme, trail length, a link to manage assets, and the account section with sign-out. Settings live in `localStorage`, per browser. They're a convenience: without storage, the defaults apply. Server render and hydration use the defaults, so the page waits for the stored value before fetching trail history.
+- **Settings** (`/settings`): theme, trail length, "Follow roads" (only when the server has map matching), a link to manage assets, and the account section with sign-out. Settings live in `localStorage`, per browser. They're a convenience: without storage, the defaults apply. Server render and hydration use the defaults, so the page waits for the stored value before fetching trail history.
 - **Home screen:** `public/manifest.webmanifest` plus icons (`icon.svg`, 192/512 px maskable PNGs, 180 px `apple-touch-icon`), so the app can be added to the home screen and opens full-screen. No service worker, and no offline use.
 
 ## Asset images
@@ -292,7 +303,8 @@ src/
     assets.functions.ts               getAssets
     manage.server.ts                  add / rename / remove assets and photos; edit access; error mapping
     manage.functions.ts               server functions for the /assets pages, with input checks
-    map.functions.ts                  getMapStyleUrl
+    map.functions.ts                  getMapOptions (style URL, follow roads available), matchWalks
+    matching.server.ts                Valhalla map matching, closeness check, cache
     images.server.ts                  /images/asset/<id>: device pictures from Traccar, cached
     theme.server.ts                   theme from the request's cookie
     trails.functions.ts               getTrails (position history)
@@ -313,6 +325,8 @@ src/
     trail.ts                          trail types, extend/prune
     segments.ts                       walking / stay / vehicle / underground, and what's happening now
     segments.test.ts                  node --test
+    matching.ts                       which walks to snap for "Follow roads"
+    useSnappedWalks.ts                asks the server to snap walks, caches the results
     settings.ts                       per-browser settings (localStorage)
     theme.ts                          THEMES, useTheme (cookie)
     assetImage.ts                     crop + shrink photos (browser), sniff image type (server)
@@ -334,6 +348,7 @@ src/
 | `SESSION_DAYS` | no | Token and cookie lifetime, default `30` |
 | `MAP_STYLE_URL` | no | maplibre style, default OpenFreeMap `liberty` |
 | `MAP_EXTRA_ORIGINS` | no | Comma-separated extra origins the map style loads from (CSP) |
+| `MAP_MATCHING_URL` | no | Valhalla for "Follow roads", e.g. `http://valhalla:8002`; see [Follow roads](#follow-roads-map-matching) |
 | `PORT`, `HOST` | no | Production server listen address, default `3000` on all interfaces |
 
 There is no Traccar token in env: each user's own sign-in is the only way to reach Traccar data. `.env` is gitignored and `.env.example` is committed. No env var uses the `VITE_` prefix, so nothing server-side can land in the client bundle.

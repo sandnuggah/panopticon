@@ -3,6 +3,7 @@ import { useSettings } from '../lib/settings'
 import { THEMES, useTheme } from '../lib/theme'
 import { TRAIL_MINUTES_OPTIONS } from '../lib/trail'
 import { getUser, logout } from '../server/auth.functions'
+import { getMapOptions } from '../server/map.functions'
 
 export const Route = createFileRoute('/settings')({
   beforeLoad: async () => {
@@ -10,12 +11,14 @@ export const Route = createFileRoute('/settings')({
     if (!user) throw redirect({ to: '/login' })
     return { user }
   },
+  loader: () => getMapOptions(),
   head: () => ({ meta: [{ title: 'Settings · Panopticon' }] }),
   component: SettingsPage,
 })
 
 function SettingsPage() {
   const { user } = Route.useRouteContext()
+  const mapOptions = Route.useLoaderData()
   const router = useRouter()
   const [settings, updateSettings] = useSettings()
   const [theme, setTheme] = useTheme()
@@ -95,6 +98,23 @@ function SettingsPage() {
         <p className="muted hint">
           How much recent movement to draw behind each asset. Saved in this browser only.
         </p>
+        {/* Only when the server has map matching (MAP_MATCHING_URL). */}
+        {mapOptions.followRoads && (
+          <>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.followRoads}
+                onChange={(event) => updateSettings({ followRoads: event.target.checked })}
+              />
+              Follow roads
+            </label>
+            <p className="muted hint">
+              Draws walks along the streets and paths they most likely took, instead of straight lines between
+              GPS fixes. Rides and places the asset stayed are unchanged. Saved in this browser only.
+            </p>
+          </>
+        )}
       </section>
 
       <section>

@@ -13,7 +13,8 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { assetInitial, isStale, type Asset } from '../lib/asset'
 import type { ThemeId } from '../lib/theme'
-import type { Trails } from '../lib/trail'
+import type { TrailPoint, Trails } from '../lib/trail'
+import { walkKey } from '../lib/matching'
 import { classifyTrail, type LatLon } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 
@@ -38,6 +39,8 @@ const CENTRED_PX = 12
 type Props = {
   assets: Asset[]
   trails: Trails
+  /** "Follow roads": walks snapped to streets and paths, by walk key; others are drawn as recorded. */
+  snappedWalks: Record<string, LatLon[]>
   /** Petopticon (the pet theme) draws trails as paw prints instead of a line. */
   theme: ThemeId
   styleUrl: string
@@ -52,6 +55,7 @@ type Props = {
 export default function AssetMap({
   assets,
   trails,
+  snappedWalks,
   theme,
   styleUrl,
   selectedId,
@@ -166,10 +170,10 @@ export default function AssetMap({
   useEffect(() => {
     const map = mapRef.current
     if (!styleLoaded || !map) return
-    const features = toTrailFeatures(trails)
+    const features = toTrailFeatures(trails, snappedWalks)
     void map.getSource<GeoJSONSource>(TRAILS)?.setData(features.trail)
     void map.getSource<GeoJSONSource>(PAWS)?.setData(features.paws)
-  }, [trails, styleLoaded])
+  }, [trails, snappedWalks, styleLoaded])
 
   // Theme: trail colour, and line versus paw prints. Runs after <html data-theme> has changed,
   // so --trail already has the new theme's value.
@@ -273,7 +277,7 @@ export default function AssetMap({
 function addTrailLayers(map: MapLibreMap) {
   const rgb = trailRgb()
   const color = `rgb(${rgb.join(', ')})`
-  const empty = toTrailFeatures({})
+  const empty = toTrailFeatures({}, {})
   const kind = (value: string) => ['==', ['get', 'kind'], value] as ['==', ['get', string], string]
   const lineLayout = { 'line-cap': 'round', 'line-join': 'round' } as const
   map.addSource(TRAILS, { type: 'geojson', data: empty.trail })
@@ -346,7 +350,7 @@ type TrailFeature = TrailData['features'][number]
  * GeoJSON for the trail layers. `paws` holds the walking only, in longer pieces than `trail`:
  * paw prints are spaced 44 px apart, so short pieces would show none.
  */
-function toTrailFeatures(trails: Trails): { trail: TrailData; paws: TrailData } {
+function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>): { trail: TrailData; paws: TrailData } {
   const trail: TrailFeature[] = []
   const paws: TrailFeature[] = []
   for (const [id, points] of Object.entries(trails)) {
@@ -362,11 +366,12 @@ function toTrailFeatures(trails: Trails): { trail: TrailData; paws: TrailData } 
     })
     for (const piece of classifyTrail(points)) {
       if (piece.kind === 'move') {
-        for (let i = 0; i < piece.points.length - 1; i += HOPS_PER_PIECE) {
-          const chunk = piece.points.slice(i, i + HOPS_PER_PIECE + 1)
+        const walk = alongRoads(piece.points, snappedWalks[walkKey(piece.points)])
+        for (let i = 0; i < walk.length - 1; i += HOPS_PER_PIECE) {
+          const chunk = walk.slice(i, i + HOPS_PER_PIECE + 1)
           trail.push(line('move', chunk, chunk.at(-1)!.time))
         }
-        paws.push(line('move', piece.points, piece.points.at(-1)!.time))
+        paws.push(line('move', walk, walk.at(-1)!.time))
       } else if (piece.kind === 'stay') {
         trail.push({
           type: 'Feature',
@@ -379,6 +384,16 @@ function toTrailFeatures(trails: Trails): { trail: TrailData; paws: TrailData } 
     }
   }
   return { trail: { type: 'FeatureCollection', features: trail }, paws: { type: 'FeatureCollection', features: paws } }
+}
+
+/**
+ * A walk as drawn: the snapped line when "Follow roads" has one, else the fixes as recorded. The
+ * snapped line has no times, so they're spread evenly between the walk's first and last fix, for fading.
+ */
+function alongRoads(points: TrailPoint[], snapped: LatLon[] | undefined): (LatLon & { time: number })[] {
+  if (!snapped || snapped.length < 2) return points
+  const [from, to] = [points[0]!.time, points.at(-1)!.time]
+  return snapped.map((point, index) => ({ ...point, time: from + ((to - from) * index) / (snapped.length - 1) }))
 }
 
 /** A circle of `radius` metres around `center`, as a closed ring of [lon, lat]. */

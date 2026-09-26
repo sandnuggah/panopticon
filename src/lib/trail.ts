@@ -18,8 +18,8 @@ export type TrailPoint = {
 export type Trails = Record<number, TrailPoint[]>
 
 /** Trail lengths offered in settings, in minutes. 0 turns trails off. */
-export const TRAIL_MINUTES_OPTIONS = [0, 5, 10, 15, 30, 60, 180] as const
-export const MAX_TRAIL_MINUTES = 180
+export const TRAIL_MINUTES_OPTIONS = [0, 5, 10, 15, 30, 60, 180, 1440] as const
+export const MAX_TRAIL_MINUTES = 1440
 /** History always covers at least this much, so what an asset is doing right now can be told. */
 export const ACTIVITY_MINUTES = 15
 

@@ -79,6 +79,44 @@ The live map uses Server-Sent Events. Caddy passes them through as they arrive. 
 `proxy_read_timeout` above 30 s. The app sends `X-Accel-Buffering: no`, so nginx won't buffer the
 stream.
 
+## Follow roads (optional)
+
+"Follow roads" in Settings draws walks along the streets and paths they most likely took, using
+[Valhalla](https://github.com/valhalla/valhalla), a routing engine built from OpenStreetMap data that
+you run yourself. Trail points only go to it, never to a third party. Without it the setting isn't
+offered.
+
+1. Add Valhalla to `compose.yaml`, on the same network as panopticon:
+   ```yaml
+     valhalla:
+       image: ghcr.io/valhalla/valhalla-scripted:latest   # pin a version tag once it works
+       restart: unless-stopped
+       environment:
+         # OpenStreetMap data for the area you need, e.g. from https://download.geofabrik.de
+         tile_urls: https://download.geofabrik.de/europe/sweden-latest.osm.pbf
+         serve_tiles: "True"
+         build_elevation: "False"
+         build_time_zones: "False"
+         build_admins: "False"
+         build_transit: "False"
+         server_threads: "2"
+       volumes:
+         - ./valhalla:/custom_files
+       networks:
+         - traccar
+   ```
+2. Start it and wait for the first build to finish; the log ends with "Tile extract successfully
+   loaded". For Sweden this downloads about 780 MB and takes a while; restarts reuse the result.
+   ```bash
+   docker compose up -d valhalla
+   ```
+3. Set `MAP_MATCHING_URL=http://valhalla:8002` in `.env` and restart panopticon:
+   ```bash
+   docker compose up -d
+   ```
+
+To refresh the map data every few months, delete `./valhalla/valhalla_tiles.tar` and restart Valhalla.
+
 ## Single sign-on
 
 panopticon uses Traccar's own OpenID Connect setup. Once panopticon is reachable at its final address:

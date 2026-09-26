@@ -693,6 +693,24 @@ input {
   outline-offset: 2px;
 }
 
+/* A setting that's on or off, e.g. "Follow roads". */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 /* Each label is centred on its stop: the stops run from half a thumb in from either end. */
 .trail-stops {
   display: flex;

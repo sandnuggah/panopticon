@@ -7,10 +7,12 @@ import { TRAIL_MINUTES_OPTIONS } from './trail'
 export type Settings = {
   /** How many minutes of movement to draw behind each asset. 0 = no trail. */
   trailMinutes: number
+  /** Snap walks on the trail to streets and paths, when the server offers it. */
+  followRoads: boolean
 }
 
 const STORAGE_KEY = 'panopticon.settings'
-const DEFAULTS: Settings = { trailMinutes: 10 }
+const DEFAULTS: Settings = { trailMinutes: 10, followRoads: false }
 
 const listeners = new Set<() => void>()
 let cachedRaw: string | null | undefined
@@ -37,7 +39,7 @@ function parse(raw: string | null): Settings {
     const trailMinutes = (TRAIL_MINUTES_OPTIONS as readonly number[]).includes(value.trailMinutes as number)
       ? (value.trailMinutes as number)
       : DEFAULTS.trailMinutes
-    return { trailMinutes }
+    return { trailMinutes, followRoads: value.followRoads === true }
   } catch {
     return DEFAULTS
   }

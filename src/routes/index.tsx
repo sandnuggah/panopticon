@@ -6,9 +6,10 @@ import { SettingsLink } from '../components/SettingsLink'
 import { useSettings } from '../lib/settings'
 import { appName, useTheme } from '../lib/theme'
 import { useLiveAssets } from '../lib/useLiveAssets'
+import { useSnappedWalks } from '../lib/useSnappedWalks'
 import { getAssets } from '../server/assets.functions'
 import { getUser } from '../server/auth.functions'
-import { getMapStyleUrl } from '../server/map.functions'
+import { getMapOptions } from '../server/map.functions'
 
 // maplibre needs a browser; keep it out of the server render and the initial bundle.
 const AssetMap = lazy(() => import('../components/AssetMap'))
@@ -26,8 +27,8 @@ export const Route = createFileRoute('/')({
     return { user }
   },
   loader: async () => {
-    const [assets, mapStyleUrl] = await Promise.all([getAssets(), getMapStyleUrl()])
-    return { assets, mapStyleUrl }
+    const [assets, mapOptions] = await Promise.all([getAssets(), getMapOptions()])
+    return { assets, mapOptions }
   },
   // Reload when arriving (e.g. back from settings). Selecting an asset only changes the search
   // params ('stay'); live updates keep the list current meanwhile.
@@ -46,6 +47,7 @@ function Home() {
     loaderData.assets,
     settingsLoaded ? settings.trailMinutes : null,
   )
+  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.followRoads && settings.followRoads)
 
   function select(id: number) {
     setFocusToken((token) => token + 1)
@@ -69,8 +71,9 @@ function Home() {
             <AssetMap
               assets={assets}
               trails={trails}
+              snappedWalks={snappedWalks}
               theme={theme}
-              styleUrl={loaderData.mapStyleUrl}
+              styleUrl={loaderData.mapOptions.styleUrl}
               selectedId={selectedId}
               focusToken={focusToken}
               onSelect={select}

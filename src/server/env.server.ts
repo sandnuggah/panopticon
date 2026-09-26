@@ -7,6 +7,8 @@ type Env = {
   mapStyleUrl: string
   /** Origins the map may load from (CSP): the style's own, plus MAP_EXTRA_ORIGINS. */
   mapOrigins: string[]
+  /** Valhalla for "Follow roads" (MAP_MATCHING_URL); without it, the setting isn't offered. */
+  mapMatchingUrl: string | undefined
 }
 
 const DEFAULT_MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
@@ -25,6 +27,7 @@ export function env(): Env {
       sessionDays: readSessionDays(),
       mapStyleUrl,
       mapOrigins: [new URL(mapStyleUrl).origin, ...readMapExtraOrigins()],
+      mapMatchingUrl: readUrl('MAP_MATCHING_URL', false),
     }
   }
   return cached
