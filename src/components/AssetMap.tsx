@@ -26,8 +26,6 @@ const PAW_IMAGE = 'paw-prints'
 const ATTRIBUTION_SECONDS = 5
 /** How long the map takes to glide to the followed asset's new position. */
 const FOLLOW_MS = 1000
-/** A tap on the map deselects after this long, unless it turns out to be a double-tap (zoom). */
-const TAP_DESELECT_MS = 350
 
 type Props = {
   assets: Asset[]
@@ -36,11 +34,9 @@ type Props = {
   theme: ThemeId
   styleUrl: string
   selectedId: number | undefined
-  /** Changes on every selection, so tapping the already-selected asset re-centres on it. */
+  /** Changes on every selection, so selecting the already-selected asset again re-centres on it. */
   focusToken: number
-  onSelect: (id: number) => void
-  /** Called when the user drags the map or taps it away from the markers. */
-  onDeselect: () => void
+  onMarkerTap: (id: number) => void
 }
 
 /** Browser-only: load with React.lazy inside <ClientOnly>. */
@@ -51,23 +47,25 @@ export default function AssetMap({
   styleUrl,
   selectedId,
   focusToken,
-  onSelect,
-  onDeselect,
+  onMarkerTap,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const markersRef = useRef(new Map<number, Marker>())
-  const onSelectRef = useRef(onSelect)
-  const onDeselectRef = useRef(onDeselect)
+  const onMarkerTapRef = useRef(onMarkerTap)
   const cameraPlacedRef = useRef(false)
   const [styleLoaded, setStyleLoaded] = useState(false)
   const now = useNow(30_000)
 
-  // Following the selected asset: the map keeps its latest position centred.
+  // Following the selected asset: the map keeps its latest position centred. Dragging the map pauses
+  // it (the asset stays selected) until the asset is tapped again or another one is selected; each
+  // selection changes focusToken, so a pause only lasts for the selection it was made in.
+  const [pausedAt, setPausedAt] = useState<number | null>(null)
+  const focusTokenRef = useRef(focusToken)
   const target = assets.find((asset) => asset.id === selectedId)?.location
   const targetLon = target?.lon
   const targetLat = target?.lat
-  const following = targetLon !== undefined && targetLat !== undefined
+  const following = targetLon !== undefined && targetLat !== undefined && pausedAt !== focusToken
   /** Where the followed asset is now, for event handlers; null when not following. */
   const targetRef = useRef<[number, number] | null>(null)
   /** Id of the selection flight under way, if any. Follow updates wait for it to land. */
@@ -77,8 +75,8 @@ export default function AssetMap({
   const gestureRef = useRef(false)
 
   useEffect(() => {
-    onSelectRef.current = onSelect
-    onDeselectRef.current = onDeselect
+    onMarkerTapRef.current = onMarkerTap
+    focusTokenRef.current = focusToken
     targetRef.current = following ? [targetLon, targetLat] : null
   })
 
@@ -103,35 +101,25 @@ export default function AssetMap({
       }, ATTRIBUTION_SECONDS * 1000)
     })
 
-    // Dragging the map, or tapping it away from the markers, deselects. Zooming doesn't.
-    const deselect = () => {
+    // Moving the map yourself pauses following; zooming doesn't. The selection stays either way.
+    const pauseFollowing = () => {
+      if (!targetRef.current) return
       targetRef.current = null
-      onDeselectRef.current()
+      setPausedAt(focusTokenRef.current)
     }
-    let tapTimer: ReturnType<typeof setTimeout> | undefined
-    const cancelTap = () => clearTimeout(tapTimer)
     map.on('dragstart', (event) => {
       // A pinch also nudges the centre, which maplibre reports as a drag; that's zooming.
       const original = event.originalEvent
       if (typeof TouchEvent !== 'undefined' && original instanceof TouchEvent && original.touches.length > 1) return
-      deselect()
+      pauseFollowing()
     })
     map.on('movestart', (event) => {
       const original = event.originalEvent
       if (!original) return
       gestureRef.current = true
       // Arrow keys pan (with Shift they rotate and tilt instead).
-      if (original instanceof KeyboardEvent && original.key.startsWith('Arrow') && !original.shiftKey) deselect()
+      if (original instanceof KeyboardEvent && original.key.startsWith('Arrow') && !original.shiftKey) pauseFollowing()
     })
-    map.on('click', (event) => {
-      if ((event.originalEvent.target as Element | null)?.closest?.('.marker')) return
-      cancelTap()
-      // The second tap of a double-tap zooms instead.
-      if (event.originalEvent.detail > 1) return
-      tapTimer = setTimeout(deselect, TAP_DESELECT_MS)
-    })
-    map.on('dblclick', cancelTap)
-    map.on('zoomstart', cancelTap)
     map.on('moveend', (event) => {
       const endedFlight = (event as { flightId?: number }).flightId
       if (endedFlight !== undefined && endedFlight !== flightRef.current) return // replaced by a newer one
@@ -146,7 +134,6 @@ export default function AssetMap({
     mapRef.current = map
     const markers = markersRef.current
     return () => {
-      cancelTap()
       clearTimeout(collapseAttribution)
       markers.clear()
       map.remove()
@@ -191,7 +178,7 @@ export default function AssetMap({
         marker.setLngLat(lngLat)
       } else {
         // A marker needs its position before it's added to the map.
-        marker = new Marker({ element: createMarkerElement(asset.id, onSelectRef) }).setLngLat(lngLat).addTo(map)
+        marker = new Marker({ element: createMarkerElement(asset.id, onMarkerTapRef) }).setLngLat(lngLat).addTo(map)
         markers.set(asset.id, marker)
       }
       updateMarkerElement(marker.getElement(), asset, {
@@ -232,13 +219,13 @@ export default function AssetMap({
   // way; those catch up when they end (see moveend above).
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !cameraPlacedRef.current || targetLon === undefined || targetLat === undefined) return
+    if (!map || !cameraPlacedRef.current || !following || targetLon === undefined || targetLat === undefined) return
     // Only while the map is actually moving, so a flag left behind can't stop following for good.
     if ((flightRef.current !== null || gestureRef.current) && map.isMoving()) return
     flightRef.current = null
     gestureRef.current = false
     map.easeTo({ center: [targetLon, targetLat], duration: FOLLOW_MS })
-  }, [targetLon, targetLat])
+  }, [targetLon, targetLat, following])
 
   // While following, zoom gestures zoom around the centre (the asset), not the fingers or cursor.
   useEffect(() => {
@@ -393,7 +380,7 @@ function fitAll(map: MapLibreMap, assets: Asset[]) {
   map.fitBounds(bounds, { padding: 64, maxZoom: ASSET_ZOOM, duration: 0 })
 }
 
-function createMarkerElement(assetId: number, onSelectRef: { current: (id: number) => void }): HTMLElement {
+function createMarkerElement(assetId: number, onTapRef: { current: (id: number) => void }): HTMLElement {
   const element = document.createElement('button')
   element.type = 'button'
   element.className = 'marker'
@@ -411,7 +398,7 @@ function createMarkerElement(assetId: number, onSelectRef: { current: (id: numbe
   })
   element.addEventListener('click', (event) => {
     event.stopPropagation()
-    onSelectRef.current(assetId)
+    onTapRef.current(assetId)
   })
   return element
 }

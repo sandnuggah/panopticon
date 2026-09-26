@@ -8,15 +8,24 @@ type Props = {
   assets: Asset[]
   selectedId: number | undefined
   onSelect: (id: number) => void
+  /** Called for a tap on the panel itself, away from the cards and buttons. */
+  onDeselect: () => void
   header?: ReactNode
   /** Controls at the end of the list: its bottom on wider screens, its right end on phones. */
   footer?: ReactNode
 }
 
 /** The list under the map on phones, beside it on wider screens. */
-export function AssetSheet({ assets, selectedId, onSelect, header, footer }: Props) {
+export function AssetSheet({ assets, selectedId, onSelect, onDeselect, header, footer }: Props) {
   return (
-    <section className="sheet" aria-label="Assets">
+    // A convenience for pointer users, like tapping the map; the cards stay the keyboard way in.
+    <section
+      className="sheet"
+      aria-label="Assets"
+      onClick={(event) => {
+        if (!(event.target as Element).closest('a, button')) onDeselect()
+      }}
+    >
       {header && <header className="sheet-header">{header}</header>}
       {assets.length === 0 ? (
         <p className="muted">No assets on this account yet.</p>

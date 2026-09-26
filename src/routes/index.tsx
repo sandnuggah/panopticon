@@ -56,6 +56,12 @@ function Home() {
     if (selectedId !== undefined) void navigate({ search: {}, replace: true })
   }
 
+  /** Map markers toggle; the cards always select (again, to re-centre). */
+  function toggle(id: number) {
+    if (id === selectedId) deselect()
+    else select(id)
+  }
+
   const mapPlaceholder = <div className="map map-placeholder" />
 
   return (
@@ -73,8 +79,7 @@ function Home() {
               styleUrl={loaderData.mapStyleUrl}
               selectedId={selectedId}
               focusToken={focusToken}
-              onSelect={select}
-              onDeselect={deselect}
+              onMarkerTap={toggle}
             />
           </Suspense>
         </ClientOnly>
@@ -83,6 +88,7 @@ function Home() {
         assets={assets}
         selectedId={selectedId}
         onSelect={select}
+        onDeselect={deselect}
         // Shown in the desktop sidebar; on phones it's hidden visually but kept for screen readers.
         header={<h1 className="sheet-title">{appName(theme)}</h1>}
         footer={<SettingsLink />}
