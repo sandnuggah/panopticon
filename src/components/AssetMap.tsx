@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  type ExpressionSpecification,
   type GeoJSONSource,
   LngLatBounds,
   MapLibreMap,
@@ -15,6 +14,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { assetInitial, isStale, type Asset } from '../lib/asset'
 import type { ThemeId } from '../lib/theme'
 import type { Trails } from '../lib/trail'
+import { classifyTrail, type LatLon } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 
 setWorkerUrl(workerUrl)
@@ -22,6 +22,12 @@ setWorkerUrl(workerUrl)
 const ASSET_ZOOM = 15
 const TRAILS = 'trails'
 const PAWS = 'paws'
+const RIDES_VEHICLE = 'trail-vehicle'
+const RIDES_UNDERGROUND = 'trail-underground'
+const STAYS_FILL = 'trail-stays'
+const STAYS_OUTLINE = 'trail-stays-outline'
+/** Walking is drawn in short pieces so the trail can fade with age, oldest faintest. */
+const HOPS_PER_PIECE = 3
 const PAW_IMAGE = 'paw-prints'
 const ATTRIBUTION_SECONDS = 5
 /** How long the map takes to glide to the followed asset's new position. */
@@ -160,8 +166,9 @@ export default function AssetMap({
   useEffect(() => {
     const map = mapRef.current
     if (!styleLoaded || !map) return
-    void map.getSource<GeoJSONSource>(TRAILS)?.setData(toTrailFeatures(trails))
-    void map.getSource<GeoJSONSource>(PAWS)?.setData(toPawFeatures(trails))
+    const features = toTrailFeatures(trails)
+    void map.getSource<GeoJSONSource>(TRAILS)?.setData(features.trail)
+    void map.getSource<GeoJSONSource>(PAWS)?.setData(features.paws)
   }, [trails, styleLoaded])
 
   // Theme: trail colour, and line versus paw prints. Runs after <html data-theme> has changed,
@@ -170,7 +177,9 @@ export default function AssetMap({
     const map = mapRef.current
     if (!styleLoaded || !map) return
     const rgb = trailRgb()
-    map.setPaintProperty(TRAILS, 'line-gradient', trailGradient(rgb))
+    const color = `rgb(${rgb.join(', ')})`
+    for (const layer of [TRAILS, RIDES_VEHICLE, RIDES_UNDERGROUND, STAYS_OUTLINE]) map.setPaintProperty(layer, 'line-color', color)
+    map.setPaintProperty(STAYS_FILL, 'fill-color', color)
     map.updateImage(PAW_IMAGE, drawPawPrints(rgb))
     const paws = theme === 'pet'
     map.setLayoutProperty(TRAILS, 'visibility', paws ? 'none' : 'visible')
@@ -256,22 +265,60 @@ export default function AssetMap({
 }
 
 /**
- * Two ways to draw trails, one shown at a time by theme: a fading line, or paw prints. Markers are
- * DOM elements, so they always sit above both.
+ * The trail, drawn by what the asset was doing (see segments.ts): walking as a line (or paw
+ * prints, in the pet theme), rides as a dashed line (dotted underground) straight between where
+ * the ride started and ended, and stays as a soft circle. Everything fades with age. Markers are
+ * DOM elements, so they always sit above all of it.
  */
 function addTrailLayers(map: MapLibreMap) {
   const rgb = trailRgb()
-  map.addSource(TRAILS, { type: 'geojson', data: toTrailFeatures({}), lineMetrics: true })
+  const color = `rgb(${rgb.join(', ')})`
+  const empty = toTrailFeatures({})
+  const kind = (value: string) => ['==', ['get', 'kind'], value] as ['==', ['get', string], string]
+  const lineLayout = { 'line-cap': 'round', 'line-join': 'round' } as const
+  map.addSource(TRAILS, { type: 'geojson', data: empty.trail })
+  map.addLayer({
+    id: STAYS_FILL,
+    type: 'fill',
+    source: TRAILS,
+    filter: kind('stay'),
+    paint: { 'fill-color': color, 'fill-opacity': ['*', 0.18, ['get', 'opacity']] },
+  })
+  map.addLayer({
+    id: STAYS_OUTLINE,
+    type: 'line',
+    source: TRAILS,
+    filter: kind('stay'),
+    paint: { 'line-color': color, 'line-width': 1.5, 'line-opacity': ['*', 0.6, ['get', 'opacity']] },
+  })
   map.addLayer({
     id: TRAILS,
     type: 'line',
     source: TRAILS,
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-width': 4, 'line-gradient': trailGradient(rgb) },
+    filter: kind('move'),
+    layout: lineLayout,
+    paint: { 'line-color': color, 'line-width': 4, 'line-opacity': ['get', 'opacity'] },
+  })
+  map.addLayer({
+    id: RIDES_VEHICLE,
+    type: 'line',
+    source: TRAILS,
+    filter: kind('vehicle'),
+    layout: lineLayout,
+    paint: { 'line-color': color, 'line-width': 3, 'line-opacity': ['get', 'opacity'], 'line-dasharray': [2, 1.6] },
+  })
+  map.addLayer({
+    id: RIDES_UNDERGROUND,
+    type: 'line',
+    source: TRAILS,
+    filter: kind('underground'),
+    layout: lineLayout,
+    // Zero-length dashes with round caps: a dotted line.
+    paint: { 'line-color': color, 'line-width': 5, 'line-opacity': ['get', 'opacity'], 'line-dasharray': [0, 1.8] },
   })
 
   map.addImage(PAW_IMAGE, drawPawPrints(rgb), { pixelRatio: PAW_PIXEL_RATIO })
-  map.addSource(PAWS, { type: 'geojson', data: toPawFeatures({}) })
+  map.addSource(PAWS, { type: 'geojson', data: empty.paws })
   map.addLayer({
     id: PAWS,
     type: 'symbol',
@@ -292,58 +339,57 @@ function addTrailLayers(map: MapLibreMap) {
   })
 }
 
-/** Oldest point transparent, newest solid, so the direction of travel reads at a glance. */
-function trailGradient([r, g, b]: [number, number, number]) {
-  return [
-    'interpolate',
-    ['linear'],
-    ['line-progress'],
-    0,
-    `rgba(${r}, ${g}, ${b}, 0)`,
-    1,
-    `rgba(${r}, ${g}, ${b}, 0.9)`,
-  ] as ExpressionSpecification
-}
+type TrailData = Extract<Parameters<GeoJSONSource['setData']>[0], { type: 'FeatureCollection' }>
+type TrailFeature = TrailData['features'][number]
 
-type TrailData = Parameters<GeoJSONSource['setData']>[0]
-
-function toTrailFeatures(trails: Trails): TrailData {
-  return {
-    type: 'FeatureCollection',
-    features: Object.entries(trails)
-      .filter(([, points]) => points.length >= 2)
-      .map(([id, points]) => ({
-        type: 'Feature',
-        properties: { id: Number(id) },
-        geometry: { type: 'LineString', coordinates: points.map((point) => [point.lon, point.lat]) },
-      })),
-  }
-}
-
-/** Paw prints can't fade along a line the way a line gradient does, so split each trail into up to
- *  five pieces, oldest faintest. Neighbouring pieces share an end point so there are no gaps. */
-function toPawFeatures(trails: Trails): TrailData {
-  const PIECES = 5
-  return {
-    type: 'FeatureCollection',
-    features: Object.entries(trails).flatMap(([id, points]) => {
-      if (points.length < 2) return []
-      const pieces = Math.min(PIECES, points.length - 1)
-      const step = (points.length - 1) / pieces
-      return Array.from({ length: pieces }, (_, piece) => {
-        const from = Math.round(piece * step)
-        const to = Math.round((piece + 1) * step)
-        return {
-          type: 'Feature' as const,
-          properties: { id: Number(id), opacity: 0.35 + (0.65 * (piece + 1)) / pieces },
-          geometry: {
-            type: 'LineString' as const,
-            coordinates: points.slice(from, to + 1).map((point) => [point.lon, point.lat]),
-          },
+/**
+ * GeoJSON for the trail layers. `paws` holds the walking only, in longer pieces than `trail`:
+ * paw prints are spaced 44 px apart, so short pieces would show none.
+ */
+function toTrailFeatures(trails: Trails): { trail: TrailData; paws: TrailData } {
+  const trail: TrailFeature[] = []
+  const paws: TrailFeature[] = []
+  for (const [id, points] of Object.entries(trails)) {
+    const fixes = points.filter((point) => point.valid)
+    if (fixes.length === 0) continue
+    // Oldest faintest: 0.2 at the start of the trail, 0.9 at its newest point.
+    const [oldest, newest] = [fixes[0]!.time, fixes.at(-1)!.time]
+    const opacity = (time: number) => 0.2 + 0.7 * (newest > oldest ? (time - oldest) / (newest - oldest) : 1)
+    const line = (kind: string, coordinates: LatLon[], time: number): TrailFeature => ({
+      type: 'Feature',
+      properties: { id: Number(id), kind, opacity: opacity(time) },
+      geometry: { type: 'LineString', coordinates: coordinates.map((point) => [point.lon, point.lat]) },
+    })
+    for (const piece of classifyTrail(points)) {
+      if (piece.kind === 'move') {
+        for (let i = 0; i < piece.points.length - 1; i += HOPS_PER_PIECE) {
+          const chunk = piece.points.slice(i, i + HOPS_PER_PIECE + 1)
+          trail.push(line('move', chunk, chunk.at(-1)!.time))
         }
-      })
-    }),
+        paws.push(line('move', piece.points, piece.points.at(-1)!.time))
+      } else if (piece.kind === 'stay') {
+        trail.push({
+          type: 'Feature',
+          properties: { id: Number(id), kind: 'stay', opacity: opacity(piece.to) },
+          geometry: { type: 'Polygon', coordinates: [circle(piece.center, piece.radius)] },
+        })
+      } else {
+        trail.push(line(piece.kind, [piece.from, piece.to], piece.to.time))
+      }
+    }
   }
+  return { trail: { type: 'FeatureCollection', features: trail }, paws: { type: 'FeatureCollection', features: paws } }
+}
+
+/** A circle of `radius` metres around `center`, as a closed ring of [lon, lat]. */
+function circle(center: LatLon, radius: number): [number, number][] {
+  const STEPS = 32
+  const metresPerDegreeLat = 111_320
+  const metresPerDegreeLon = metresPerDegreeLat * Math.cos((center.lat * Math.PI) / 180)
+  return Array.from({ length: STEPS + 1 }, (_, step) => {
+    const angle = (step / STEPS) * 2 * Math.PI
+    return [center.lon + (Math.cos(angle) * radius) / metresPerDegreeLon, center.lat + (Math.sin(angle) * radius) / metresPerDegreeLat]
+  })
 }
 
 const PAW_PIXEL_RATIO = 2

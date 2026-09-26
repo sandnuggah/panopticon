@@ -1,6 +1,6 @@
 import type { Asset, AssetLocation } from '../lib/asset'
 import type { LiveUpdate } from '../lib/live'
-import type { Trails } from '../lib/trail'
+import type { TrailPoint, Trails } from '../lib/trail'
 import { assetImageVersion } from './images.server'
 import {
   getDevices,
@@ -20,7 +20,10 @@ export async function loadAssets(token: string): Promise<Asset[]> {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** Valid positions from the last `minutes`, per asset. An asset whose history fails just gets no trail. */
+/**
+ * Reports from the last `minutes`, per asset, including those without a GPS fix: they're evidence
+ * of travel without GPS (see segments.ts). An asset whose history fails just gets no trail.
+ */
 export async function loadTrails(token: string, assetIds: number[], minutes: number): Promise<Trails> {
   const to = new Date()
   const from = new Date(to.getTime() - minutes * 60 * 1000)
@@ -33,10 +36,7 @@ export async function loadTrails(token: string, assetIds: number[], minutes: num
       console.warn(`No trail for asset ${assetIds[index]}:`, String(result.reason))
       return
     }
-    trails[assetIds[index]!] = result.value
-      .filter((position) => position.valid)
-      .map((position) => ({ lat: position.latitude, lon: position.longitude, time: Date.parse(position.fixTime) }))
-      .sort((a, b) => a.time - b.time)
+    trails[assetIds[index]!] = result.value.map(toTrailPoint).sort((a, b) => a.time - b.time)
   })
   return trails
 }
@@ -73,13 +73,39 @@ export function imageUrl(device: TraccarDevice): string | undefined {
 }
 
 export function toPositionUpdate(position: TraccarPosition): LiveUpdate {
-  return {
+  const update: LiveUpdate = {
     kind: 'position',
     id: position.deviceId,
     location: toLocation(position),
     battery: readBattery(position.attributes),
     valid: position.valid,
   }
+  const cell = readCell(position)
+  if (cell !== undefined) update.cell = cell
+  return update
+}
+
+function toTrailPoint(position: TraccarPosition): TrailPoint {
+  const point: TrailPoint = {
+    lat: position.latitude,
+    lon: position.longitude,
+    time: Date.parse(position.fixTime),
+    valid: position.valid,
+  }
+  const cell = readCell(position)
+  if (cell !== undefined) point.cell = cell
+  return point
+}
+
+/**
+ * The serving cell tower. Traccar's `network` has it for many protocols; SinoTrack's h02 instead
+ * sends it unnamed after the status field, where io1–io4 are country, operator, area and cell.
+ */
+function readCell(position: TraccarPosition): number | undefined {
+  if (position.cellId !== null) return position.cellId
+  if (position.protocol !== 'h02') return undefined
+  const cell = Number(position.attributes.io4)
+  return Number.isInteger(cell) && cell > 0 ? cell : undefined
 }
 
 function toLocation(position: TraccarPosition): AssetLocation {

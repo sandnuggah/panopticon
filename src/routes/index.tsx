@@ -42,7 +42,7 @@ function Home() {
   const [focusToken, setFocusToken] = useState(0)
   const [settings, , settingsLoaded] = useSettings()
   const [theme] = useTheme()
-  const { assets, trails, status } = useLiveAssets(
+  const { assets, trails, activities, status } = useLiveAssets(
     loaderData.assets,
     settingsLoaded ? settings.trailMinutes : null,
   )
@@ -81,6 +81,7 @@ function Home() {
       </div>
       <AssetSheet
         assets={assets}
+        activities={activities}
         selectedId={selectedId}
         onSelect={select}
         onDeselect={deselect}

@@ -119,12 +119,40 @@ Consequences of pointing `web.url` at this app:
 
 ## Trail
 
-A line behind each asset showing where it went in the last N minutes, fading from transparent (oldest) to solid (newest).
+A trail behind each asset showing where it went in the last N minutes, drawn by what it was doing: walking, staying put, riding a vehicle, or travelling underground. Older parts fade.
 
-- **History:** after the map loads, `getTrails({ minutes, assetIds })` calls `GET /api/positions?deviceId&from&to` once per asset. Positions Traccar marks invalid (no GPS fix, repeated old location) are left out.
-  - Traccar refuses this endpoint for users with "disable reports" set. Those users just get no trail.
-- **Live:** each valid live position is appended; points older than the window are dropped every 30 s.
-- **Drawing:** one GeoJSON `LineString` per asset in a single maplibre line layer with `line-gradient` (needs `lineMetrics`). The colour is the theme's `--accent`, read once when the map loads.
+- **History:** `getTrails({ minutes, assetIds })` calls `GET /api/positions?deviceId&from&to` once per asset. It always covers at least 15 minutes, even with the trail off, so the card can say what the asset is doing right now; only the chosen length is drawn.
+  - Reports **without a GPS fix** are kept, marked `valid: false`. Their position is stale, so they're never drawn; they only count as evidence of travel without GPS.
+  - Each point also carries the **serving cell tower**: Traccar's `network.cellTowers` when it has one, otherwise `io4` for SinoTrack's `h02` (see [Battery](#battery) for the io fields).
+  - Traccar refuses this endpoint for users with "disable reports" set. Those users just get no trail and no activity.
+- **Live:** every live position, with or without a fix, is appended; points older than the window are dropped.
+
+### What the asset was doing (`src/lib/segments.ts`)
+
+The trail is split using only the tracker's own reports: speed between fixes, gaps without a fix, and cell changes. It needs no map data, so it works in any city or country. The thresholds were tuned on a real ST-904L trip by metro across Stockholm (Skanstull → Slussen → Östermalmstorg → Karlaplan → Ropsten), and checked against five hours at daycare with GPS gaps and up to 100 m of jitter, which stayed "walking".
+
+| Piece | Rule |
+|---|---|
+| **Vehicle** | Averaging over 20 km/h between two fixes, over at least 150 m. A dog doesn't do that on foot for 30 s; GPS jitter doesn't cover 150 m. |
+| **Underground** | A vehicle hop with reports without a fix in between, or a GPS gap that ends at least 300 m away at over 10 km/h. |
+| **Station stop** | A pause of at most 2 minutes and 100 m between two rides belongs to the ride. Longer stops (changing lines) don't. |
+| **Stay** | At least 2 minutes within 40 m of where it started. Overlapping stays with only a short wander between merge (a yard). Drawn as a circle around 90% of its fixes, at least 10 m. |
+| **Move** | Everything else: walking. |
+
+- **Right now** (`currentActivity`), for the card:
+  - **Moving underground** before GPS returns: at least a minute of reports without a fix while served by at least 3 different cell sites. LTE cell IDs are site × 256 + antenna, so the antennas of one mast count once; indoors the tracker loses its fix but stays on one mast.
+  - **In a vehicle / Moving underground** after a ride, until 2 minutes after it ended, so station stops don't flicker.
+  - Nothing when the latest report is over 3 minutes old.
+  - Replayed against the real trip, the card switched on with the first train hop, and to "Moving underground" 90 s after GPS dropped.
+- **Limits:** a bus, a car and an above-ground train all read as "vehicle". A car in a road tunnel (Norra länken) reads as "underground", which is literally true. Telling subway from train or tram would need stop locations from OpenStreetMap for a configurable area; not built.
+- **Tests:** `npm test` runs `segments.test.ts` with Node's own test runner (Node 24 runs TypeScript directly). The data is a made-up trip in the same shape; real location data never goes in the repo.
+
+### Drawing
+
+- **Walking:** a 4 px line in `--trail`, in pieces of 3 hops so it can fade with age (opacity 0.2 at the oldest fix, 0.9 at the newest). In the pet theme, paw prints instead.
+- **Rides:** straight from the last fix before to the first fix after, since where exactly it went isn't known. Dashed for a vehicle, dotted for underground.
+- **Stays:** a soft filled circle with a thin outline.
+- All of it is one GeoJSON source with a `kind` property and a layer per kind; paw prints have their own source with longer pieces, since they're spaced 44 px apart.
 - **Length:** set in Settings: Off, 5, 10 (default), 15, 30 or 60 minutes, or 3 hours. Longer means more history per asset on each load.
 
 ## Battery
@@ -159,6 +187,7 @@ In the app:
   - the name, an online/offline dot and a status label;
   - "Seen 4 minutes ago", from `fixTime` using `Intl.RelativeTimeFormat` and re-rendered every 30 s;
   - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
+  - while riding, **In a vehicle** or **Moving underground** with a transit icon, in the accent colour (on phones, a small badge on the avatar's top-right corner);
   - battery, when available: a gauge with 0–4 bars (empty below 5%, then one bar per started quarter) at the end of the name row, in the warning colour at 20% or below. The exact percentage is its label, for screen readers and as the hover tooltip. Readings near empty jump by several points as the voltage recovers, and bars hide most of that. Trackers that report volts only get a text line instead.
 - **Map:** tapping a card selects that asset and flies to it; tapping the selected card again re-centres. Tapping a marker selects its asset. Tapping the selected asset's marker deselects it when it's centred (being followed, or within 12 px of the middle); when it's off-centre, for example after a drag, the tap re-centres it and resumes following instead. On load the map shows the asset in `?asset=`, or fits all assets.
 - **Deselecting:** only by tapping the selected asset's marker while it's centred, or tapping the asset panel away from its cards and buttons (the gaps in the phone bar, the sidebar's title and empty space). Tapping or dragging the map keeps the selection.
@@ -284,6 +313,8 @@ src/
     useNow.ts                         ticking clock for relative times
     live.ts                           LiveUpdate type + applyUpdates (shared with the server)
     trail.ts                          trail types, extend/prune
+    segments.ts                       walking / stay / vehicle / underground, and what's happening now
+    segments.test.ts                  node --test
     settings.ts                       per-browser settings (localStorage)
     theme.ts                          THEMES, useTheme (cookie)
     assetImage.ts                     crop + shrink photos (browser), sniff image type (server)

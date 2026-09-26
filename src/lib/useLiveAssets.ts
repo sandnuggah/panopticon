@@ -4,7 +4,8 @@ import { getUser } from '../server/auth.functions'
 import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { applyUpdates, type LiveUpdate } from './live'
-import { extendTrails, pruneTrails, type Trails } from './trail'
+import { currentActivity, type Activity } from './segments'
+import { ACTIVITY_MINUTES, extendTrails, pruneTrails, type Trails } from './trail'
 import { useNow } from './useNow'
 
 export type LiveStatus = 'connecting' | 'live' | 'offline'
@@ -16,9 +17,12 @@ const MAX_RETRY_MS = 60_000
  * Keeps the asset list and trails current from /live. `initialAssets` is the route loader's data;
  * whenever it's reloaded (reconnect, returning to the tab) it replaces the live state.
  * `trailMinutes` is null until the setting is known, so no history is fetched for a default.
+ * History always covers at least ACTIVITY_MINUTES, even with trails off, to tell what each asset
+ * is doing right now; only `trailMinutes` of it is returned for drawing.
  */
 export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: number | null) {
   const trailMinutes = trailMinutesSetting ?? 0
+  const historyMinutes = Math.max(trailMinutes, ACTIVITY_MINUTES)
   const router = useRouter()
   const [assets, setAssets] = useState(initialAssets)
   const assetsRef = useRef(initialAssets)
@@ -26,12 +30,12 @@ export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: numbe
   const [status, setStatus] = useState<LiveStatus>('connecting')
   // Bumped when we may have missed updates, to refetch trail history.
   const [historyVersion, setHistoryVersion] = useState(0)
-  const trailMinutesRef = useRef(trailMinutes)
-  const now = useNow(30_000)
+  const historyMinutesRef = useRef(historyMinutes)
+  const now = useNow(15_000)
 
   useEffect(() => {
-    trailMinutesRef.current = trailMinutes
-  }, [trailMinutes])
+    historyMinutesRef.current = historyMinutes
+  }, [historyMinutes])
 
   useEffect(() => {
     assetsRef.current = initialAssets
@@ -41,12 +45,12 @@ export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: numbe
   const assetIdsKey = initialAssets.map((asset) => asset.id).join(',')
   useEffect(() => {
     if (trailMinutesSetting === null) return
-    if (trailMinutes === 0 || assetIdsKey === '') {
+    if (assetIdsKey === '') {
       setTrails({})
       return
     }
     let cancelled = false
-    getTrails({ data: { minutes: trailMinutes, assetIds: assetIdsKey.split(',').map(Number) } })
+    getTrails({ data: { minutes: historyMinutes, assetIds: assetIdsKey.split(',').map(Number) } })
       .then((history) => {
         if (!cancelled) setTrails(history)
       })
@@ -54,7 +58,7 @@ export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: numbe
     return () => {
       cancelled = true
     }
-  }, [trailMinutesSetting, trailMinutes, assetIdsKey, historyVersion])
+  }, [trailMinutesSetting, historyMinutes, assetIdsKey, historyVersion])
 
   useEffect(() => {
     let source: EventSource | undefined
@@ -73,8 +77,8 @@ export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: numbe
       setAssets(result.assets)
       // A tracker was added in Traccar; reload the full list.
       if (result.unknown) void router.invalidate()
-      const since = Date.now() - trailMinutesRef.current * 60 * 1000
-      if (trailMinutesRef.current > 0) setTrails((current) => extendTrails(current, updates, since))
+      const since = Date.now() - historyMinutesRef.current * 60 * 1000
+      setTrails((current) => extendTrails(current, updates, since))
     }
 
     const connect = () => {
@@ -138,5 +142,14 @@ export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: numbe
     [trails, trailMinutes, now],
   )
 
-  return { assets, trails: visibleTrails, status }
+  const activities = useMemo(() => {
+    const result: Record<number, Activity> = {}
+    for (const [id, points] of Object.entries(trails)) {
+      const activity = currentActivity(points, now)
+      if (activity) result[Number(id)] = activity
+    }
+    return result
+  }, [trails, now])
+
+  return { assets, trails: visibleTrails, activities, status }
 }

@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react'
 import { contactIsNewerThanFix, isStale, type Asset } from '../lib/asset'
+import type { Activity } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { RelativeTime } from './RelativeTime'
 
 type Props = {
   assets: Asset[]
+  /** What each asset is doing right now, when it's riding (see segments.ts). */
+  activities: Record<number, Activity>
   selectedId: number | undefined
   onSelect: (id: number) => void
   /** Called for a tap on the panel itself, away from the cards and buttons. */
@@ -16,7 +19,7 @@ type Props = {
 }
 
 /** The list under the map on phones, beside it on wider screens. */
-export function AssetSheet({ assets, selectedId, onSelect, onDeselect, header, footer }: Props) {
+export function AssetSheet({ assets, activities, selectedId, onSelect, onDeselect, header, footer }: Props) {
   return (
     // A convenience for pointer users, like tapping the map; the cards stay the keyboard way in.
     <section
@@ -33,7 +36,12 @@ export function AssetSheet({ assets, selectedId, onSelect, onDeselect, header, f
         <ul className="asset-cards">
           {assets.map((asset) => (
             <li key={asset.id}>
-              <AssetCard asset={asset} selected={asset.id === selectedId} onSelect={onSelect} />
+              <AssetCard
+                asset={asset}
+                activity={activities[asset.id]}
+                selected={asset.id === selectedId}
+                onSelect={onSelect}
+              />
             </li>
           ))}
         </ul>
@@ -43,7 +51,9 @@ export function AssetSheet({ assets, selectedId, onSelect, onDeselect, header, f
   )
 }
 
-function AssetCard({ asset, selected, onSelect }: { asset: Asset; selected: boolean; onSelect: (id: number) => void }) {
+type CardProps = { asset: Asset; activity: Activity | undefined; selected: boolean; onSelect: (id: number) => void }
+
+function AssetCard({ asset, activity, selected, onSelect }: CardProps) {
   const now = useNow(30_000)
   const stale = isStale(asset, now)
   return (
@@ -63,6 +73,11 @@ function AssetCard({ asset, selected, onSelect }: { asset: Asset; selected: bool
             <BatteryGauge percent={asset.battery.percent} />
           </span>
         )}
+        {activity && (
+          <span className="avatar-activity" aria-hidden="true">
+            <TransitIcon />
+          </span>
+        )}
       </span>
       <span className="asset-card-body">
         <span className="asset-card-title">
@@ -71,6 +86,12 @@ function AssetCard({ asset, selected, onSelect }: { asset: Asset; selected: bool
           <span className="asset-card-status">{statusLabel(asset.status)}</span>
           {asset.battery?.percent !== undefined && <BatteryGauge percent={asset.battery.percent} />}
         </span>
+        {activity && (
+          <span className="asset-card-activity">
+            <TransitIcon />
+            {activityLabel(activity)}
+          </span>
+        )}
         <span>
           {asset.location ? (
             <>
@@ -124,6 +145,23 @@ function BatteryGauge({ percent }: { percent: number }) {
 function batteryBars(percent: number): number {
   if (percent < 5) return 0
   return Math.min(4, Math.ceil(percent / 25))
+}
+
+function activityLabel(activity: Activity): string {
+  return activity === 'underground' ? 'Moving underground' : 'In a vehicle'
+}
+
+/** The front of a train or bus: any vehicle. Decorative; the label says which. */
+function TransitIcon() {
+  return (
+    <svg className="transit-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="3" y="1.5" width="10" height="11" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="5" y="4" width="6" height="3" rx="0.75" fill="currentColor" />
+      <circle cx="5.75" cy="9.75" r="1" fill="currentColor" />
+      <circle cx="10.25" cy="9.75" r="1" fill="currentColor" />
+      <path d="M5.5 12.5 4 15M10.5 12.5 12 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
 }
 
 function statusLabel(status: Asset['status']): string {

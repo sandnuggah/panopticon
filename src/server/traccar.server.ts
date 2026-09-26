@@ -39,6 +39,8 @@ export type TraccarPosition = {
   latitude: number
   longitude: number
   accuracy: number
+  /** The serving cell tower's ID, when Traccar decoded one (`network.cellTowers`). */
+  cellId: number | null
   attributes: Record<string, unknown>
 }
 
@@ -405,8 +407,16 @@ function parsePosition(value: unknown): TraccarPosition {
     latitude: number(value, 'latitude', 'position'),
     longitude: number(value, 'longitude', 'position'),
     accuracy: value.accuracy == null ? 0 : number(value, 'accuracy', 'position'),
+    cellId: readCellId(value.network),
     attributes,
   }
+}
+
+/** The first cell tower's ID from Traccar's `network` object; it's optional and loosely shaped, so no errors. */
+function readCellId(network: unknown): number | null {
+  if (!isObject(network) || !Array.isArray(network.cellTowers)) return null
+  const tower: unknown = network.cellTowers[0]
+  return isObject(tower) && typeof tower.cellId === 'number' && Number.isInteger(tower.cellId) ? tower.cellId : null
 }
 
 function number(object: Json, key: string, what: string): number {

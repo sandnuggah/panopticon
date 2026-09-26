@@ -17,8 +17,10 @@ export type LiveUpdate =
       id: number
       location: AssetLocation
       battery?: AssetBattery
-      /** False when the tracker had no GPS fix; such points are kept off the trail. */
+      /** False when the tracker had no GPS fix; such points are never drawn on the trail. */
       valid: boolean
+      /** The cell tower serving the tracker, when it reports one. */
+      cell?: number
     }
 
 /** Applies updates to the asset list. `unknown` is true when an update names an asset we don't have. */
