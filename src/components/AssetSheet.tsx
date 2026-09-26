@@ -63,6 +63,7 @@ function AssetCard({ asset, selected, onSelect }: { asset: Asset; selected: bool
           <span className={`status-dot status-${asset.status}`} aria-hidden="true" />
           <span className="asset-card-name">{asset.name}</span>
           <span className="asset-card-status">{statusLabel(asset.status)}</span>
+          {asset.battery?.percent !== undefined && <BatteryGauge percent={asset.battery.percent} />}
         </span>
         <span>
           {asset.location ? (
@@ -78,21 +79,43 @@ function AssetCard({ asset, selected, onSelect }: { asset: Asset; selected: bool
             Last contact <RelativeTime time={asset.lastUpdate} />
           </span>
         )}
-        <Battery battery={asset.battery} />
+        {/* Trackers that report volts only: shown as text, since volts don't map to bars reliably. */}
+        {asset.battery?.percent === undefined && asset.battery?.volts !== undefined && (
+          <span className="muted">Battery {asset.battery.volts} V</span>
+        )}
       </span>
     </button>
   )
 }
 
-function Battery({ battery }: { battery: Asset['battery'] }) {
-  if (battery?.percent !== undefined) {
-    const low = battery.percent <= 20
-    return <span className={low ? 'battery-low' : 'muted'}>Battery {Math.round(battery.percent)}%</span>
-  }
-  if (battery?.volts !== undefined) {
-    return <span className="muted">Battery {battery.volts} V</span>
-  }
-  return null
+/**
+ * The battery as a gauge with 0–4 bars, drawn in the warning colour at 20% or below. The exact
+ * percentage is its label, for screen readers and as the hover tooltip.
+ */
+function BatteryGauge({ percent }: { percent: number }) {
+  const bars = batteryBars(percent)
+  const label = `Battery ${Math.round(percent)}%`
+  return (
+    <svg
+      className={`battery-gauge${percent <= 20 ? ' battery-gauge-low' : ''}`}
+      viewBox="0 0 24 12"
+      role="img"
+      aria-label={label}
+    >
+      <title>{label}</title>
+      <rect x="0.75" y="0.75" width="19.5" height="10.5" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="21" y="3.5" width="2" height="5" rx="0.75" fill="currentColor" />
+      {Array.from({ length: bars }, (_, bar) => (
+        <rect key={bar} x={2.5 + bar * 4.25} y="2.5" width="3.25" height="7" rx="0.75" fill="currentColor" />
+      ))}
+    </svg>
+  )
+}
+
+/** Empty below 5%, then one bar per started quarter: 5–25% is one bar, 76–100% is four. */
+function batteryBars(percent: number): number {
+  if (percent < 5) return 0
+  return Math.min(4, Math.ceil(percent / 25))
 }
 
 function statusLabel(status: Asset['status']): string {

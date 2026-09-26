@@ -127,18 +127,24 @@ A line behind each asset showing where it went in the last N minutes, fading fro
 
 ## Battery
 
-SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder`, battery is only recorded from heartbeat (`HTBT`), `LINK`, `V3` and binary messages. The regular text location message has an optional battery field, but Traccar's decoder skips it. So the ST-904L most likely gives Traccar no battery data, which matches what you've seen.
+SinoTrack trackers use Traccar's `h02` protocol. The ST-904L sends two kinds of message that matter here:
 
+- **Heartbeats** (`HTBT`): Traccar reads a battery level from these and stores it as `batteryLevel`.
+- **Location reports** (`V1`): the battery is there too, but Traccar doesn't know it. After the status field, the ST-904L sends extra values that Traccar stores unnamed as `io1`, `io2`, and so on:
+  - `io1`–`io4` are cell info (MCC `240` = Sweden, MNC `01`, then area and cell IDs).
+  - **`io5` is the battery percentage.** Confirmed on 2026-09-26: a heartbeat said 9% while `io5` on the report just before said 8%. It matches SinoTrack's 4G message layout and what Traccar forum users see on other SinoTrack models.
+  - `io6` is most likely signal strength; `io7` and `io8` haven't changed.
+
+**Mapping it in Traccar, not the app:** a computed attribute turns `io5` into `batteryLevel` on location reports, so every message has a battery level and other tracker models aren't affected.
+- Settings → Computed attributes: Attribute **Battery Level**, which makes the type Number. Expression: `io5 != null && io5 * 1 >= 0 && io5 * 1 <= 100 ? io5 * 1 : null`. Linked to the tracker, or to its group.
+- `io5 * 1` turns the text into a number without enabling `processing.computedAttributes.newInstanceCreation`. Traccar discards non-numbers for Number attributes; the attribute has to be Battery Level, or Traccar tries to store the result as the wrong type and drops it.
+- Traccar runs these expressions strictly. On a heartbeat, which has no `io5`, the expression fails with a logged warning and the heartbeat's own battery level stays. If the expression returned null there instead, Traccar would remove the attribute.
+
+In the app:
 - `battery` is optional in the view model. The value comes from `batteryLevel` (percent) or `battery` (volts), whichever Traccar has.
 - The card shows battery only when it exists. There's no placeholder.
 - Live updates never blank a known battery value; a position without battery keeps the last one seen in that session.
-
-**Confirmed from real data (2026-09-25):** the ST-904L reports protocol `h02` with no `batteryLevel` or `battery`. It does send eight extra values after the status field, which Traccar stores unnamed as `io1`–`io8`:
-
-- `io1`–`io4` look like cell info (MCC `240` = Sweden, MNC `01`, then area and cell IDs).
-- On SinoTrack 4G models, `io5` is reported to be battery %. It read `0` on a tracker that had gone offline, then `13` once it was back online the same day. That fits a recharged battery, but isn't proof yet. `io6` also changed (`16` → `26`); `io7` and `io8` stayed the same.
-
-**Plan:** map it in Traccar, not in the app. A computed attribute `batteryLevel` = `io5` (as a number), linked to the SinoTrack devices, makes Traccar store a real battery level. The app then shows it with no code change, and other tracker models aren't affected. Confirm `io5` is battery first: charge the tracker and check that `io5` rises.
+- The value is the tracker's estimate from its voltage, so it moves with load and temperature: 8% → 12% → 19% while moving was seen on 2026-09-26. The gauge's bars absorb most of this.
 
 ## UI
 
@@ -151,7 +157,7 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
   - the name, an online/offline dot and a status label;
   - "Seen 4 minutes ago", from `fixTime` using `Intl.RelativeTimeFormat` and re-rendered every 30 s;
   - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
-  - battery, when available (highlighted at 20% or below).
+  - battery, when available: a gauge with 0–4 bars (empty below 5%, then one bar per started quarter) at the end of the name row, in the warning colour at 20% or below. The exact percentage is its label, for screen readers and as the hover tooltip. Readings near empty jump by several points as the voltage recovers, and bars hide most of that. Trackers that report volts only get a text line instead.
 - **Map:** tapping a card selects that asset and flies to it; tapping the selected card again re-centres. Tapping a marker selects its asset. Tapping the selected asset's marker deselects it when it's centred (being followed, or within 12 px of the middle); when it's off-centre, for example after a drag, the tap re-centres it and resumes following instead. On load the map shows the asset in `?asset=`, or fits all assets.
 - **Deselecting:** only by tapping the selected asset's marker while it's centred, or tapping the asset panel away from its cards and buttons (the gaps in the phone bar, the sidebar's title and empty space). Tapping or dragging the map keeps the selection.
 - **Following:** while an asset is selected, the map keeps it centred, gliding to each new position (1 s).

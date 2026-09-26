@@ -445,9 +445,15 @@ input {
   background: var(--offline);
 }
 
-.battery-low {
+.battery-gauge {
+  flex: none;
+  width: 1.5rem;
+  height: 0.75rem;
+  color: var(--muted);
+}
+
+.battery-gauge-low {
   color: var(--warning);
-  font-weight: 600;
 }
 
 /* Map markers */
