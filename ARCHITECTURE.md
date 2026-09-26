@@ -165,7 +165,7 @@ In the app:
   - **Zooming keeps following:** scroll wheel, pinch, +/− and double-tap. While following, wheel and pinch zoom around the centre instead of the cursor or fingers. After a zoom gesture (a double-tap zooms around the tap; a pinch drifts, which maplibre reports as a two-finger drag and is ignored) the map glides back to the asset.
   - Position updates that arrive during a selection flight or a zoom gesture don't interrupt it; the map catches up when it ends. Those waits only apply while the map is actually moving, so a missed end event can't stop following.
   - Only real gestures pause following: maplibre fires `dragstart` for user drags, never for the app's own camera moves.
-- **Markers:** maplibre DOM markers (enough for ≤5): a dot with the asset's initial and a name label. Greyed out when the fix is older than 30 minutes; larger with a ring when selected.
+- **Markers:** maplibre DOM markers (enough for ≤5): a dot with the asset's initial and a name label. Greyed out when the fix is older than 30 minutes; a ring when selected (same size, so selecting doesn't shift it).
   - No accuracy circle yet: the ST-904L reports no accuracy, so it would never show. Add it when a tracker does.
 - **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first, and maplibre stays out of the first-load bundle.
 - **maplibre worker:** v6 looks for its worker script next to its own file, which breaks once bundled. Vite bundles it instead (`?worker&url`, `worker.format: 'es'`), and `setWorkerUrl` points maplibre at the same-origin result.
@@ -184,7 +184,7 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
   The device's `uniqueId` stays on the server. It's often the IMEI, and h02 trackers send positions without authentication, so knowing it would let someone fake positions.
 - **Traccar's media endpoint only accepts a session cookie,** not API tokens. So fetching an image opens a session from the token (`GET /api/session?token=`) for that one request and ends it right after. Images are then kept in memory for 5 minutes (at most 50), and served with `Cache-Control: private, max-age=300` and an ETag, so most loads cost Traccar nothing.
 - **Accepted filenames:** only `device.<ext>` is used; anything else in `deviceImage` is ignored, which also rules out odd paths.
-- **Marker behaviour:** the `<img>` sits on top of the initial and hides itself if it fails to load. Live updates only touch the `<img>` when the URL changes, so it doesn't reload. Markers with a picture are larger (2.75 rem, 3.25 rem when selected), and stale ones turn grey.
+- **Marker behaviour:** the `<img>` sits on top of the initial and hides itself if it fails to load. Live updates only touch the `<img>` when the URL changes, so it doesn't reload. Markers with a picture are larger (2.75 rem), and stale ones turn grey.
 - **Updating a picture:** Traccar saves every upload as `device.<ext>`, so the filename alone doesn't change the URL.
   - Uploaded in panopticon: shows at once. The server drops its cached copy and adds its own version to the URL (`?v=device.jpg-<time>`). That version is kept in memory, so after a restart URLs go back to `?v=<file>`, which only matters within 5 minutes of an upload.
   - Uploaded in Traccar's UI: can take up to about 10 minutes to show everywhere (5 minutes of server cache, then up to 5 minutes of browser cache).
