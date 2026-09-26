@@ -134,7 +134,7 @@ The trail is split using only the tracker's own reports: speed between fixes, ga
 | **Vehicle** | Averaging over 20 km/h between two fixes, over at least 150 m. A dog doesn't do that on foot for 30 s; GPS jitter doesn't cover 150 m. |
 | **Underground** | A vehicle hop with reports without a fix in between, or a GPS gap that ends at least 300 m away at over 10 km/h. |
 | **Station stop** | A pause of at most 2 minutes and 100 m between two rides belongs to the ride. Longer stops (changing lines) don't. |
-| **Stay** | At least 2 minutes within 40 m of where it started. Overlapping stays with only a short wander between merge (a yard). Drawn as a circle around 90% of its fixes, at least 10 m. |
+| **Stay** | At least 2 minutes within 40 m of where it started. Drawn as a circle around 90% of its fixes, at least 10 m. Pottering about one place makes many small stays, so two stays become one **place** when their circles are at most 25 m apart and the move between them never went more than 50 m outside them. This repeats until nothing joins, and a move that never left a neighbouring stay's circle joins it too. A morning at daycare is then one circle instead of four overlapping ones with lines between them, while a walk around the block and back stays a walk. |
 | **Move** | Everything else: walking. |
 
 - **Right now** (`currentActivity`), for the card:

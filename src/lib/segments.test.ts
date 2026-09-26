@@ -27,7 +27,7 @@ class Trip {
     })
   }
 
-  /** Walks east at `kmh`, one report per 30 s. */
+  /** Walks east at `kmh` (west if negative), one report per 30 s. */
   walk(minutes: number, kmh = 4) {
     for (let i = 0; i < minutes * 2; i++) {
       this.time += 30_000
@@ -131,6 +131,16 @@ describe('classifyTrail', () => {
   test('a long stop between two rides is not (changing trains)', () => {
     const pieces = classifyTrail(new Trip().walk(5).ride(800, 30).stay(4).ride(800, 30).walk(5).points)
     assert.deepEqual(kinds(pieces), ['move', 'vehicle', 'stay', 'vehicle', 'move'])
+  })
+
+  test('pottering about a yard is one stay', () => {
+    const pieces = classifyTrail(new Trip().stay(10).walk(0.5, 5).stay(10).walk(0.5, 5).stay(10).walk(0.5, -5).stay(10).points)
+    assert.deepEqual(kinds(pieces), ['stay'])
+  })
+
+  test('walking away and coming back is two stays and a walk', () => {
+    const pieces = classifyTrail(new Trip().stay(10).walk(5).walk(5, -4).stay(10).points)
+    assert.deepEqual(kinds(pieces), ['stay', 'move', 'stay'])
   })
 
   test('losing GPS indoors without going anywhere is not a ride', () => {

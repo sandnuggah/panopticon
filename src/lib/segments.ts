@@ -21,6 +21,9 @@ const STAY_MIN_MS = 2 * 60 * 1000
 const STAY_MAX_METERS = 40
 /** Stays are drawn at least this big, so a single spot still shows. */
 const STAY_MIN_RADIUS_METERS = 10
+/** Stays this close (edge to edge) are one place, if the moves between them stayed this near. */
+const PLACE_GAP_METERS = 25
+const WANDER_METERS = 50
 /** Live activity only counts while reports are this fresh. */
 const ACTIVITY_MAX_AGE_MS = 3 * 60 * 1000
 /** Underground right now: this long without a fix while switching between this many cell sites. */
@@ -161,8 +164,8 @@ function toStretches(hops: Hop[]): Stretch[] {
 type Part = { stay: boolean; points: TrailPoint[] }
 
 /**
- * Splits walking into moves between stays. A move's ends touch the stays around it. Stays that
- * overlap, with only a short wander between them (a yard, a park bench), become one.
+ * Splits walking into moves between stays. A move's ends touch the stays around it. Stays in one
+ * place with only local wandering between them (a yard, a park) become one; see mergePlaces.
  */
 function splitWalk(points: TrailPoint[]): TrailPiece[] {
   const parts: Part[] = []
@@ -184,21 +187,50 @@ function splitWalk(points: TrailPoint[]): TrailPiece[] {
   }
   if (move.length > 1) parts.push({ stay: false, points: move })
 
-  const merged: Part[] = []
-  for (const part of parts) {
-    const [before, between] = [merged.at(-2), merged.at(-1)]
-    if (part.stay && before?.stay && between && !between.stay && overlap(before.points, part.points)) {
-      merged.splice(-2, 2, { stay: true, points: [...before.points, ...between.points.slice(1, -1), ...part.points] })
-    } else {
-      merged.push(part)
-    }
-  }
-  return merged.map((part) => (part.stay ? toStay(part.points) : { kind: 'move', points: part.points }))
+  return mergePlaces(parts).map((part) => (part.stay ? toStay(part.points) : { kind: 'move', points: part.points }))
 }
 
-function overlap(a: TrailPoint[], b: TrailPoint[]): boolean {
-  const [stayA, stayB] = [toStay(a), toStay(b)] as [StayPiece, StayPiece]
-  return distance(stayA.center, stayB.center) <= stayA.radius + stayB.radius
+/**
+ * Pottering about one place (a yard, a park) gives many stays with short moves between them. Joins
+ * two stays, and the move between them, when they're close and the move never strayed from them,
+ * until nothing more joins; then moves that never left a neighbouring stay's circle join it too.
+ */
+function mergePlaces(parts: Part[]): Part[] {
+  const merged = [...parts]
+  for (let joined = true; joined; ) {
+    joined = false
+    for (let k = 0; k + 2 < merged.length; k++) {
+      const [a, between, b] = [merged[k]!, merged[k + 1]!, merged[k + 2]!]
+      if (a.stay && !between.stay && b.stay && samePlace(a.points, between.points, b.points)) {
+        merged.splice(k, 3, { stay: true, points: [...a.points, ...between.points.slice(1, -1), ...b.points] })
+        joined = true
+      }
+    }
+  }
+  for (let k = 0; k < merged.length; k++) {
+    const part = merged[k]!
+    if (part.stay) continue
+    const neighbour = [merged[k - 1], merged[k + 1]].find(
+      (other) => other?.stay && withinStay(toStay(other.points), part.points, 0),
+    )
+    if (!neighbour) continue
+    const before = neighbour === merged[k - 1]
+    neighbour.points = before ? [...neighbour.points, ...part.points.slice(1)] : [...part.points.slice(0, -1), ...neighbour.points]
+    merged.splice(k, 1)
+    k--
+  }
+  return merged
+}
+
+function samePlace(a: TrailPoint[], between: TrailPoint[], b: TrailPoint[]): boolean {
+  const [stayA, stayB] = [toStay(a), toStay(b)]
+  if (distance(stayA.center, stayB.center) > stayA.radius + stayB.radius + PLACE_GAP_METERS) return false
+  return between.every((point) => withinStay(stayA, [point], WANDER_METERS) || withinStay(stayB, [point], WANDER_METERS))
+}
+
+/** Whether all these points lie inside the stay's circle, grown by `margin`. */
+function withinStay(stay: StayPiece, points: TrailPoint[], margin: number): boolean {
+  return points.every((point) => distance(stay.center, point) <= stay.radius + margin)
 }
 
 type StayPiece = Extract<TrailPiece, { kind: 'stay' }>
