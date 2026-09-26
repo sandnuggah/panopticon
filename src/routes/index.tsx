@@ -52,6 +52,10 @@ function Home() {
     void navigate({ search: { asset: id }, replace: true })
   }
 
+  function deselect() {
+    if (selectedId !== undefined) void navigate({ search: {}, replace: true })
+  }
+
   const mapPlaceholder = <div className="map map-placeholder" />
 
   return (
@@ -70,6 +74,7 @@ function Home() {
               selectedId={selectedId}
               focusToken={focusToken}
               onSelect={select}
+              onDeselect={deselect}
             />
           </Suspense>
         </ClientOnly>

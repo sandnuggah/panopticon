@@ -153,6 +153,11 @@ SinoTrack trackers use Traccar's `h02` protocol. In 6.15.3's `H02ProtocolDecoder
   - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
   - battery, when available (highlighted at 20% or below).
 - **Map:** tapping a card or marker selects that asset and flies to it; tapping it again re-centres. On load the map shows the asset in `?asset=`, or fits all assets.
+- **Following:** while an asset is selected, the map keeps it centred, gliding to each new position (1 s).
+  - **Deselect:** dragging the map (mouse or one finger), panning with the arrow keys, or tapping the map away from the markers. A tap waits 350 ms first, so a double-tap can still zoom. The camera stays where it is.
+  - **Zooming keeps following:** scroll wheel, pinch, +/− and double-tap. While following, wheel and pinch zoom around the centre instead of the cursor or fingers. After a zoom gesture (a double-tap zooms around the tap; a pinch drifts, which maplibre reports as a two-finger drag and is ignored) the map glides back to the asset.
+  - Position updates that arrive during a selection flight or a zoom gesture don't interrupt it; the map catches up when it ends. Those waits only apply while the map is actually moving, so a missed end event can't stop following.
+  - Only real gestures deselect: maplibre fires `dragstart` for user drags, never for the app's own camera moves.
 - **Markers:** maplibre DOM markers (enough for ≤5): a dot with the asset's initial and a name label. Greyed out when the fix is older than 30 minutes; larger with a ring when selected.
   - No accuracy circle yet: the ST-904L reports no accuracy, so it would never show. Add it when a tracker does.
 - **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first, and maplibre stays out of the first-load bundle.
