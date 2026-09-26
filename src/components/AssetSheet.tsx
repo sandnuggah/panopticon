@@ -55,8 +55,14 @@ function AssetCard({ asset, selected, onSelect }: { asset: Asset; selected: bool
     >
       <span className="avatar-wrap">
         <AssetAvatar asset={asset} />
-        {/* Only shown in the compact phone list, where the name and details are hidden. */}
+        {/* Only shown in the compact phone list, where the name and details are hidden (screen readers
+            still get those, so these two are decorative). */}
         <span className={`avatar-status status-${asset.status}`} aria-hidden="true" />
+        {asset.battery?.percent !== undefined && (
+          <span className="avatar-battery" aria-hidden="true">
+            <BatteryGauge percent={asset.battery.percent} />
+          </span>
+        )}
       </span>
       <span className="asset-card-body">
         <span className="asset-card-title">
