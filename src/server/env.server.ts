@@ -7,6 +7,8 @@ type Env = {
   mapStyleUrl: string
   /** Origins the map may load from (CSP): the style's own, plus MAP_EXTRA_ORIGINS. */
   mapOrigins: string[]
+  /** Which sign-in methods the login page offers and the server accepts (SIGN_IN_METHODS). */
+  signInMethods: { password: boolean; sso: boolean }
 }
 
 const DEFAULT_MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
@@ -25,6 +27,7 @@ export function env(): Env {
       sessionDays: readSessionDays(),
       mapStyleUrl,
       mapOrigins: [new URL(mapStyleUrl).origin, ...readMapExtraOrigins()],
+      signInMethods: readSignInMethods(),
     }
   }
   return cached
@@ -41,6 +44,22 @@ function readMapExtraOrigins(): string[] {
       throw new Error(`MAP_EXTRA_ORIGINS has an invalid URL: ${value.trim()}`)
     }
   })
+}
+
+/** Comma-separated `password` and/or `sso`; both when unset. SSO also needs OpenID set up in Traccar. */
+function readSignInMethods(): { password: boolean; sso: boolean } {
+  const raw = process.env.SIGN_IN_METHODS?.trim()
+  if (!raw) return { password: true, sso: true }
+  const methods = raw
+    .toLowerCase()
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+  const unknown = methods.filter((method) => method !== 'password' && method !== 'sso')
+  if (unknown.length > 0 || methods.length === 0) {
+    throw new Error(`SIGN_IN_METHODS must be password, sso, or both separated by a comma, got ${raw}`)
+  }
+  return { password: methods.includes('password'), sso: methods.includes('sso') }
 }
 
 function required(name: string): string {

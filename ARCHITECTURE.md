@@ -36,6 +36,8 @@ After that, REST calls use `Authorization: Bearer <token>` and the WebSocket use
 
 The app is stateless: the only state is the cookie.
 
+**Choosing methods:** `SIGN_IN_METHODS` is `password`, `sso`, or both (the default). The login page only shows the methods that are on. SSO also needs OpenID set up in Traccar, and is hidden until it is. The server refuses a method that's off, so hiding its button isn't the only barrier: password sign-in answers "turned off", and `/auth/sso` and the OpenID callback send the browser back to the login page. With neither method available, the login page says so and names the setting to check.
+
 ### Password
 
 A server function sends `POST /api/session` with `email` and `password` (form-encoded). If Traccar replies `401` with `WWW-Authenticate: TOTP`, the form asks for the 2FA code and retries with `code`.
@@ -301,6 +303,7 @@ src/
 | `TRACCAR_PUBLIC_URL` | no | Where browsers reach Traccar's UI, for email-link redirects; default `TRACCAR_URL` |
 | `SESSION_SECRET` | yes | ≥ 32 chars; encrypts the session cookie |
 | `SESSION_DAYS` | no | Token and cookie lifetime, default `30` |
+| `SIGN_IN_METHODS` | no | `password`, `sso`, or both comma-separated (default both); see [Authentication](#authentication) |
 | `MAP_STYLE_URL` | no | maplibre style, default OpenFreeMap `liberty` |
 | `MAP_EXTRA_ORIGINS` | no | Comma-separated extra origins the map style loads from (CSP) |
 | `PORT`, `HOST` | no | Production server listen address, default `3000` on all interfaces |
