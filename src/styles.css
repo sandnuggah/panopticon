@@ -447,8 +447,9 @@ input {
 
 .battery-gauge {
   flex: none;
-  width: 1.5rem;
-  height: 0.75rem;
+  /* The SVG's own grid size: see BatteryGauge. */
+  width: 16.5px;
+  height: 9px;
   color: var(--muted);
 }
 
@@ -1025,14 +1026,12 @@ a.manage-row:hover {
     position: absolute;
     left: -3px;
     bottom: -1px;
-    padding: 2px 3px;
-    border-radius: 5px;
+    padding: 2px;
+    border-radius: 4px;
     background: var(--bg);
   }
 
   .avatar-battery .battery-gauge {
-    width: 1.1rem;
-    height: 0.55rem;
     color: var(--text);
   }
 

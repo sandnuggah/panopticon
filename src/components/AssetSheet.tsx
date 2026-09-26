@@ -102,17 +102,19 @@ function BatteryGauge({ percent }: { percent: number }) {
   const bars = batteryBars(percent)
   const label = `Battery ${Math.round(percent)}%`
   return (
+    // Drawn on a pixel grid at the size it's shown (16.5 × 9 CSS px), so the 1px outline and the
+    // bars land on whole pixels instead of blurring between them.
     <svg
       className={`battery-gauge${percent <= 20 ? ' battery-gauge-low' : ''}`}
-      viewBox="0 0 24 12"
+      viewBox="0 0 16.5 9"
       role="img"
       aria-label={label}
     >
       <title>{label}</title>
-      <rect x="0.75" y="0.75" width="19.5" height="10.5" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="21" y="3.5" width="2" height="5" rx="0.75" fill="currentColor" />
+      <rect x="0.5" y="0.5" width="14" height="8" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1" />
+      <rect x="15" y="3" width="1.5" height="3" rx="0.5" fill="currentColor" />
       {Array.from({ length: bars }, (_, bar) => (
-        <rect key={bar} x={2.5 + bar * 4.25} y="2.5" width="3.25" height="7" rx="0.75" fill="currentColor" />
+        <rect key={bar} x={2 + bar * 3} y="2" width="2" height="5" fill="currentColor" />
       ))}
     </svg>
   )
