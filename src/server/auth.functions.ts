@@ -1,36 +1,27 @@
 import { createServerFn } from '@tanstack/react-start'
-import { env } from './env.server'
 import { getSessionUser, signIn, signOut } from './session.server'
 import { createPasswordSession, getServerInfo, TraccarError } from './traccar.server'
 
 export type LoginResult =
   | { ok: true }
-  | { ok: false; error: 'invalid' | 'code-required' | 'unavailable' | 'disabled' }
+  | { ok: false; error: 'invalid' | 'code-required' | 'unavailable' }
 
 export const getUser = createServerFn({ method: 'GET' }).handler(() => getSessionUser())
 
-/**
- * Which sign-in methods the login page shows: those turned on in SIGN_IN_METHODS, with SSO only when
- * Traccar has OpenID set up. SSO is also hidden when Traccar is unreachable; password sign-in then
- * reports it.
- */
+/** Whether to offer SSO on the login page. False if Traccar is unreachable; password sign-in then reports it. */
 export const getLoginOptions = createServerFn({ method: 'GET' }).handler(async () => {
-  const methods = env().signInMethods
-  if (!methods.sso) return { password: methods.password, sso: false }
   try {
     const { openIdEnabled } = await getServerInfo()
-    if (!openIdEnabled) console.warn('SIGN_IN_METHODS includes sso, but OpenID is not set up in Traccar.')
-    return { password: methods.password, sso: openIdEnabled }
+    return { sso: openIdEnabled }
   } catch (error) {
     console.warn('Could not read Traccar server info:', error instanceof Error ? error.message : error)
-    return { password: methods.password, sso: false }
+    return { sso: false }
   }
 })
 
 export const loginWithPassword = createServerFn({ method: 'POST' })
   .validator(parseLoginInput)
   .handler(async ({ data }): Promise<LoginResult> => {
-    if (!env().signInMethods.password) return { ok: false, error: 'disabled' }
     try {
       const result = await createPasswordSession(data.email, data.password, data.code)
       if (result.kind !== 'ok') {

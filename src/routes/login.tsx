@@ -5,7 +5,7 @@ import { appName, useTheme } from '../lib/theme'
 import type { SsoError } from '../server/sso.server'
 
 const ssoMessages: Record<SsoError, string> = {
-  'sso-unavailable': "Single sign-on isn't available right now. Try again in a moment.",
+  'sso-unavailable': "Single sign-on isn't available right now. Try again, or sign in with your password.",
   'sso-failed': "Single sign-on didn't complete. Try again.",
   'sso-no-account': 'No Traccar account uses the email from your sign-in provider.',
   'sso-not-allowed': "Your sign-in provider account isn't in a group allowed to use Traccar.",
@@ -26,7 +26,7 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   const router = useRouter()
-  const { sso, password } = Route.useLoaderData()
+  const { sso } = Route.useLoaderData()
   const { error: ssoError } = Route.useSearch()
   const [theme] = useTheme()
   const [needsCode, setNeedsCode] = useState(false)
@@ -50,8 +50,6 @@ function LoginPage() {
         await router.navigate({ to: '/' })
       } else if (result.error === 'code-required') {
         setNeedsCode(true)
-      } else if (result.error === 'disabled') {
-        setError('Password sign-in is turned off on this server.')
       } else if (result.error === 'invalid') {
         setError(needsCode ? 'Wrong password or code.' : 'Wrong email or password.')
       } else {
@@ -70,59 +68,47 @@ function LoginPage() {
     <main className="login">
       <h1>{appName(theme)}</h1>
       {sso && (
-        // A full page load, not client routing: /auth/sso redirects to the identity provider.
-        <a className="button-primary" href="/auth/sso">
-          Sign in with SSO
-        </a>
+        <>
+          {/* A full page load, not client routing: /auth/sso redirects to the identity provider. */}
+          <a className="button-primary" href="/auth/sso">
+            Sign in with SSO
+          </a>
+          <p className="divider">or with your Traccar password</p>
+        </>
       )}
-      {sso && password && <p className="divider">or with your Traccar password</p>}
-      {!sso && !password && (
-        <p className="error" role="alert">
-          No sign-in method is available. Check SIGN_IN_METHODS on the server, and that OpenID is set up in
-          Traccar if it's set to sso.
-        </p>
-      )}
-      {/* Without the password form, an SSO error shows here instead. */}
-      {!password && ssoError && (
-        <p className="error" role="alert">
-          {ssoMessages[ssoError]}
-        </p>
-      )}
-      {password && (
-        // method="post" keeps credentials out of the URL if someone submits before hydration
-        <form method="post" onSubmit={onSubmit}>
+      {/* method="post" keeps credentials out of the URL if someone submits before hydration */}
+      <form method="post" onSubmit={onSubmit}>
+        <label>
+          Email
+          <input name="email" type="text" autoComplete="username" autoCapitalize="none" required />
+        </label>
+        <label>
+          Password
+          <input name="password" type="password" autoComplete="current-password" required />
+        </label>
+        {needsCode && (
           <label>
-            Email
-            <input name="email" type="text" autoComplete="username" autoCapitalize="none" required />
+            Code from your authenticator app
+            <input
+              name="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="\d{6}"
+              maxLength={6}
+              required
+              autoFocus
+            />
           </label>
-          <label>
-            Password
-            <input name="password" type="password" autoComplete="current-password" required />
-          </label>
-          {needsCode && (
-            <label>
-              Code from your authenticator app
-              <input
-                name="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="\d{6}"
-                maxLength={6}
-                required
-                autoFocus
-              />
-            </label>
-          )}
-          {shownError && (
-            <p className="error" role="alert">
-              {shownError}
-            </p>
-          )}
-          <button type="submit" disabled={pending}>
-            {pending ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-      )}
+        )}
+        {shownError && (
+          <p className="error" role="alert">
+            {shownError}
+          </p>
+        )}
+        <button type="submit" disabled={pending}>
+          {pending ? 'Signing in…' : 'Sign in'}
+        </button>
+      </form>
     </main>
   )
 }
