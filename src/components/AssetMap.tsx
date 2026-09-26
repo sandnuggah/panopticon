@@ -26,6 +26,8 @@ const PAW_IMAGE = 'paw-prints'
 const ATTRIBUTION_SECONDS = 5
 /** How long the map takes to glide to the followed asset's new position. */
 const FOLLOW_MS = 1000
+/** How close to the middle of the map (px) a selected asset counts as centred. */
+const CENTRED_PX = 12
 
 type Props = {
   assets: Asset[]
@@ -36,7 +38,8 @@ type Props = {
   selectedId: number | undefined
   /** Changes on every selection, so selecting the already-selected asset again re-centres on it. */
   focusToken: number
-  onMarkerTap: (id: number) => void
+  onSelect: (id: number) => void
+  onDeselect: () => void
 }
 
 /** Browser-only: load with React.lazy inside <ClientOnly>. */
@@ -47,12 +50,13 @@ export default function AssetMap({
   styleUrl,
   selectedId,
   focusToken,
-  onMarkerTap,
+  onSelect,
+  onDeselect,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const markersRef = useRef(new Map<number, Marker>())
-  const onMarkerTapRef = useRef(onMarkerTap)
+  const onMarkerTapRef = useRef((_id: number) => {})
   const cameraPlacedRef = useRef(false)
   const [styleLoaded, setStyleLoaded] = useState(false)
   const now = useNow(30_000)
@@ -75,7 +79,17 @@ export default function AssetMap({
   const gestureRef = useRef(false)
 
   useEffect(() => {
-    onMarkerTapRef.current = onMarkerTap
+    onMarkerTapRef.current = (id) => {
+      const map = mapRef.current
+      if (id !== selectedId || !map || !target) return onSelect(id)
+      // The selected asset: deselect it when it's centred (or being followed); otherwise centre it
+      // again, which also resumes following.
+      const point = map.project([target.lon, target.lat])
+      const container = map.getContainer()
+      const offCentre = Math.hypot(point.x - container.clientWidth / 2, point.y - container.clientHeight / 2)
+      if (following || offCentre <= CENTRED_PX) onDeselect()
+      else onSelect(id)
+    }
     focusTokenRef.current = focusToken
     targetRef.current = following ? [targetLon, targetLat] : null
   })

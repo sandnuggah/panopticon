@@ -56,12 +56,6 @@ function Home() {
     if (selectedId !== undefined) void navigate({ search: {}, replace: true })
   }
 
-  /** Map markers toggle; the cards always select (again, to re-centre). */
-  function toggle(id: number) {
-    if (id === selectedId) deselect()
-    else select(id)
-  }
-
   const mapPlaceholder = <div className="map map-placeholder" />
 
   return (
@@ -79,7 +73,8 @@ function Home() {
               styleUrl={loaderData.mapStyleUrl}
               selectedId={selectedId}
               focusToken={focusToken}
-              onMarkerTap={toggle}
+              onSelect={select}
+              onDeselect={deselect}
             />
           </Suspense>
         </ClientOnly>
