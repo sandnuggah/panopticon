@@ -72,8 +72,8 @@ function SharedLive({ link, view, styleUrl }: { link: string; view: LiveView; st
           </Suspense>
         </ClientOnly>
       </div>
-      <section className="sheet shared-sheet" aria-label={asset.name}>
-        <div className="shared-details">
+      <section className="sheet link-sheet" aria-label={asset.name}>
+        <div className="link-details">
           <div className="asset-details-title">
             <AssetAvatar asset={asset} />
             <h1 className="asset-details-name">{asset.name}</h1>
@@ -109,7 +109,7 @@ const endings: Record<Exclude<SharedView['kind'], 'live'>, { title: string; text
 function SharedEnded({ kind }: { kind: Exclude<SharedView['kind'], 'live'> }) {
   const { title, text } = endings[kind]
   return (
-    <main className="page shared-ended">
+    <main className="page link-ended">
       <h1>{title}</h1>
       <p className="muted">{text}</p>
     </main>

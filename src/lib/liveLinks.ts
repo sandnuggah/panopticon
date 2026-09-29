@@ -1,10 +1,11 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
-// The live location links made in this browser, so they can be sent again or stopped. panopticon
-// stores nothing on the server, so other browsers don't see them; a link keeps working until it
-// expires either way. Kept in localStorage, and dropped once expired.
+// The live location links made in this browser, so they can be stopped from Settings and the Share
+// button can say it's sharing. panopticon stores nothing on the server, so other browsers don't see
+// them; a link keeps working until it expires either way. Kept in localStorage, dropped once expired.
 
-export type LiveLink = { link: string; assetId: number; expiresAt: number }
+/** `name` is the asset's name when the link was made (links saved before it was kept have none). */
+export type LiveLink = { link: string; assetId: number; expiresAt: number; name?: string }
 
 const STORAGE_KEY = 'panopticon.liveLinks'
 const listeners = new Set<() => void>()
@@ -59,15 +60,10 @@ function subscribe(listener: () => void): () => void {
   }
 }
 
-/** This asset's live links that haven't expired, soonest to expire first, plus add and remove. */
-export function useLiveLinks(
-  assetId: number,
-  now: number,
-): [LiveLink[], (link: LiveLink) => void, (link: string) => void] {
+/** The live links that haven't expired, soonest to expire first, plus add and remove. */
+export function useLiveLinks(now: number): [LiveLink[], (link: LiveLink) => void, (link: string) => void] {
   const all = useSyncExternalStore(subscribe, read, () => none)
-  const links = all
-    .filter((link) => link.assetId === assetId && link.expiresAt > now)
-    .sort((a, b) => a.expiresAt - b.expiresAt)
+  const links = all.filter((link) => link.expiresAt > now).sort((a, b) => a.expiresAt - b.expiresAt)
   const add = useCallback((link: LiveLink) => {
     write([...read().filter((other) => other.expiresAt > Date.now()), link])
   }, [])

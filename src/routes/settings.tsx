@@ -1,9 +1,14 @@
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
+import { useState } from 'react'
+import { useLiveLinks, type LiveLink } from '../lib/liveLinks'
 import { useSettings } from '../lib/settings'
+import { formatTime } from '../lib/share'
 import { THEMES, useTheme } from '../lib/theme'
 import { TRAIL_OPTIONS, type TrailLength } from '../lib/trail'
+import { useNow } from '../lib/useNow'
 import { getUser, logout } from '../server/auth.functions'
 import { getMapOptions } from '../server/map.functions'
+import { stopLink } from '../server/sharing.functions'
 
 export const Route = createFileRoute('/settings')({
   beforeLoad: async () => {
@@ -125,6 +130,8 @@ function SettingsPage() {
         <p className="muted hint">Add or remove trackers, rename them, and change their photos. Saved in Traccar.</p>
       </section>
 
+      <LiveLinks />
+
       <section>
         <h2>Account</h2>
         <p>
@@ -151,4 +158,61 @@ function trailLabel(length: TrailLength): string {
 function trailStopLabel(length: number): string {
   if (length === 0) return 'Off'
   return length < 60 ? `${length}m` : `${length / 60}h`
+}
+
+/** The live location links made in this browser, each with Stop (see sharing.server.ts). */
+function LiveLinks() {
+  const now = useNow(30_000)
+  const [links, , removeLink] = useLiveLinks(now)
+  const [stopping, setStopping] = useState<string>()
+  const [failed, setFailed] = useState(false)
+
+  async function stop(link: LiveLink) {
+    setStopping(link.link)
+    setFailed(false)
+    try {
+      await stopLink({ data: link.link })
+      removeLink(link.link)
+    } catch {
+      setFailed(true)
+    } finally {
+      setStopping(undefined)
+    }
+  }
+
+  return (
+    <section>
+      <h2>Live links</h2>
+      {links.length === 0 ? (
+        <p className="muted">No live links from this browser.</p>
+      ) : (
+        <ul className="live-links">
+          {links.map((link) => (
+            <li key={link.link}>
+              <span>
+                <strong>{link.name ?? 'Asset'}</strong> until {formatTime(link.expiresAt, now)}
+              </span>
+              <button
+                type="button"
+                className="button-danger"
+                disabled={stopping === link.link}
+                onClick={() => void stop(link)}
+              >
+                Stop
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {failed && (
+        <p className="error" role="alert">
+          Couldn't stop the link. Try again.
+        </p>
+      )}
+      <p className="muted hint">
+        Links made with Share in this browser. Stopping one ends it at once; a page that's already open goes blank
+        within a minute.
+      </p>
+    </section>
+  )
 }

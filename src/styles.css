@@ -499,19 +499,19 @@ input {
 }
 
 .asset-details .asset-card-address,
-.shared-details .asset-card-address {
+.link-details .asset-card-address {
   font-size: 1.05rem;
 }
 
 /* A live location link's page (/s/<link>): the one asset, below the map on phones, beside it on wider screens. */
-.shared-details {
+.link-details {
   display: grid;
   gap: 0.6rem;
   flex: 0 0 100%;
   padding: 0.25rem 0;
 }
 
-.shared-ended {
+.link-ended {
   padding-top: 20dvh;
   text-align: center;
 }
@@ -545,7 +545,7 @@ input {
   margin-top: 0.5rem;
 }
 
-.button-share {
+.location-button {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -559,15 +559,17 @@ input {
   font-weight: 600;
 }
 
-.share-icon {
+.location-button-icon {
   flex: none;
   width: 1rem;
   height: 1rem;
 }
 
 /* The Share button and its menu (ShareMenu): a drop-down under the button, or an action sheet
-   from the bottom of the screen on phones. */
-.share {
+   from the bottom of the screen on phones. No class or id here says "share": content blockers'
+   social filter lists hide elements like .share-menu and .share-icon, which on an iPhone left
+   only the dimmed backdrop. */
+.location-actions {
   position: relative;
   display: flex;
   align-items: center;
@@ -575,39 +577,44 @@ input {
   justify-self: start;
 }
 
-.share-notice {
+.location-actions:has(.location-link-field) {
+  flex-wrap: wrap;
+  justify-self: stretch;
+}
+
+/* The base input size (16px) stays, or iOS zooms in when it's tapped. */
+.location-link-field {
+  flex: 1 0 100%;
+}
+
+.location-notice {
   font-size: 0.85rem;
   color: var(--muted);
 }
 
-.button-share-live {
+.location-button-live {
   background: transparent;
   color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.share-live-dot {
+.location-live-dot {
   width: 0.55rem;
   height: 0.55rem;
   border-radius: 50%;
   background: var(--online);
 }
 
-/* The asset list is its own layer below the map's controls; lifted while the menu is open. */
-.sheet:has(.share-menu) {
-  z-index: 30;
-}
-
 /* Catches taps outside the menu, so they close it rather than reach the map or the list. */
-.share-backdrop {
+.location-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  z-index: 40;
 }
 
-.share-menu {
+.location-menu {
   position: fixed;
-  z-index: 21;
+  z-index: 41;
   display: grid;
   min-width: 14rem;
   padding: 0.35rem;
@@ -617,21 +624,21 @@ input {
   box-shadow: var(--shadow);
 }
 
-.share-menu-group {
+.location-menu-group {
   display: grid;
   margin-top: 0.25rem;
   padding-top: 0.25rem;
   border-top: 1px solid var(--border);
 }
 
-.share-menu-heading {
+.location-menu-heading {
   padding: 0.35rem 0.65rem 0.15rem;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--muted);
 }
 
-.share-menu-item {
+.location-menu-item {
   padding: 0.5rem 0.65rem;
   border: 0;
   border-radius: calc(var(--radius) - 4px);
@@ -640,18 +647,13 @@ input {
   white-space: nowrap;
 }
 
-.share-menu-item:hover,
-.share-menu-item:focus-visible {
+.location-menu-item:hover,
+.location-menu-item:focus-visible {
   background: var(--surface-selected);
   outline: none;
 }
 
-.share-menu-danger {
-  margin-top: 0.25rem;
-  color: var(--error);
-}
-
-.share-menu-cancel {
+.location-menu-cancel {
   display: none;
 }
 
@@ -945,6 +947,23 @@ input {
   color: var(--accent-text);
 }
 
+/* Settings → Live links. */
+.live-links {
+  display: grid;
+  justify-self: stretch;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.live-links li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .hint {
   font-size: 0.85rem;
 }
@@ -1209,30 +1228,32 @@ a.manage-row:hover {
   }
 
   /* The Share menu as an action sheet: across the bottom, above everything, with the page dimmed. */
-  .share-menu-heading {
+  .location-menu-heading {
     text-align: center;
   }
 
-  .share-backdrop {
+  .location-backdrop {
     background: rgb(0 0 0 / 0.35);
   }
 
-  .share-menu {
+  .location-menu {
     position: fixed;
     top: auto;
     left: 8px;
     right: 8px;
     bottom: calc(8px + env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 16px - env(safe-area-inset-bottom));
+    overflow-y: auto;
     padding: 0.5rem;
     font-size: 1.05rem;
   }
 
-  .share-menu-item {
+  .location-menu-item {
     padding: 0.8rem 0.75rem;
     text-align: center;
   }
 
-  .share-menu-cancel {
+  .location-menu-cancel {
     display: block;
     margin-top: 0.4rem;
     border-top: 1px solid var(--border);

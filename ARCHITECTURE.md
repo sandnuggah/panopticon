@@ -196,8 +196,9 @@ The selected asset's card shows its street address, e.g. "Storviltsgatan 5, Stoc
 - **Making one:** the server checks the user can see the asset, asks Traccar for a new token for the same user expiring with the link (`POST /api/session/token`; Traccar caps it at the session's own expiry, and so does panopticon), and seals `{asset id, token, expiry}` with AES-256-GCM under a key derived from `SESSION_SECRET` by HKDF (`shareLink.server.ts`). That's the link: about 250 characters with a real Traccar token. Nothing is stored, so the read-only container stays stateless.
 - **Opening one:** the server unseals it, checks the expiry, and reads only that asset with the link's token. The viewer gets the asset's name, picture, status, position and address; never its battery, trail, tracker ID, or anything about the sharer or their other assets. Its live stream (`/s/<link>/live`) relays Traccar's socket filtered to that asset, and its picture comes from `/s/<link>/image`.
 - **Ending:** at the expiry, Traccar refuses the token and the stream sends an `ended` event; the page then says the link has expired. **Stop** revokes the token (`POST /api/session/token/revoke`, with the link's own token so it can only revoke itself). Traccar keeps an already-open socket going after that, so each stream checks every minute that the token still works and ends if not: a stopped link goes blank within a minute even on a page that's open. Signing out of panopticon doesn't end links; they have their own tokens.
-- **Stop needs the link:** panopticon keeps no list, so the links made in a browser are kept in its localStorage (`liveLinks.ts`) and offered as Stop items in the Share menu there. Other browsers don't see them.
-- **Safari and the share sheet:** Safari only opens it straight after a tap. Making a link takes a request first, so if Safari refuses, the Share button turns into **Send link** for a second tap.
+- **Stop needs the link:** panopticon keeps no list, so the links made in a browser are kept in its localStorage (`liveLinks.ts`, with the asset's name) and listed in **Settings → Live links**, each with Stop. Other browsers don't see them.
+- **No "share" in class names or ids:** content blockers' social filter lists hide elements such as `.share-menu` and `.share-icon` (to remove share widgets from sites). On an iPhone with one, the menu got `display: none` and only its backdrop showed. The menu uses `location-*` and the link page `link-*` instead.
+- **Safari and the share sheet:** Safari only opens it straight after a tap. Making a link takes a request first, so if Safari refuses, the Share button turns into **Send link** for a second tap. If that fails too (no share sheet or clipboard, as on a page without HTTPS), the link is shown in a field to copy by hand.
 - **Security:** the link is a password to where that asset is until it expires, and anyone it's forwarded to can use it. It can't be read, edited or forged without `SESSION_SECRET` (tests: `shareLink.test.ts`). If the secret leaked, a link would be as powerful as a session cookie for that account until it expires; that's the same exposure as the cookie itself, and why links last at most 24 hours. The token never reaches the viewer's browser, and Traccar isn't reachable directly anyway. Pages are `noindex`, and `Referrer-Policy: same-origin` keeps the link out of requests to the tile server. Your reverse proxy's access log will contain links if it logs paths.
 
 ## Battery
@@ -236,7 +237,7 @@ In the app:
   - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
   - while riding, **In a vehicle** or **Moving underground** with a transit icon, in the accent colour (on phones, a small badge on the avatar's top-right corner);
   - battery, when available: a gauge with 0–4 bars (empty below 5%, then one bar per started quarter) at the end of the name row, in the warning colour at 20% or below. The exact percentage is its label, for screen readers and as the hover tooltip. Readings near empty jump by several points as the voltage recovers, and bars hide most of that. Trackers that report volts only get a text line instead.
-- **Share:** a button in the phone details, and under the selected card on desktop. It opens a menu: a drop-down under the button on wider screens, an action sheet from the bottom on phones (with Cancel). Items: **Send location**; **Share live location** for 1, 8 or 24 hours; and, while a live link made in this browser is active, **Stop sharing · until 20:30**. The button then reads **Sharing live**. See [Sharing](#sharing).
+- **Share:** a button in the phone details, and under the selected card on desktop. It opens a menu: a drop-down under the button on wider screens, an action sheet from the bottom on phones (with Cancel). Items: **Send location**, and **Share live location** for 1, 8 or 24 hours. While a live link made in this browser is active, the button reads **Sharing live**; links are stopped in Settings → Live links. See [Sharing](#sharing).
 - **Map:** tapping a card selects that asset and flies to it; tapping the selected card again re-centres. Tapping a marker selects its asset. Tapping the selected asset's marker deselects it when it's centred (being followed, or within 12 px of the middle); when it's off-centre, for example after a drag, the tap re-centres it and resumes following instead. On load the map shows the asset in `?asset=`, or fits all assets.
 - **Deselecting:** only by tapping the selected asset's marker while it's centred, tapping the asset panel away from its cards and buttons (the gaps in the phone bar, the sidebar's title and empty space), or the close button in the phone details. Tapping or dragging the map keeps the selection.
 - **Following:** while an asset is selected, the map keeps it centred, gliding to each new position (1 s).
@@ -327,7 +328,7 @@ src/
     auth.sso.ts                       server route: start SSO
     images.asset.$id.ts               server route: asset picture
     api.session.openid.callback.ts    server route: SSO return (path fixed by Traccar)
-    settings.tsx                      theme, trail length, manage assets link, sign-out
+    settings.tsx                      theme, trail length, manage assets link, live links, sign-out
     assets.index.tsx                  list of assets to manage
     assets.new.tsx                    add an asset
     assets.$id.tsx                    photo, name, remove
@@ -363,7 +364,7 @@ src/
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
     SettingsLink.tsx                  cog link to Settings, at the end of the asset list
-    ShareMenu.tsx                     Share: send location, make / send / stop live links
+    ShareMenu.tsx                     Share: send location, make and send live links
     RelativeTime.tsx
   lib/
     asset.ts                          Asset view model + isStale (shared with the browser)

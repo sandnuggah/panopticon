@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { Asset } from '../lib/asset'
 import { useLiveLinks, type LiveLink } from '../lib/liveLinks'
-import { formatTime, LIVE_LINK_HOURS, liveLinkShare, locationShare } from '../lib/share'
+import { LIVE_LINK_HOURS, liveLinkShare, locationShare } from '../lib/share'
 import { shareOrCopy } from '../lib/shareSheet'
 import { useNow } from '../lib/useNow'
-import { createLink, stopLink } from '../server/sharing.functions'
+import { createLink } from '../server/sharing.functions'
 
 type Props = { asset: Asset; address: string | undefined }
 
@@ -12,9 +13,10 @@ type Props = { asset: Asset; address: string | undefined }
 const NOTICE_MS = 3_000
 
 /**
- * The Share button and its menu: send where the asset is once, share it live for 1, 8 or 24 hours
- * (see sharing.server.ts), or stop the live links made in this browser. A drop-down on wider
- * screens, an action sheet from the bottom on phones.
+ * The Share button and its menu: send where the asset is once, or share it live for 1, 8 or 24
+ * hours (see sharing.server.ts). A drop-down on wider screens, an action sheet from the bottom on
+ * phones. While a live link made in this browser is active the button says so; links are stopped
+ * in Settings.
  */
 export function ShareMenu({ asset, address }: Props) {
   const [open, setOpen] = useState(false)
@@ -24,9 +26,13 @@ export function ShareMenu({ asset, address }: Props) {
   const [busy, setBusy] = useState(false)
   // A link Safari wouldn't share straight after it was made: the button sends it on the next tap.
   const [unsent, setUnsent] = useState<LiveLink>()
+  // Last resort when neither the share sheet nor the clipboard works (e.g. a page without HTTPS):
+  // the link itself, to select and copy by hand.
+  const [manual, setManual] = useState<string>()
   const [notice, setNotice] = useState<string>()
   const now = useNow(30_000)
-  const [links, addLink, removeLink] = useLiveLinks(asset.id, now)
+  const [allLinks, addLink] = useLiveLinks(now)
+  const live = allLinks.some((link) => link.assetId === asset.id)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -61,6 +67,7 @@ export function ShareMenu({ asset, address }: Props) {
 
   function toggle() {
     if (open) return close()
+    setManual(undefined)
     const rect = buttonRef.current?.getBoundingClientRect()
     const dropDown = rect && window.matchMedia('(min-width: 768px)').matches
     setAnchor(dropDown ? { top: rect.bottom + 6, left: rect.left } : undefined)
@@ -93,6 +100,12 @@ export function ShareMenu({ asset, address }: Props) {
   async function sendLink(link: LiveLink) {
     const url = `${window.location.origin}/s/${link.link}`
     const result = await shareOrCopy(liveLinkShare(asset.name, url, link.expiresAt, Date.now()))
+    if (result === 'failed' && unsent?.link === link.link) {
+      // The second try failed too: sharing isn't possible here at all.
+      setUnsent(undefined)
+      setManual(url)
+      return
+    }
     setUnsent(result === 'failed' ? link : undefined)
     if (result === 'copied') setNotice('Link copied')
   }
@@ -101,7 +114,7 @@ export function ShareMenu({ asset, address }: Props) {
     run(async () => {
       try {
         const { link, expiresAt } = await createLink({ data: { assetId: asset.id, hours } })
-        const made = { link, assetId: asset.id, expiresAt }
+        const made = { link, assetId: asset.id, expiresAt, name: asset.name }
         addLink(made)
         await sendLink(made)
       } catch {
@@ -109,23 +122,10 @@ export function ShareMenu({ asset, address }: Props) {
       }
     })
 
-  const stop = (link: LiveLink) =>
-    run(async () => {
-      try {
-        await stopLink({ data: link.link })
-        removeLink(link.link)
-        if (unsent?.link === link.link) setUnsent(undefined)
-        setNotice('Stopped sharing')
-      } catch {
-        setNotice("Couldn't stop sharing")
-      }
-    })
-
-  const live = links.length > 0
   return (
-    <div className="share">
+    <div className="location-actions">
       {unsent ? (
-        <button type="button" className="button-share" onClick={() => void sendLink(unsent)}>
+        <button type="button" className="location-button" onClick={() => void sendLink(unsent)}>
           <ShareIcon />
           Send link
         </button>
@@ -133,55 +133,64 @@ export function ShareMenu({ asset, address }: Props) {
         <button
           ref={buttonRef}
           type="button"
-          className={`button-share${live ? ' button-share-live' : ''}`}
+          className={`location-button${live ? ' location-button-live' : ''}`}
           aria-haspopup="menu"
           aria-expanded={open}
           disabled={busy}
           onClick={toggle}
         >
-          {live ? <span className="share-live-dot" aria-hidden="true" /> : <ShareIcon />}
+          {live ? <span className="location-live-dot" aria-hidden="true" /> : <ShareIcon />}
           {live ? 'Sharing live' : 'Share'}
         </button>
       )}
-      <span className="share-notice" role="status">
+      <span className="location-notice" role="status">
         {notice}
       </span>
-      {open && (
-        <>
-          <div className="share-backdrop" onClick={close} />
-          <div ref={menuRef} className="share-menu" role="menu" aria-label={`Share ${asset.name}`} style={anchor}>
-            {asset.location && (
-              <MenuItem onSelect={sendLocation}>Send location</MenuItem>
-            )}
-            <div className="share-menu-group" role="group" aria-labelledby="share-live-heading">
-              <span id="share-live-heading" className="share-menu-heading">
-                Share live location
-              </span>
-              {LIVE_LINK_HOURS.map((hours) => (
-                <MenuItem key={hours} onSelect={() => shareLive(hours)}>
-                  For {hours === 1 ? '1 hour' : `${hours} hours`}
-                </MenuItem>
-              ))}
-            </div>
-            {links.map((link) => (
-              <MenuItem key={link.link} danger onSelect={() => stop(link)}>
-                Stop sharing · until {formatTime(link.expiresAt, now)}
-              </MenuItem>
-            ))}
-            <MenuItem cancel onSelect={close}>
-              Cancel
-            </MenuItem>
-          </div>
-        </>
+      {manual && (
+        <input
+          className="location-link-field"
+          readOnly
+          value={manual}
+          aria-label="Live link: select and copy it"
+          onFocus={(event) => event.currentTarget.select()}
+        />
       )}
+      {/* Drawn at the end of the page, outside the asset list, so the list's clipping and layering
+          can't affect it. Clicks inside stay here rather than reaching the list, which would take
+          them as a deselect. */}
+      {open &&
+        createPortal(
+          <div className="location-layer" onClick={(event) => event.stopPropagation()}>
+            <div className="location-backdrop" onClick={close} />
+            <div ref={menuRef} className="location-menu" role="menu" aria-label={`Share ${asset.name}`} style={anchor}>
+              {asset.location && (
+                <MenuItem onSelect={sendLocation}>Send location</MenuItem>
+              )}
+              <div className="location-menu-group" role="group" aria-labelledby="live-link-heading">
+                <span id="live-link-heading" className="location-menu-heading">
+                  Share live location
+                </span>
+                {LIVE_LINK_HOURS.map((hours) => (
+                  <MenuItem key={hours} onSelect={() => shareLive(hours)}>
+                    For {hours === 1 ? '1 hour' : `${hours} hours`}
+                  </MenuItem>
+                ))}
+              </div>
+              <MenuItem cancel onSelect={close}>
+                Cancel
+              </MenuItem>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
 
-type ItemProps = { children: ReactNode; onSelect: () => void; danger?: boolean; cancel?: boolean }
+type ItemProps = { children: ReactNode; onSelect: () => void; cancel?: boolean }
 
-function MenuItem({ children, onSelect, danger, cancel }: ItemProps) {
-  const className = `share-menu-item${danger ? ' share-menu-danger' : ''}${cancel ? ' share-menu-cancel' : ''}`
+function MenuItem({ children, onSelect, cancel }: ItemProps) {
+  const className = `location-menu-item${cancel ? ' location-menu-cancel' : ''}`
   return (
     <button type="button" role="menuitem" className={className} onClick={() => void onSelect()}>
       {children}
@@ -192,7 +201,7 @@ function MenuItem({ children, onSelect, danger, cancel }: ItemProps) {
 /** A box with an arrow out of it, the usual share symbol. Decorative; the label says it. */
 function ShareIcon() {
   return (
-    <svg className="share-icon" viewBox="0 0 16 16" aria-hidden="true">
+    <svg className="location-button-icon" viewBox="0 0 16 16" aria-hidden="true">
       <path d="M8 10V1.75M5 4.5l3-3 3 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M5.5 6.75H4.25a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1H10.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
