@@ -10,6 +10,8 @@ type Props = {
   /** What each asset is doing right now, when it's riding (see segments.ts). */
   activities: Record<number, Activity>
   selectedId: number | undefined
+  /** The selected asset's street address, when known. */
+  selectedAddress?: string
   onSelect: (id: number) => void
   /** Called for a tap on the panel itself, away from the cards and buttons. */
   onDeselect: () => void
@@ -19,7 +21,7 @@ type Props = {
 }
 
 /** The list under the map on phones, beside it on wider screens. */
-export function AssetSheet({ assets, activities, selectedId, onSelect, onDeselect, header, footer }: Props) {
+export function AssetSheet({ assets, activities, selectedId, selectedAddress, onSelect, onDeselect, header, footer }: Props) {
   return (
     // A convenience for pointer users, like tapping the map; the cards stay the keyboard way in.
     <section
@@ -40,6 +42,7 @@ export function AssetSheet({ assets, activities, selectedId, onSelect, onDeselec
                 asset={asset}
                 activity={activities[asset.id]}
                 selected={asset.id === selectedId}
+                address={asset.id === selectedId ? selectedAddress : undefined}
                 onSelect={onSelect}
               />
             </li>
@@ -51,9 +54,15 @@ export function AssetSheet({ assets, activities, selectedId, onSelect, onDeselec
   )
 }
 
-type CardProps = { asset: Asset; activity: Activity | undefined; selected: boolean; onSelect: (id: number) => void }
+type CardProps = {
+  asset: Asset
+  activity: Activity | undefined
+  selected: boolean
+  address: string | undefined
+  onSelect: (id: number) => void
+}
 
-function AssetCard({ asset, activity, selected, onSelect }: CardProps) {
+function AssetCard({ asset, activity, selected, address, onSelect }: CardProps) {
   const now = useNow(30_000)
   const stale = isStale(asset, now)
   return (
@@ -92,6 +101,7 @@ function AssetCard({ asset, activity, selected, onSelect }: CardProps) {
             {activityLabel(activity)}
           </span>
         )}
+        {address && <span className="asset-card-address">{address}</span>}
         <span>
           {asset.location ? (
             <>

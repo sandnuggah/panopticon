@@ -5,6 +5,7 @@ import { LiveIndicator } from '../components/LiveIndicator'
 import { SettingsLink } from '../components/SettingsLink'
 import { useSettings } from '../lib/settings'
 import { appName, useTheme } from '../lib/theme'
+import { useAddress } from '../lib/useAddress'
 import { useLiveAssets } from '../lib/useLiveAssets'
 import { useSnappedWalks } from '../lib/useSnappedWalks'
 import { getAssets } from '../server/assets.functions'
@@ -48,6 +49,7 @@ function Home() {
     settingsLoaded ? settings.trailMinutes : null,
   )
   const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.followRoads && settings.followRoads)
+  const address = useAddress(assets.find((asset) => asset.id === selectedId))
 
   function select(id: number) {
     setFocusToken((token) => token + 1)
@@ -86,6 +88,7 @@ function Home() {
         assets={assets}
         activities={activities}
         selectedId={selectedId}
+        selectedAddress={address}
         onSelect={select}
         onDeselect={deselect}
         // Shown in the desktop sidebar; on phones it's hidden visually but kept for screen readers.

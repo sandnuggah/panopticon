@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { MAX_POINTS_PER_WALK, MAX_WALKS_PER_REQUEST, type MatchablePoint } from '../lib/matching'
+import { lookUpAddress } from './address.server'
 import { env } from './env.server'
 import { matchWalk } from './matching.server'
 import { withToken } from './session.server'
@@ -17,6 +18,19 @@ export const getMapOptions = createServerFn({ method: 'GET' }).handler(() => ({
 export const matchWalks = createServerFn({ method: 'POST' })
   .validator(parseWalks)
   .handler(({ data }) => withToken(() => Promise.all(data.map((walk) => matchWalk(walk)))))
+
+/** The street address near a point, or null. POST so coordinates stay out of URLs and proxy logs. */
+export const getAddress = createServerFn({ method: 'POST' })
+  .validator(parsePoint)
+  .handler(({ data }) => withToken((token) => lookUpAddress(token, data.lat, data.lon)))
+
+function parsePoint(input: unknown): { lat: number; lon: number } {
+  const { lat, lon } = (input ?? {}) as Record<string, unknown>
+  if (typeof lat !== 'number' || !(Math.abs(lat) <= 90) || typeof lon !== 'number' || !(Math.abs(lon) <= 180)) {
+    throw new Error('Invalid request')
+  }
+  return { lat, lon }
+}
 
 function parseWalks(input: unknown): MatchablePoint[][] {
   if (!Array.isArray(input) || input.length > MAX_WALKS_PER_REQUEST) throw new Error('Invalid request')

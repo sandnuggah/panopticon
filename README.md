@@ -117,6 +117,48 @@ offered.
 
 To refresh the map data every few months, delete `./valhalla/valhalla_tiles.tar` and restart Valhalla.
 
+## Street addresses (optional)
+
+The selected asset's card shows its street address, from Traccar's own reverse geocoder. Recent
+Traccar versions use LocationIQ by default, with a key shared by every install. To keep coordinates on
+your own machines, run [Nominatim](https://nominatim.org) next to Traccar:
+
+1. Add it to `compose.yaml`, on Traccar's network:
+   ```yaml
+     nominatim:
+       image: mediagis/nominatim:5.3
+       restart: unless-stopped
+       shm_size: 1g
+       environment:
+         PBF_URL: https://download.geofabrik.de/europe/sweden-latest.osm.pbf
+         IMPORT_STYLE: address        # streets and house numbers only
+         REVERSE_ONLY: "true"         # coordinates to addresses, all Traccar needs
+         FREEZE: "true"               # no live map updates, saves disk
+         POSTGRES_SHARED_BUFFERS: 1GB
+         POSTGRES_MAINTENANCE_WORK_MEM: 2GB
+         POSTGRES_EFFECTIVE_CACHE_SIZE: 4GB
+         NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD}
+       volumes:
+         - ./nominatim:/var/lib/postgresql/16/main
+       networks:
+         - traccar
+   ```
+2. Set `NOMINATIM_PASSWORD` in `.env` to a random string, start it, and wait for the import to finish:
+   ```bash
+   docker compose up -d nominatim
+   ```
+3. Point Traccar at it in `traccar.xml`, then restart Traccar:
+   ```xml
+   <entry key='geocoder.enable'>true</entry>
+   <entry key='geocoder.type'>nominatim</entry>
+   <entry key='geocoder.url'>http://nominatim:8080/reverse</entry>
+   <entry key='geocoder.language'>sv</entry>
+   <entry key='geocoder.format'>%r %h, %t</entry>
+   <entry key='geocoder.ignorePositions'>true</entry>
+   ```
+
+Without a working geocoder the address line is simply not shown.
+
 ## Single sign-on
 
 panopticon uses Traccar's own OpenID Connect setup. Once panopticon is reachable at its final address:

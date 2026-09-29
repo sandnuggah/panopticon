@@ -164,6 +164,24 @@ Optional: with `MAP_MATCHING_URL` set, Settings offers **Follow roads** (off by 
 - All of it is one GeoJSON source with a `kind` property and a layer per kind; paw prints have their own source with longer pieces, since they're spaced 44 px apart.
 - **Length:** set in Settings: Off, 5, 10 (default), 15, 30 or 60 minutes, 3 hours, or 24 hours. Longer means more history per asset on each load: a day of reports every 30 s is about 2,900 points per asset.
 
+## Addresses
+
+The selected asset's card shows its street address, e.g. "Storviltsgatan 5, Stockholm".
+
+- **Source:** Traccar's own reverse geocoder (`GET /api/server/geocode`), so the provider, language and format are Traccar settings (`geocoder.*` in `traccar.xml`), not panopticon's. panopticon has no geocoding config of its own.
+- **Provider:** recent Traccar versions have geocoding on by default, through LocationIQ with a key shared by every install. That sends coordinates to a third party and is tightly rate-limited, so the recommended setup is a self-hosted Nominatim (`mediagis/nominatim`, Sweden extract, `IMPORT_STYLE=address`, `REVERSE_ONLY`) on Traccar's Docker network:
+  ```xml
+  <entry key='geocoder.type'>nominatim</entry>
+  <entry key='geocoder.url'>http://nominatim:8080/reverse</entry>
+  <entry key='geocoder.language'>sv</entry>
+  <entry key='geocoder.format'>%r %h, %t</entry>
+  <entry key='geocoder.ignorePositions'>true</entry>
+  ```
+  `%r %h, %t` gives Swedish order (street, number, town); Traccar leaves out fields it doesn't get. `ignorePositions` stops Traccar from geocoding every report; panopticon asks only when it needs an address.
+- **How often:** only for the selected asset, and again only once it has moved 25 m from where its address was found (`useAddress.ts`). The server rounds points to 4 decimals (about 10 m) and caches up to 1,000 answers (`address.server.ts`), so a stay costs one lookup, and a walk about one every 30 s.
+- **When there's none:** no address line. If geocoding is off or failing, the server logs it once and the line stays hidden; failures aren't cached, so it appears once geocoding works.
+- The request is a POST, so coordinates stay out of URLs and proxy logs.
+
 ## Battery
 
 SinoTrack trackers use Traccar's `h02` protocol. The ST-904L sends two kinds of message that matter here:
@@ -303,7 +321,8 @@ src/
     assets.functions.ts               getAssets
     manage.server.ts                  add / rename / remove assets and photos; edit access; error mapping
     manage.functions.ts               server functions for the /assets pages, with input checks
-    map.functions.ts                  getMapOptions (style URL, follow roads available), matchWalks
+    map.functions.ts                  getMapOptions (style URL, follow roads available), matchWalks, getAddress
+    address.server.ts                 street addresses through Traccar's geocoder, cache
     matching.server.ts                Valhalla map matching, closeness check, cache
     images.server.ts                  /images/asset/<id>: device pictures from Traccar, cached
     theme.server.ts                   theme from the request's cookie
@@ -327,6 +346,7 @@ src/
     segments.test.ts                  node --test
     matching.ts                       which walks to snap for "Follow roads"
     useSnappedWalks.ts                asks the server to snap walks, caches the results
+    useAddress.ts                     the selected asset's address, asked again after 25 m
     settings.ts                       per-browser settings (localStorage)
     theme.ts                          THEMES, useTheme (cookie)
     assetImage.ts                     crop + shrink photos (browser), sniff image type (server)

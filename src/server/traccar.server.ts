@@ -290,6 +290,20 @@ export async function getPositionHistory(
 }
 
 /** Opens Traccar's live WebSocket. It sends `{devices, positions, events}` messages as things change. */
+/**
+ * The address at a point from Traccar's reverse geocoder (`geocoder.*` in traccar.xml), or null when
+ * it has none there. Fails like any other call when geocoding is off ("Reverse geocoding is not enabled").
+ */
+export async function reverseGeocode(token: string, lat: number, lon: number): Promise<string | null> {
+  const query = new URLSearchParams({ latitude: String(lat), longitude: String(lon) })
+  const response = await request(`/api/server/geocode?${query}`, { token })
+  await ensureOk(response, 'GET /api/server/geocode')
+  // A bare string, though some versions may quote it as JSON.
+  let address: unknown = (await response.text()).trim()
+  if (typeof address === 'string' && address.startsWith('"')) address = JSON.parse(address)
+  return typeof address === 'string' && address !== '' ? address : null
+}
+
 export function openSocket(token: string): WebSocket {
   const url = env().traccarUrl.replace(/^http/, 'ws') + `/api/socket?token=${encodeURIComponent(token)}`
   return new WebSocket(url)

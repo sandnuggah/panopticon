@@ -462,6 +462,11 @@ input {
   display: none;
 }
 
+/* Where the selected asset is, from Traccar's reverse geocoder. */
+.asset-card-address {
+  font-weight: 600;
+}
+
 /* Riding right now (see segments.ts): a line on the card, and a badge on the phone avatar. */
 .asset-card-activity {
   display: flex;
