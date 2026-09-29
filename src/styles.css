@@ -572,14 +572,17 @@ input {
 .location-actions {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem;
-  justify-self: start;
+  justify-self: stretch;
 }
 
-.location-actions:has(.location-link-field) {
-  flex-wrap: wrap;
-  justify-self: stretch;
+/* Share and Sharing live each take half the row; Share keeps its size when it's alone. */
+.location-actions > .location-button,
+.location-actions > .location-live {
+  flex: 0 0 calc(50% - 0.3rem);
+  justify-content: center;
 }
 
 /* The base input size (16px) stays, or iOS zooms in when it's tapped. */
@@ -588,14 +591,27 @@ input {
 }
 
 .location-notice {
+  flex: 1 0 100%;
   font-size: 0.85rem;
   color: var(--muted);
 }
 
-.location-button-live {
-  background: transparent;
-  color: var(--accent);
+.location-notice:empty {
+  display: none;
+}
+
+/* Beside Share while a live link is active; leads to Settings → Live links. */
+.location-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius);
   box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .location-live-dot {

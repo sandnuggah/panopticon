@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Asset } from '../lib/asset'
@@ -15,8 +16,8 @@ const NOTICE_MS = 3_000
 /**
  * The Share button and its menu: send where the asset is once, or share it live for 1, 8 or 24
  * hours (see sharing.server.ts). A drop-down on wider screens, an action sheet from the bottom on
- * phones. While a live link made in this browser is active the button says so; links are stopped
- * in Settings.
+ * phones. While a live link made in this browser is active, Sharing live beside it leads to
+ * Settings → Live links, where links are stopped.
  */
 export function ShareMenu({ asset, address }: Props) {
   const [open, setOpen] = useState(false)
@@ -133,15 +134,21 @@ export function ShareMenu({ asset, address }: Props) {
         <button
           ref={buttonRef}
           type="button"
-          className={`location-button${live ? ' location-button-live' : ''}`}
+          className="location-button"
           aria-haspopup="menu"
           aria-expanded={open}
           disabled={busy}
           onClick={toggle}
         >
-          {live ? <span className="location-live-dot" aria-hidden="true" /> : <ShareIcon />}
-          {live ? 'Sharing live' : 'Share'}
+          <ShareIcon />
+          Share
         </button>
+      )}
+      {live && (
+        <Link to="/settings" hash="live-links" className="location-live">
+          <span className="location-live-dot" aria-hidden="true" />
+          Sharing live
+        </Link>
       )}
       <span className="location-notice" role="status">
         {notice}

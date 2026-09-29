@@ -181,7 +181,7 @@ function LiveLinks() {
   }
 
   return (
-    <section>
+    <section id="live-links">
       <h2>Live links</h2>
       {links.length === 0 ? (
         <p className="muted">No live links from this browser.</p>
