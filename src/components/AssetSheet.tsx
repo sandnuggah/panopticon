@@ -4,6 +4,7 @@ import type { Activity, Stay } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { RelativeTime } from './RelativeTime'
+import { ShareLocationButton } from './ShareLocationButton'
 
 type Props = {
   assets: Asset[]
@@ -32,7 +33,7 @@ export function AssetSheet(props: Props) {
       className="sheet"
       aria-label="Assets"
       onClick={(event) => {
-        if (!(event.target as Element).closest('a, button, .asset-details')) onDeselect()
+        if (!(event.target as Element).closest('a, button, .asset-details, .asset-card-actions')) onDeselect()
       }}
     >
       {header && <header className="sheet-header">{header}</header>}
@@ -59,6 +60,12 @@ export function AssetSheet(props: Props) {
                 address={asset.id === selectedId ? selectedAddress : undefined}
                 onSelect={onSelect}
               />
+              {/* Desktop only: on phones the details above the row have these. */}
+              {asset.id === selectedId && (
+                <div className="asset-card-actions">
+                  <ShareLocationButton asset={asset} address={selectedAddress} />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -145,6 +152,7 @@ function AssetDetails({ asset, activity, stay, address, onClose }: DetailsProps)
       <div className="asset-details-facts">
         <AssetFacts asset={asset} activity={activity} stay={stay} address={address} />
       </div>
+      <ShareLocationButton asset={asset} address={address} />
     </section>
   )
 }

@@ -491,6 +491,31 @@ input {
   height: 1rem;
 }
 
+/* Actions for the selected asset: under its card on desktop, in its details on phones. */
+.asset-card-actions {
+  margin-top: 0.5rem;
+}
+
+.button-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-self: start;
+  padding: 0.35rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.share-icon {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+}
+
 /* Where the selected asset is, from Traccar's reverse geocoder. */
 .asset-card-address {
   font-weight: 600;
@@ -1063,6 +1088,10 @@ a.manage-row:hover {
     gap: 0.35rem;
     font-size: 0.85rem;
     color: var(--muted);
+  }
+
+  .asset-card-actions {
+    display: none;
   }
 
   .asset-details-facts {

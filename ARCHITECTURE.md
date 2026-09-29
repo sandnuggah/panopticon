@@ -220,6 +220,11 @@ In the app:
   - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
   - while riding, **In a vehicle** or **Moving underground** with a transit icon, in the accent colour (on phones, a small badge on the avatar's top-right corner);
   - battery, when available: a gauge with 0–4 bars (empty below 5%, then one bar per started quarter) at the end of the name row, in the warning colour at 20% or below. The exact percentage is its label, for screen readers and as the hover tooltip. Readings near empty jump by several points as the voltage recovers, and bars hide most of that. Trackers that report volts only get a text line instead.
+- **Share location:** a button in the phone details, and under the selected card on desktop. It opens the system share sheet (`navigator.share`) with a sentence and a map link (`src/lib/share.ts`):
+  - "Betty is at Storviltsgatan 5, Stockholm." when the fix is at most 5 minutes old, otherwise "Betty was at … (14:05)." with the date too if it isn't today. Without an address, "Betty is here:" and the link.
+  - The link is Google Maps' documented search URL with the exact coordinates, since it opens for anyone, on any phone, with or without the app. It's only text the user sends; panopticon itself calls nothing.
+  - Browsers without a share sheet (desktop Firefox) copy the message instead, and the button says "Copied to clipboard" for a moment. Closing the share sheet does nothing.
+  - One-off only: a live link that keeps updating would need a public page, and is a separate feature.
 - **Map:** tapping a card selects that asset and flies to it; tapping the selected card again re-centres. Tapping a marker selects its asset. Tapping the selected asset's marker deselects it when it's centred (being followed, or within 12 px of the middle); when it's off-centre, for example after a drag, the tap re-centres it and resumes following instead. On load the map shows the asset in `?asset=`, or fits all assets.
 - **Deselecting:** only by tapping the selected asset's marker while it's centred, tapping the asset panel away from its cards and buttons (the gaps in the phone bar, the sidebar's title and empty space), or the close button in the phone details. Tapping or dragging the map keeps the selection.
 - **Following:** while an asset is selected, the map keeps it centred, gliding to each new position (1 s).
@@ -351,6 +356,7 @@ src/
     matching.ts                       which walks to snap for "Follow roads"
     useSnappedWalks.ts                asks the server to snap walks, caches the results
     useAddress.ts                     the selected asset's address, asked again after 25 m
+    share.ts                          the message and map link for "Share location"
     settings.ts                       per-browser settings (localStorage)
     theme.ts                          THEMES, useTheme (cookie)
     assetImage.ts                     crop + shrink photos (browser), sniff image type (server)
