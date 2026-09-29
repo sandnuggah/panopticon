@@ -4,7 +4,7 @@ import type { Activity, Stay } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { RelativeTime } from './RelativeTime'
-import { ShareLocationButton } from './ShareLocationButton'
+import { ShareMenu } from './ShareMenu'
 
 type Props = {
   assets: Asset[]
@@ -63,7 +63,7 @@ export function AssetSheet(props: Props) {
               {/* Desktop only: on phones the details above the row have these. */}
               {asset.id === selectedId && (
                 <div className="asset-card-actions">
-                  <ShareLocationButton asset={asset} address={selectedAddress} />
+                  <ShareMenu asset={asset} address={selectedAddress} />
                 </div>
               )}
             </li>
@@ -152,7 +152,7 @@ function AssetDetails({ asset, activity, stay, address, onClose }: DetailsProps)
       <div className="asset-details-facts">
         <AssetFacts asset={asset} activity={activity} stay={stay} address={address} />
       </div>
-      <ShareLocationButton asset={asset} address={address} />
+      <ShareMenu asset={asset} address={address} />
     </section>
   )
 }

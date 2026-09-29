@@ -25,6 +25,8 @@ export function securityHeaders(): Record<string, string> {
     'Referrer-Policy': 'same-origin',
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    // Nothing here is for search engines, least of all live location links (/s/<link>).
+    'X-Robots-Tag': 'noindex, nofollow',
   }
   if (!import.meta.env.DEV) headers['Content-Security-Policy'] = contentSecurityPolicy(requestNonce())
   return headers

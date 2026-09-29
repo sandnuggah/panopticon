@@ -18,7 +18,10 @@ import { Route as AssetsIndexRouteImport } from './routes/assets.index'
 import { Route as AssetsIdRouteImport } from './routes/assets.$id'
 import { Route as AssetsNewRouteImport } from './routes/assets.new'
 import { Route as AuthSsoRouteImport } from './routes/auth.sso'
+import { Route as SLinkRouteImport } from './routes/s.$link'
 import { Route as ImagesAssetIdRouteImport } from './routes/images.asset.$id'
+import { Route as SLinkImageRouteImport } from './routes/s_.$link.image'
+import { Route as SLinkLiveRouteImport } from './routes/s_.$link.live'
 import { Route as ApiSessionOpenidCallbackRouteImport } from './routes/api.session.openid.callback'
 
 const IndexRoute = IndexRouteImport.update({
@@ -66,9 +69,24 @@ const AuthSsoRoute = AuthSsoRouteImport.update({
   path: '/auth/sso',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SLinkRoute = SLinkRouteImport.update({
+  id: '/s/$link',
+  path: '/s/$link',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ImagesAssetIdRoute = ImagesAssetIdRouteImport.update({
   id: '/images/asset/$id',
   path: '/images/asset/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SLinkImageRoute = SLinkImageRouteImport.update({
+  id: '/s_/$link/image',
+  path: '/s/$link/image',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SLinkLiveRoute = SLinkLiveRouteImport.update({
+  id: '/s_/$link/live',
+  path: '/s/$link/live',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSessionOpenidCallbackRoute =
@@ -87,8 +105,11 @@ export interface FileRoutesByFullPath {
   '/assets/$id': typeof AssetsIdRoute
   '/assets/new': typeof AssetsNewRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/s/$link': typeof SLinkRoute
   '/assets/': typeof AssetsIndexRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
+  '/s/$link/image': typeof SLinkImageRoute
+  '/s/$link/live': typeof SLinkLiveRoute
   '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -100,8 +121,11 @@ export interface FileRoutesByTo {
   '/assets/$id': typeof AssetsIdRoute
   '/assets/new': typeof AssetsNewRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/s/$link': typeof SLinkRoute
   '/assets': typeof AssetsIndexRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
+  '/s/$link/image': typeof SLinkImageRoute
+  '/s/$link/live': typeof SLinkLiveRoute
   '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
 export interface FileRoutesById {
@@ -114,8 +138,11 @@ export interface FileRoutesById {
   '/assets/$id': typeof AssetsIdRoute
   '/assets/new': typeof AssetsNewRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/s/$link': typeof SLinkRoute
   '/assets/': typeof AssetsIndexRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
+  '/s_/$link/image': typeof SLinkImageRoute
+  '/s_/$link/live': typeof SLinkLiveRoute
   '/api/session/openid/callback': typeof ApiSessionOpenidCallbackRoute
 }
 export interface FileRouteTypes {
@@ -129,8 +156,11 @@ export interface FileRouteTypes {
     | '/assets/$id'
     | '/assets/new'
     | '/auth/sso'
+    | '/s/$link'
     | '/assets/'
     | '/images/asset/$id'
+    | '/s/$link/image'
+    | '/s/$link/live'
     | '/api/session/openid/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -142,8 +172,11 @@ export interface FileRouteTypes {
     | '/assets/$id'
     | '/assets/new'
     | '/auth/sso'
+    | '/s/$link'
     | '/assets'
     | '/images/asset/$id'
+    | '/s/$link/image'
+    | '/s/$link/live'
     | '/api/session/openid/callback'
   id:
     | '__root__'
@@ -155,8 +188,11 @@ export interface FileRouteTypes {
     | '/assets/$id'
     | '/assets/new'
     | '/auth/sso'
+    | '/s/$link'
     | '/assets/'
     | '/images/asset/$id'
+    | '/s_/$link/image'
+    | '/s_/$link/live'
     | '/api/session/openid/callback'
   fileRoutesById: FileRoutesById
 }
@@ -169,8 +205,11 @@ export interface RootRouteChildren {
   AssetsIdRoute: typeof AssetsIdRoute
   AssetsNewRoute: typeof AssetsNewRoute
   AuthSsoRoute: typeof AuthSsoRoute
+  SLinkRoute: typeof SLinkRoute
   AssetsIndexRoute: typeof AssetsIndexRoute
   ImagesAssetIdRoute: typeof ImagesAssetIdRoute
+  SLinkImageRoute: typeof SLinkImageRoute
+  SLinkLiveRoute: typeof SLinkLiveRoute
   ApiSessionOpenidCallbackRoute: typeof ApiSessionOpenidCallbackRoute
 }
 
@@ -239,11 +278,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSsoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/s/$link': {
+      id: '/s/$link'
+      path: '/s/$link'
+      fullPath: '/s/$link'
+      preLoaderRoute: typeof SLinkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/images/asset/$id': {
       id: '/images/asset/$id'
       path: '/images/asset/$id'
       fullPath: '/images/asset/$id'
       preLoaderRoute: typeof ImagesAssetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/s_/$link/image': {
+      id: '/s_/$link/image'
+      path: '/s/$link/image'
+      fullPath: '/s/$link/image'
+      preLoaderRoute: typeof SLinkImageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/s_/$link/live': {
+      id: '/s_/$link/live'
+      path: '/s/$link/live'
+      fullPath: '/s/$link/live'
+      preLoaderRoute: typeof SLinkLiveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/session/openid/callback': {
@@ -265,8 +325,11 @@ const rootRouteChildren: RootRouteChildren = {
   AssetsIdRoute: AssetsIdRoute,
   AssetsNewRoute: AssetsNewRoute,
   AuthSsoRoute: AuthSsoRoute,
+  SLinkRoute: SLinkRoute,
   AssetsIndexRoute: AssetsIndexRoute,
   ImagesAssetIdRoute: ImagesAssetIdRoute,
+  SLinkImageRoute: SLinkImageRoute,
+  SLinkLiveRoute: SLinkLiveRoute,
   ApiSessionOpenidCallbackRoute: ApiSessionOpenidCallbackRoute,
 }
 export const routeTree = rootRouteImport

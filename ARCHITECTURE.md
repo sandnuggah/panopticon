@@ -184,6 +184,22 @@ The selected asset's card shows its street address, e.g. "Storviltsgatan 5, Stoc
 - **When there's none:** no address line. If geocoding is off or failing, the server logs it once and the line stays hidden; failures aren't cached, so it appears once geocoding works.
 - The request is a POST, so coordinates stay out of URLs and proxy logs.
 
+## Sharing
+
+**Send location** sends where the asset is once, through the system share sheet (`navigator.share`), as a sentence and a map link (`src/lib/share.ts`):
+- "Betty is at Storviltsgatan 5, Stockholm." when the fix is at most 5 minutes old, otherwise "Betty was at … (14:05)." with a weekday or date if it isn't today. Without an address, "Betty is here:" and the link.
+- The link is Google Maps' documented search URL with the exact coordinates, since it opens for anyone, on any phone, with or without the app. It's only text the user sends; panopticon itself calls nothing.
+- Browsers without a share sheet (desktop Firefox) copy the message instead and say so. Closing the share sheet does nothing.
+
+**Live location links** (`/s/<link>`) show one asset, followed live on a map, to anyone with the link and without signing in, for 1, 8 or 24 hours (`sharing.server.ts`, `s.$link.tsx`).
+- **Why not Traccar's own sharing** (`POST /api/share/device`): it makes one temporary user per sharer and device and reuses it, and that user keeps the expiry of the first share. Once the first link expires, every later one for that device fails with "User has expired", and a normal user can't fix it.
+- **Making one:** the server checks the user can see the asset, asks Traccar for a new token for the same user expiring with the link (`POST /api/session/token`; Traccar caps it at the session's own expiry, and so does panopticon), and seals `{asset id, token, expiry}` with AES-256-GCM under a key derived from `SESSION_SECRET` by HKDF (`shareLink.server.ts`). That's the link: about 250 characters with a real Traccar token. Nothing is stored, so the read-only container stays stateless.
+- **Opening one:** the server unseals it, checks the expiry, and reads only that asset with the link's token. The viewer gets the asset's name, picture, status, position and address; never its battery, trail, tracker ID, or anything about the sharer or their other assets. Its live stream (`/s/<link>/live`) relays Traccar's socket filtered to that asset, and its picture comes from `/s/<link>/image`.
+- **Ending:** at the expiry, Traccar refuses the token and the stream sends an `ended` event; the page then says the link has expired. **Stop** revokes the token (`POST /api/session/token/revoke`, with the link's own token so it can only revoke itself). Traccar keeps an already-open socket going after that, so each stream checks every minute that the token still works and ends if not: a stopped link goes blank within a minute even on a page that's open. Signing out of panopticon doesn't end links; they have their own tokens.
+- **Stop needs the link:** panopticon keeps no list, so the links made in a browser are kept in its localStorage (`liveLinks.ts`) and offered as Stop items in the Share menu there. Other browsers don't see them.
+- **Safari and the share sheet:** Safari only opens it straight after a tap. Making a link takes a request first, so if Safari refuses, the Share button turns into **Send link** for a second tap.
+- **Security:** the link is a password to where that asset is until it expires, and anyone it's forwarded to can use it. It can't be read, edited or forged without `SESSION_SECRET` (tests: `shareLink.test.ts`). If the secret leaked, a link would be as powerful as a session cookie for that account until it expires; that's the same exposure as the cookie itself, and why links last at most 24 hours. The token never reaches the viewer's browser, and Traccar isn't reachable directly anyway. Pages are `noindex`, and `Referrer-Policy: same-origin` keeps the link out of requests to the tile server. Your reverse proxy's access log will contain links if it logs paths.
+
 ## Battery
 
 SinoTrack trackers use Traccar's `h02` protocol. The ST-904L sends two kinds of message that matter here:
@@ -207,7 +223,7 @@ In the app:
 
 ## UI
 
-- **Pages:** `/login`, `/`, `/settings`, and `/assets`, `/assets/new` and `/assets/<id>` for [managing assets](#managing-assets). The selected asset is a search param (`/?asset=12`), so it survives a reload.
+- **Pages:** `/login`, `/`, `/settings`, and `/assets`, `/assets/new` and `/assets/<id>` for [managing assets](#managing-assets). `/s/<link>` is a [live location link](#sharing), the only page that doesn't need signing in. The selected asset is a search param (`/?asset=12`), so it survives a reload.
 - **App name:** the desktop sidebar starts with the app's name as the theme shows it ("Panopticon 👁️", or "Petopticon 🐾" in the pet theme). On phones that heading is hidden visually but kept for screen readers, so the compact list stays one row.
 - **Settings link:** a round cog button (an 8-tooth gear, generated rather than hand-drawn so it's symmetric) at the end of the asset list: at the right end of the bottom bar on phones, at the bottom of the sidebar on desktop. The live indicator stays in the map's top-left corner. It's a plain link straight to Settings (`SettingsLink.tsx`); an earlier version opened a menu, which was one tap too many. Who's signed in is shown on the Settings page.
   - A profile picture was considered and dropped. Traccar has no user pictures, and the one Pocket ID sends at sign-in reaches only Traccar, which discards it. Getting it would need either a Pocket ID API key (which can't be scoped, so a full admin key) or a second OIDC client in panopticon.
@@ -220,11 +236,7 @@ In the app:
   - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
   - while riding, **In a vehicle** or **Moving underground** with a transit icon, in the accent colour (on phones, a small badge on the avatar's top-right corner);
   - battery, when available: a gauge with 0–4 bars (empty below 5%, then one bar per started quarter) at the end of the name row, in the warning colour at 20% or below. The exact percentage is its label, for screen readers and as the hover tooltip. Readings near empty jump by several points as the voltage recovers, and bars hide most of that. Trackers that report volts only get a text line instead.
-- **Share location:** a button in the phone details, and under the selected card on desktop. It opens the system share sheet (`navigator.share`) with a sentence and a map link (`src/lib/share.ts`):
-  - "Betty is at Storviltsgatan 5, Stockholm." when the fix is at most 5 minutes old, otherwise "Betty was at … (14:05)." with the date too if it isn't today. Without an address, "Betty is here:" and the link.
-  - The link is Google Maps' documented search URL with the exact coordinates, since it opens for anyone, on any phone, with or without the app. It's only text the user sends; panopticon itself calls nothing.
-  - Browsers without a share sheet (desktop Firefox) copy the message instead, and the button says "Copied to clipboard" for a moment. Closing the share sheet does nothing.
-  - One-off only: a live link that keeps updating would need a public page, and is a separate feature.
+- **Share:** a button in the phone details, and under the selected card on desktop. It opens a menu: a drop-down under the button on wider screens, an action sheet from the bottom on phones (with Cancel). Items: **Send location**; **Share live location** for 1, 8 or 24 hours; and, while a live link made in this browser is active, **Stop sharing · until 20:30**. The button then reads **Sharing live**. See [Sharing](#sharing).
 - **Map:** tapping a card selects that asset and flies to it; tapping the selected card again re-centres. Tapping a marker selects its asset. Tapping the selected asset's marker deselects it when it's centred (being followed, or within 12 px of the middle); when it's off-centre, for example after a drag, the tap re-centres it and resumes following instead. On load the map shows the asset in `?asset=`, or fits all assets.
 - **Deselecting:** only by tapping the selected asset's marker while it's centred, tapping the asset panel away from its cards and buttons (the gaps in the phone bar, the sidebar's title and empty space), or the close button in the phone details. Tapping or dragging the map keeps the selection.
 - **Following:** while an asset is selected, the map keeps it centred, gliding to each new position (1 s).
@@ -320,6 +332,9 @@ src/
     assets.new.tsx                    add an asset
     assets.$id.tsx                    photo, name, remove
     live.ts                           server route: SSE relay
+    s.$link.tsx                       live location link page (public)
+    s_.$link.live.ts                  server route: a live link's SSE stream
+    s_.$link.image.ts                 server route: a live link's asset picture
     $.ts                              Traccar email links → 302 to Traccar; else 404
   server/
     env.server.ts                     read + validate env once
@@ -337,7 +352,10 @@ src/
     theme.server.ts                   theme from the request's cookie
     trails.functions.ts               getTrails (position history)
     security.server.ts                CSP nonce + security headers
-    live.server.ts                    /live: WebSocket → SSE relay
+    live.server.ts                    /live: WebSocket → SSE relay (also used by live links)
+    sharing.server.ts                 live location links: make, open, stream, stop
+    sharing.functions.ts              createLink / stopLink (signed in), getSharedView / getSharedAddress (public)
+    shareLink.server.ts               sealing links (AES-GCM, key from SESSION_SECRET) + tests
     sso.server.ts                     /auth/sso, callback, Traccar email-link redirects
   components/
     AssetMap.tsx                      maplibre map + markers (browser only, lazy)
@@ -345,6 +363,7 @@ src/
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
     SettingsLink.tsx                  cog link to Settings, at the end of the asset list
+    ShareMenu.tsx                     Share: send location, make / send / stop live links
     RelativeTime.tsx
   lib/
     asset.ts                          Asset view model + isStale (shared with the browser)
@@ -356,7 +375,10 @@ src/
     matching.ts                       which walks to snap for "Follow roads"
     useSnappedWalks.ts                asks the server to snap walks, caches the results
     useAddress.ts                     the selected asset's address, asked again after 25 m
-    share.ts                          the message and map link for "Share location"
+    share.ts                          share messages, times, the SharedView type
+    shareSheet.ts                     share sheet, or copy as the fallback
+    liveLinks.ts                      live links made in this browser (localStorage)
+    useSharedAsset.ts                 a live link page's EventSource
     settings.ts                       per-browser settings (localStorage)
     theme.ts                          THEMES, useTheme (cookie)
     assetImage.ts                     crop + shrink photos (browser), sniff image type (server)
@@ -386,6 +408,7 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 ## Security
 
 - The app calls only the Traccar endpoints listed here; there's no `/api/*` pass-through. The catch-all only redirects the browser and never proxies.
+- **Live location links** are the only way to see data without signing in; see [Sharing](#sharing).
 - `/live` needs the session cookie. It's a same-origin GET with `SameSite=Lax`, so other sites can't open it with your cookie. Traccar only accepts the token as a URL parameter on its socket, which may put the token in Traccar's access logs. That's server to server and never visible to the browser.
 - **Content-Security-Policy** (production only; Vite's dev server needs inline scripts):
   - `script-src 'self' 'nonce-…'`: TanStack Start writes a few inline scripts into every page (hydration data, scroll restoration). `security.server.ts` makes a random nonce per request, and `getRouter` passes it to `ssr.nonce` so every one of those scripts carries it. No `'unsafe-inline'`.
@@ -394,7 +417,7 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
   - `worker-src 'self'`: the maplibre worker is served from the app's own origin, so no `blob:` is needed.
   - `object-src 'none'`, `base-uri 'none'`, `form-action 'self'`, `frame-ancestors 'none'`.
   - Checked in a production build: map, worker, trail and live stream all load with no violations.
-- **Other headers** (dev and production): `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` (the tile server never sees app URLs), `Cross-Origin-Opener-Policy: same-origin`, and a `Permissions-Policy` turning off camera, microphone, geolocation and payment. HSTS belongs on the HTTPS proxy.
+- **Other headers** (dev and production): `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` (the tile server never sees app URLs), `Cross-Origin-Opener-Policy: same-origin`, a `Permissions-Policy` turning off camera, microphone, geolocation and payment, and `X-Robots-Tag: noindex, nofollow`. HSTS belongs on the HTTPS proxy.
 - **`src/start.ts` and CSRF:** having a `start.ts` switches off TanStack Start's default CSRF protection for server functions, so it's registered there explicitly. Checked in production: cross-site calls get 403. Behind an HTTPS proxy it still works, because modern browsers send `Sec-Fetch-Site`, which is checked before `Origin`.
 - No analytics or third-party scripts.
 - **Traccar `:latest` moves.** `traccar.ts` checks the fields it reads and fails loudly instead of rendering nonsense. I'd recommend pinning the Traccar image tag in your deployment.

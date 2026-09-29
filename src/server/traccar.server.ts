@@ -178,6 +178,22 @@ export async function tokenWasRejected(token: string, error: unknown): Promise<b
   return withoutToken?.ok === true
 }
 
+/**
+ * A new token for the same user, expiring at `expiresAt` (Traccar caps it at the current token's
+ * own expiry). Used for live location links; see sharing.server.ts.
+ */
+export async function createToken(token: string, expiresAt: Date): Promise<string> {
+  const response = await request('/api/session/token', {
+    method: 'POST',
+    token,
+    body: new URLSearchParams({ expiration: expiresAt.toISOString() }),
+  })
+  await ensureOk(response, 'POST /api/session/token')
+  const created = (await response.text()).trim().replace(/^"|"$/g, '')
+  if (!created) throw new TraccarError('Traccar returned an empty token')
+  return created
+}
+
 export async function revokeToken(token: string): Promise<void> {
   const response = await request('/api/session/token/revoke', {
     method: 'POST',

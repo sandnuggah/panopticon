@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getAddress } from '../server/map.functions'
 import type { Asset } from './asset'
 import { distance, type LatLon } from './segments'
@@ -8,23 +8,31 @@ const MOVED_METERS = 25
 
 type Found = LatLon & { assetId: number; address: string | null }
 
+type LookUp = (lat: number, lon: number) => Promise<string | null>
+
+const signedIn: LookUp = (lat, lon) => getAddress({ data: { lat, lon } })
+
 /**
  * The street address where this asset is, from Traccar's reverse geocoder (see address.server.ts).
- * Undefined until known, and when there's no address or geocoding is off.
+ * Undefined until known, and when there's no address or geocoding is off. `lookUp` is how to ask;
+ * a live location link page asks with its link instead of a session.
  */
-export function useAddress(asset: Asset | undefined): string | undefined {
+export function useAddress(asset: Asset | undefined, lookUp: LookUp = signedIn): string | undefined {
   const [found, setFound] = useState<Found>()
+  const lookUpRef = useRef(lookUp)
+  lookUpRef.current = lookUp
   const id = asset?.id
   const location = asset?.location
   const current = found && found.assetId === id && location && distance(found, location) <= MOVED_METERS
-  const lookUp = id !== undefined && location && !current ? { id, lat: location.lat, lon: location.lon } : null
+  const wanted = id !== undefined && location && !current ? { id, lat: location.lat, lon: location.lon } : null
 
   useEffect(() => {
-    if (!lookUp) return
+    if (!wanted) return
     let cancelled = false
-    getAddress({ data: { lat: lookUp.lat, lon: lookUp.lon } })
+    lookUpRef
+      .current(wanted.lat, wanted.lon)
       .then((address) => {
-        if (!cancelled) setFound({ assetId: lookUp.id, lat: lookUp.lat, lon: lookUp.lon, address })
+        if (!cancelled) setFound({ assetId: wanted.id, lat: wanted.lat, lon: wanted.lon, address })
       })
       .catch(() => {
         // Unreachable or signed out: no address, and another try when the asset moves or is reselected.
@@ -34,7 +42,7 @@ export function useAddress(asset: Asset | undefined): string | undefined {
       cancelled = true
     }
     // Asks again only when the lookup's inputs change: another asset, or it moved on.
-  }, [lookUp?.id, lookUp?.lat, lookUp?.lon])
+  }, [wanted?.id, wanted?.lat, wanted?.lon])
 
   // While walking on, the last address shows until the next one arrives.
   return found && found.assetId === id ? (found.address ?? undefined) : undefined

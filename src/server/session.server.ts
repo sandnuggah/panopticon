@@ -84,6 +84,13 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 /** The signed-in user's Traccar token, or null when signed out or expired. */
+/** When the signed-in session ends (ms since epoch), or null when there's none. */
+export async function sessionExpiresAt(): Promise<number | null> {
+  const session = await appSession()
+  const { token, expiresAt } = session.data
+  return token && expiresAt && expiresAt > Date.now() ? expiresAt : null
+}
+
 export async function getSessionToken(): Promise<string | null> {
   const session = await appSession()
   const { token, expiresAt } = session.data

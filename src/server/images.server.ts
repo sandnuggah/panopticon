@@ -41,7 +41,11 @@ export async function assetImageResponse(request: Request, idParam: string): Pro
 
   const token = await getSessionToken()
   if (!token) return new Response('Not signed in', { status: 401 })
+  return imageResponse(request, token, id)
+}
 
+/** The image for asset `id` as `token`'s user sees it; also serves live location links. */
+export async function imageResponse(request: Request, token: string, id: number): Promise<Response> {
   try {
     // Also Traccar's permission check: only devices this user may see are returned.
     const device = await getDevice(token, id)
