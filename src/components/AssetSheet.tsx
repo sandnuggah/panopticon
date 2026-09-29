@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { contactIsNewerThanFix, isStale, type Asset } from '../lib/asset'
-import type { Activity } from '../lib/segments'
+import type { Activity, Stay } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { RelativeTime } from './RelativeTime'
@@ -9,6 +9,8 @@ type Props = {
   assets: Asset[]
   /** What each asset is doing right now, when it's riding (see segments.ts). */
   activities: Record<number, Activity>
+  /** How long each asset has been in one place, when it's staying put. */
+  stays: Record<number, Stay>
   selectedId: number | undefined
   /** The selected asset's street address, when known. */
   selectedAddress?: string
@@ -21,17 +23,28 @@ type Props = {
 }
 
 /** The list under the map on phones, beside it on wider screens. */
-export function AssetSheet({ assets, activities, selectedId, selectedAddress, onSelect, onDeselect, header, footer }: Props) {
+export function AssetSheet(props: Props) {
+  const { assets, activities, stays, selectedId, selectedAddress, onSelect, onDeselect, header, footer } = props
+  const selected = assets.find((asset) => asset.id === selectedId)
   return (
     // A convenience for pointer users, like tapping the map; the cards stay the keyboard way in.
     <section
       className="sheet"
       aria-label="Assets"
       onClick={(event) => {
-        if (!(event.target as Element).closest('a, button')) onDeselect()
+        if (!(event.target as Element).closest('a, button, .asset-details')) onDeselect()
       }}
     >
       {header && <header className="sheet-header">{header}</header>}
+      {selected && (
+        <AssetDetails
+          asset={selected}
+          activity={activities[selected.id]}
+          stay={stays[selected.id]}
+          address={selectedAddress}
+          onClose={onDeselect}
+        />
+      )}
       {assets.length === 0 ? (
         <p className="muted">No assets on this account yet.</p>
       ) : (
@@ -41,6 +54,7 @@ export function AssetSheet({ assets, activities, selectedId, selectedAddress, on
               <AssetCard
                 asset={asset}
                 activity={activities[asset.id]}
+                stay={stays[asset.id]}
                 selected={asset.id === selectedId}
                 address={asset.id === selectedId ? selectedAddress : undefined}
                 onSelect={onSelect}
@@ -57,12 +71,13 @@ export function AssetSheet({ assets, activities, selectedId, selectedAddress, on
 type CardProps = {
   asset: Asset
   activity: Activity | undefined
+  stay: Stay | undefined
   selected: boolean
   address: string | undefined
   onSelect: (id: number) => void
 }
 
-function AssetCard({ asset, activity, selected, address, onSelect }: CardProps) {
+function AssetCard({ asset, activity, stay, selected, address, onSelect }: CardProps) {
   const now = useNow(30_000)
   const stale = isStale(asset, now)
   return (
@@ -95,34 +110,94 @@ function AssetCard({ asset, activity, selected, address, onSelect }: CardProps) 
           <span className="asset-card-status">{statusLabel(asset.status)}</span>
           {asset.battery?.percent !== undefined && <BatteryGauge percent={asset.battery.percent} />}
         </span>
-        {activity && (
-          <span className="asset-card-activity">
-            <TransitIcon />
-            {activityLabel(activity)}
-          </span>
-        )}
-        {address && <span className="asset-card-address">{address}</span>}
-        <span>
-          {asset.location ? (
-            <>
-              Seen <RelativeTime time={asset.location.fixTime} />
-            </>
-          ) : (
-            'No location yet'
-          )}
-        </span>
-        {asset.lastUpdate && (!asset.location || contactIsNewerThanFix(asset)) && (
-          <span className="muted">
-            Last contact <RelativeTime time={asset.lastUpdate} />
-          </span>
-        )}
-        {/* Trackers that report volts only: shown as text, since volts don't map to bars reliably. */}
-        {asset.battery?.percent === undefined && asset.battery?.volts !== undefined && (
-          <span className="muted">Battery {asset.battery.volts} V</span>
-        )}
+        <AssetFacts asset={asset} activity={activity} stay={stay} address={address} />
       </span>
     </button>
   )
+}
+
+/**
+ * The selected asset on phones, above the row of avatars: what the desktop card shows, with room
+ * for actions. On wider screens the selected card itself shows all this, so it's hidden there.
+ */
+function AssetDetails({ asset, activity, stay, address, onClose }: DetailsProps) {
+  const percent = asset.battery?.percent
+  return (
+    <section className="asset-details" aria-label={asset.name}>
+      <div className="asset-details-title">
+        <span className="asset-details-name">{asset.name}</span>
+        <span className="asset-details-status">
+          <span className={`status-dot status-${asset.status}`} aria-hidden="true" />
+          {statusLabel(asset.status)}
+        </span>
+        {percent !== undefined && (
+          <span className="asset-details-battery">
+            <BatteryGauge percent={percent} />
+            <span aria-hidden="true">{Math.round(percent)}%</span>
+          </span>
+        )}
+        <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+      <div className="asset-details-facts">
+        <AssetFacts asset={asset} activity={activity} stay={stay} address={address} />
+      </div>
+    </section>
+  )
+}
+
+type DetailsProps = {
+  asset: Asset
+  activity: Activity | undefined
+  stay: Stay | undefined
+  address: string | undefined
+  onClose: () => void
+}
+
+/** Where the asset is and what it's doing, line by line; the card and the details share these. */
+function AssetFacts({ asset, activity, stay, address }: FactsProps) {
+  return (
+    <>
+      {activity && (
+        <span className="asset-card-activity">
+          <TransitIcon />
+          {activityLabel(activity)}
+        </span>
+      )}
+      {address && <span className="asset-card-address">{address}</span>}
+      <span>
+        {asset.location ? (
+          <>
+            Seen <RelativeTime time={asset.location.fixTime} />
+            {stay && !activity && <> · {stayLabel(stay)}</>}
+          </>
+        ) : (
+          'No location yet'
+        )}
+      </span>
+      {asset.lastUpdate && (!asset.location || contactIsNewerThanFix(asset)) && (
+        <span className="muted">
+          Last contact <RelativeTime time={asset.lastUpdate} />
+        </span>
+      )}
+      {/* Trackers that report volts only: shown as text, since volts don't map to bars reliably. */}
+      {asset.battery?.percent === undefined && asset.battery?.volts !== undefined && (
+        <span className="muted">Battery {asset.battery.volts} V</span>
+      )}
+    </>
+  )
+}
+
+type FactsProps = { asset: Asset; activity: Activity | undefined; stay: Stay | undefined; address: string | undefined }
+
+const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
+
+/** "Here since 07:12", or "since before" when the stay goes back further than the history loaded. */
+function stayLabel(stay: Stay): string {
+  return `Here since ${stay.began ? '' : 'before '}${clock.format(stay.since)}`
 }
 
 /**

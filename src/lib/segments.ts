@@ -42,6 +42,9 @@ export type TrailPiece =
 
 export type Activity = 'vehicle' | 'underground'
 
+/** Staying put right now: since when, and whether that's when it began or only when the points do. */
+export type Stay = { since: number; began: boolean }
+
 /** Great-circle distance in metres. */
 export function distance(a: LatLon, b: LatLon): number {
   const toRad = (degrees: number) => (degrees * Math.PI) / 180
@@ -69,6 +72,20 @@ export function classifyTrail(points: TrailPoint[]): TrailPiece[] {
     else pieces.push({ kind: stretch.kind, from: stretch.points[0]!, to: stretch.points.at(-1)! })
   }
   return pieces
+}
+
+/**
+ * Whether the asset is staying in one place right now (the trail ends in a stay, with recent
+ * reports), and since when. `began` is false when the stay goes back to the first point given,
+ * so it may have begun earlier.
+ */
+export function currentStay(points: TrailPoint[], now: number): Stay | null {
+  const latest = points.at(-1)
+  if (!latest || now - latest.time > ACTIVITY_MAX_AGE_MS) return null
+  const last = classifyTrail(points).at(-1)
+  if (last?.kind !== 'stay') return null
+  const firstFix = points.find((point) => point.valid)!
+  return { since: last.from, began: last.from > firstFix.time }
 }
 
 /**

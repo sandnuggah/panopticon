@@ -1,7 +1,7 @@
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
 import { useSettings } from '../lib/settings'
 import { THEMES, useTheme } from '../lib/theme'
-import { TRAIL_MINUTES_OPTIONS } from '../lib/trail'
+import { TRAIL_OPTIONS, type TrailLength } from '../lib/trail'
 import { getUser, logout } from '../server/auth.functions'
 import { getMapOptions } from '../server/map.functions'
 
@@ -73,7 +73,7 @@ function SettingsPage() {
         <div className="field trail-field">
           <label htmlFor="trail-minutes" className="trail-label">
             Trail
-            <output htmlFor="trail-minutes">{trailLabel(settings.trailMinutes)}</output>
+            <output htmlFor="trail-minutes">{trailLabel(settings.trail)}</output>
           </label>
           {/* Steps through the options by position: they aren't evenly spaced in minutes. */}
           <input
@@ -81,16 +81,16 @@ function SettingsPage() {
             className="trail-slider"
             type="range"
             min={0}
-            max={TRAIL_MINUTES_OPTIONS.length - 1}
+            max={TRAIL_OPTIONS.length - 1}
             step={1}
-            value={Math.max(0, (TRAIL_MINUTES_OPTIONS as readonly number[]).indexOf(settings.trailMinutes))}
-            aria-valuetext={trailLabel(settings.trailMinutes)}
-            onChange={(event) => updateSettings({ trailMinutes: TRAIL_MINUTES_OPTIONS[Number(event.target.value)] })}
+            value={Math.max(0, TRAIL_OPTIONS.indexOf(settings.trail))}
+            aria-valuetext={trailLabel(settings.trail)}
+            onChange={(event) => updateSettings({ trail: TRAIL_OPTIONS[Number(event.target.value)] })}
           />
           <div className="trail-stops" aria-hidden="true">
-            {TRAIL_MINUTES_OPTIONS.map((minutes) => (
-              <span key={minutes} className={minutes === settings.trailMinutes ? 'trail-stop-current' : undefined}>
-                {trailStopLabel(minutes)}
+            {TRAIL_OPTIONS.map((length) => (
+              <span key={length} className={length === settings.trail ? 'trail-stop-current' : undefined}>
+                {length === 'today' ? <span className="trail-stop-today">Today</span> : trailStopLabel(length)}
               </span>
             ))}
           </div>
@@ -138,7 +138,9 @@ function SettingsPage() {
   )
 }
 
-function trailLabel(minutes: number): string {
+function trailLabel(length: TrailLength): string {
+  if (length === 'today') return 'Today, since midnight'
+  const minutes = length
   if (minutes === 0) return 'Off'
   if (minutes < 60) return `Last ${minutes} minutes`
   const hours = minutes / 60
@@ -146,7 +148,7 @@ function trailLabel(minutes: number): string {
 }
 
 /** The short form under each slider stop. */
-function trailStopLabel(minutes: number): string {
-  if (minutes === 0) return 'Off'
-  return minutes < 60 ? `${minutes}m` : `${minutes / 60}h`
+function trailStopLabel(length: number): string {
+  if (length === 0) return 'Off'
+  return length < 60 ? `${length}m` : `${length / 60}h`
 }

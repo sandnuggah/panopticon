@@ -1,18 +1,18 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { TRAIL_MINUTES_OPTIONS } from './trail'
+import { DEFAULT_TRAIL, nearestTrail, type TrailLength } from './trail'
 
 // Per-browser preferences in localStorage. They're conveniences: if storage is unavailable
 // (private mode, blocked site data) the defaults apply and nothing breaks.
 
 export type Settings = {
-  /** How many minutes of movement to draw behind each asset. 0 = no trail. */
-  trailMinutes: number
+  /** How much movement to draw behind each asset. */
+  trail: TrailLength
   /** Snap walks on the trail to streets and paths, when the server offers it. */
   followRoads: boolean
 }
 
 const STORAGE_KEY = 'panopticon.settings'
-const DEFAULTS: Settings = { trailMinutes: 10, followRoads: false }
+const DEFAULTS: Settings = { trail: DEFAULT_TRAIL, followRoads: false }
 
 const listeners = new Set<() => void>()
 let cachedRaw: string | null | undefined
@@ -35,11 +35,10 @@ function read(): Settings {
 function parse(raw: string | null): Settings {
   if (!raw) return DEFAULTS
   try {
-    const value = JSON.parse(raw) as Partial<Settings>
-    const trailMinutes = (TRAIL_MINUTES_OPTIONS as readonly number[]).includes(value.trailMinutes as number)
-      ? (value.trailMinutes as number)
-      : DEFAULTS.trailMinutes
-    return { trailMinutes, followRoads: value.followRoads === true }
+    // `trailMinutes` is what the trail length was saved as before "today" existed.
+    const value = JSON.parse(raw) as Partial<Settings> & { trailMinutes?: unknown }
+    const trail = nearestTrail(value.trail ?? value.trailMinutes) ?? DEFAULTS.trail
+    return { trail, followRoads: value.followRoads === true }
   } catch {
     return DEFAULTS
   }

@@ -4,8 +4,16 @@ import { getUser } from '../server/auth.functions'
 import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { applyUpdates, type LiveUpdate } from './live'
-import { currentActivity, type Activity } from './segments'
-import { ACTIVITY_MINUTES, extendTrails, pruneTrails, type Trails } from './trail'
+import { currentActivity, currentStay, type Activity, type Stay } from './segments'
+import {
+  HISTORY_MIN_MINUTES,
+  extendTrails,
+  pruneTrails,
+  trailMinutes,
+  trailStart,
+  type TrailLength,
+  type Trails,
+} from './trail'
 import { useNow } from './useNow'
 
 export type LiveStatus = 'connecting' | 'live' | 'offline'
@@ -16,13 +24,12 @@ const MAX_RETRY_MS = 60_000
 /**
  * Keeps the asset list and trails current from /live. `initialAssets` is the route loader's data;
  * whenever it's reloaded (reconnect, returning to the tab) it replaces the live state.
- * `trailMinutes` is null until the setting is known, so no history is fetched for a default.
- * History always covers at least ACTIVITY_MINUTES, even with trails off, to tell what each asset
- * is doing right now; only `trailMinutes` of it is returned for drawing.
+ * `trail` is null until the setting is known, so no history is fetched for a default.
+ * History always covers at least HISTORY_MIN_MINUTES, even with trails off, to tell what each asset
+ * is doing right now; only the trail's own length of it is returned for drawing.
  */
-export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: number | null) {
-  const trailMinutes = trailMinutesSetting ?? 0
-  const historyMinutes = Math.max(trailMinutes, ACTIVITY_MINUTES)
+export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null) {
+  const historyMinutes = Math.max(trailMinutes(trail ?? 0), HISTORY_MIN_MINUTES)
   const router = useRouter()
   const [assets, setAssets] = useState(initialAssets)
   const assetsRef = useRef(initialAssets)
@@ -44,7 +51,7 @@ export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: numbe
 
   const assetIdsKey = initialAssets.map((asset) => asset.id).join(',')
   useEffect(() => {
-    if (trailMinutesSetting === null) return
+    if (trail === null) return
     if (assetIdsKey === '') {
       setTrails({})
       return
@@ -58,7 +65,7 @@ export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: numbe
     return () => {
       cancelled = true
     }
-  }, [trailMinutesSetting, historyMinutes, assetIdsKey, historyVersion])
+  }, [trail === null, historyMinutes, assetIdsKey, historyVersion])
 
   useEffect(() => {
     let source: EventSource | undefined
@@ -137,10 +144,10 @@ export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: numbe
     }
   }, [router])
 
-  const visibleTrails = useMemo(
-    () => (trailMinutes === 0 ? {} : pruneTrails(trails, now - trailMinutes * 60 * 1000)),
-    [trails, trailMinutes, now],
-  )
+  const visibleTrails = useMemo(() => {
+    const start = trailStart(trail ?? 0, now)
+    return start === null ? {} : pruneTrails(trails, start)
+  }, [trails, trail, now])
 
   const activities = useMemo(() => {
     const result: Record<number, Activity> = {}
@@ -151,5 +158,14 @@ export function useLiveAssets(initialAssets: Asset[], trailMinutesSetting: numbe
     return result
   }, [trails, now])
 
-  return { assets, trails: visibleTrails, activities, status }
+  const stays = useMemo(() => {
+    const result: Record<number, Stay> = {}
+    for (const [id, points] of Object.entries(trails)) {
+      const stay = currentStay(points, now)
+      if (stay) result[Number(id)] = stay
+    }
+    return result
+  }, [trails, now])
+
+  return { assets, trails: visibleTrails, activities, stays, status }
 }

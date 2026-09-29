@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { classifyTrail, currentActivity, type TrailPiece } from './segments.ts'
+import { classifyTrail, currentActivity, currentStay, type TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
 // A made-up trip in the shape of real SinoTrack data: a report every 30 s, GPS lost underground,
@@ -189,5 +189,30 @@ describe('currentActivity', () => {
   test('old reports are no activity', () => {
     const trip = new Trip().walk(5).ride(1000, 60)
     assert.equal(currentActivity(trip.points, trip.now + 10 * 60_000), null)
+  })
+})
+
+describe('currentStay', () => {
+  test('staying after a walk is a stay since it began', () => {
+    const trip = new Trip().walk(5)
+    const arrived = trip.points.at(-1)!.time
+    trip.stay(10)
+    const stay = currentStay(trip.points, trip.now)
+    assert.ok(stay?.began)
+    assert.ok(Math.abs(stay.since - arrived) <= 30_000, `since ${stay.since - arrived} ms after arriving`)
+  })
+
+  test('a stay from the first point on may have begun earlier', () => {
+    const trip = new Trip().stay(10)
+    assert.equal(currentStay(trip.points, trip.now)?.began, false)
+  })
+
+  test('walking, riding or old reports are no stay', () => {
+    const walking = new Trip().stay(10).walk(5)
+    assert.equal(currentStay(walking.points, walking.now), null)
+    const riding = new Trip().stay(10).ride(1000, 60)
+    assert.equal(currentStay(riding.points, riding.now), null)
+    const old = new Trip().walk(5).stay(10)
+    assert.equal(currentStay(old.points, old.now + 10 * 60_000), null)
   })
 })

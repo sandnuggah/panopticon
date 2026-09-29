@@ -462,6 +462,35 @@ input {
   display: none;
 }
 
+/* The selected asset above the phone toolbar (see AssetDetails); the desktop card shows the same. */
+.asset-details {
+  display: none;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--surface-selected);
+  color: var(--text);
+}
+
+.icon-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
 /* Where the selected asset is, from Traccar's reverse geocoder. */
 .asset-card-address {
   font-weight: 600;
@@ -725,7 +754,7 @@ input {
   color: var(--muted);
 }
 
-.trail-stops span {
+.trail-stops > span {
   display: flex;
   justify-content: center;
   width: 0;
@@ -735,6 +764,21 @@ input {
 .trail-stops .trail-stop-current {
   color: var(--text);
   font-weight: 600;
+}
+
+/* "Today" counts from midnight rather than back from now, so it's a pill in the accent colour,
+   filled when chosen. */
+.trail-stops .trail-stop-today {
+  padding: 0 0.35rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.trail-stops .trail-stop-current .trail-stop-today {
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 .hint {
@@ -976,6 +1020,58 @@ a.manage-row:hover {
     -webkit-user-select: none;
     padding: calc(var(--toolbar-space) - var(--ring-space));
     padding-bottom: calc(var(--toolbar-space) - var(--ring-space) + env(safe-area-inset-bottom));
+  }
+
+  /* The selected asset's details: a full-width row above the avatars, pushing the map up rather
+     than covering it. */
+  .sheet {
+    flex-wrap: wrap;
+  }
+
+  .asset-details {
+    display: grid;
+    gap: 0.6rem;
+    flex: 0 0 100%;
+    padding: var(--ring-space) var(--ring-space) var(--toolbar-space);
+    margin-bottom: calc(var(--toolbar-space) - var(--ring-space));
+    border-bottom: 1px solid var(--border);
+    /* The toolbar turns selection off; an address is worth copying. */
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .asset-details-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .asset-details-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: 1.1rem;
+  }
+
+  .asset-details-status,
+  .asset-details-battery {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .asset-details-facts {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .asset-details .asset-card-address {
+    font-size: 1.05rem;
   }
 
   /* Swiping on the toolbar would otherwise drag the whole page on iOS. */

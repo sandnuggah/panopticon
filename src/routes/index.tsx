@@ -44,9 +44,9 @@ function Home() {
   const [focusToken, setFocusToken] = useState(0)
   const [settings, , settingsLoaded] = useSettings()
   const [theme] = useTheme()
-  const { assets, trails, activities, status } = useLiveAssets(
+  const { assets, trails, activities, stays, status } = useLiveAssets(
     loaderData.assets,
-    settingsLoaded ? settings.trailMinutes : null,
+    settingsLoaded ? settings.trail : null,
   )
   const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.followRoads && settings.followRoads)
   const address = useAddress(assets.find((asset) => asset.id === selectedId))
@@ -87,6 +87,7 @@ function Home() {
       <AssetSheet
         assets={assets}
         activities={activities}
+        stays={stays}
         selectedId={selectedId}
         selectedAddress={address}
         onSelect={select}
