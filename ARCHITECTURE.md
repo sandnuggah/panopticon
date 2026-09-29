@@ -208,19 +208,39 @@ SinoTrack trackers use Traccar's `h02` protocol. The ST-904L sends two kinds of 
 - **Heartbeats** (`HTBT`): Traccar reads a battery level from these and stores it as `batteryLevel`.
 - **Location reports** (`V1`): the battery is there too, but Traccar doesn't know it. After the status field, the ST-904L sends extra values that Traccar stores unnamed as `io1`, `io2`, and so on:
   - `io1`–`io4` are cell info (MCC `240` = Sweden, MNC `01`, then area and cell IDs).
-  - **`io5` is the battery percentage.** Confirmed on 2026-09-26: a heartbeat said 9% while `io5` on the report just before said 8%. It matches SinoTrack's 4G message layout and what Traccar forum users see on other SinoTrack models.
-  - `io6` is most likely signal strength; `io7` and `io8` haven't changed.
+  - `io5` is the number of satellites used for the fix, `0` without one.
+  - `io6` is mobile signal strength on the modem scale (CSQ, 0–31, 99 unknown). 12–31 was seen in Stockholm.
+  - `io7` is the battery voltage × 10: 35–38, so 3.5–3.8 V.
+  - **`io8` is the battery percentage.** Confirmed on 2026-09-29 against Traccar's computed attribute. An earlier reading took `io5` for the battery: its 8 matched a 9% heartbeat by chance, but over a day it runs 0–20 and drops to 0 without a GPS fix, which is satellites.
 
-**Mapping it in Traccar, not the app:** a computed attribute turns `io5` into `batteryLevel` on location reports, so every message has a battery level and other tracker models aren't affected.
-- Settings → Computed attributes: Attribute **Battery Level**, which makes the type Number. Expression: `io5 != null && io5 * 1 >= 0 && io5 * 1 <= 100 ? io5 * 1 : null`. Linked to the tracker, or to its group.
-- `io5 * 1` turns the text into a number without enabling `processing.computedAttributes.newInstanceCreation`. Traccar discards non-numbers for Number attributes; the attribute has to be Battery Level, or Traccar tries to store the result as the wrong type and drops it.
-- Traccar runs these expressions strictly. On a heartbeat, which has no `io5`, the expression fails with a logged warning and the heartbeat's own battery level stays. If the expression returned null there instead, Traccar would remove the attribute.
+**Mapping it in Traccar, not the app:** a computed attribute turns `io8` into `batteryLevel` on location reports, so every message has a battery level and other tracker models aren't affected.
+- Settings → Computed attributes: Attribute **Battery Level**, which makes the type Number. Expression: `io8 != null && io8 * 1 >= 0 && io8 * 1 <= 100 ? io8 * 1 : null`. Linked to the tracker, or to its group.
+- `io8 * 1` turns the text into a number without enabling `processing.computedAttributes.newInstanceCreation`. Traccar discards non-numbers for Number attributes; the attribute has to be Battery Level, or Traccar tries to store the result as the wrong type and drops it.
+- Traccar runs these expressions strictly. On a heartbeat, which has no `io8`, the expression fails with a logged warning and the heartbeat's own battery level stays. If the expression returned null there instead, Traccar would remove the attribute.
 
 In the app:
 - `battery` is optional in the view model. The value comes from `batteryLevel` (percent) or `battery` (volts), whichever Traccar has.
 - The card shows battery only when it exists. There's no placeholder.
 - Live updates never blank a known battery value; a position without battery keeps the last one seen in that session.
 - The value is the tracker's estimate from its voltage, so it moves with load and temperature: 8% → 12% → 19% while moving was seen on 2026-09-26. The gauge's bars absorb most of this.
+
+## Tracker details
+
+Tapping **Online ›** in the phone details, or **Tracker details** under the selected card on desktop, opens a panel about the tracker itself (`TrackerDetails.tsx`): a modal `<dialog>`, as a bottom sheet on phones and centred on wider screens. Escape, the close button and a tap outside close it.
+
+| Row | From |
+|---|---|
+| Connection: Online · last contact 20 s ago | device `status`, `lastUpdate` |
+| GPS: "Fix, 19 satellites", or "No fix since 14:05" / "No fix for over an hour" | the latest report's `valid`; satellites from `sat`, or `io5` on h02; the last fix from an hour of history |
+| Mobile signal: bars and Poor / Fair / Good / Excellent | `io6` on h02, read as CSQ: under 10 poor, 10–14 fair, 15–19 good, 20 and up excellent |
+| Network: Telia · Sweden | the serving cell's country and network codes (`network.cellTowers`, or `io1`/`io2` on h02); names for the Nordic countries and the main Swedish operators, codes otherwise |
+| Battery: 62% · 3.7 V | `batteryLevel`; volts from `battery`, or `io7` / 10 on h02 |
+| Reports: about every 30 s | the median time between reports over the past hour |
+| Last fix: coordinates, with Copy | the latest position |
+| Model: ST-904L (h02) | the device's model in Traccar, and the protocol |
+
+- **Fetched when it opens** (`getTrackerDetails`), and every 30 s while open, rather than streamed with the map's data. It reads the device, the latest positions and an hour of that device's history. The mapping is a pure function (`tracker.server.ts`) with tests against real ST-904L values.
+- Only rows the tracker reports are shown. Never the tracker ID (IMEI) or the SIM's number, and live link viewers never see this panel.
 
 ## UI
 
@@ -343,7 +363,8 @@ src/
     session.server.ts                 sealed cookie, token exchange, withToken()
     assets.server.ts                  Traccar → Asset mapping
     auth.functions.ts                 getUser / loginWithPassword / logout
-    assets.functions.ts               getAssets
+    assets.functions.ts               getAssets, getTrackerDetails
+    tracker.server.ts                 Traccar → tracker details (SinoTrack io fields) + tests
     manage.server.ts                  add / rename / remove assets and photos; edit access; error mapping
     manage.functions.ts               server functions for the /assets pages, with input checks
     map.functions.ts                  getMapOptions (style URL, follow roads available), matchWalks, getAddress
@@ -364,6 +385,7 @@ src/
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
     SettingsLink.tsx                  cog link to Settings, at the end of the asset list
+    TrackerDetails.tsx                the tracker details dialog
     ShareMenu.tsx                     Share: send location, make and send live links
     RelativeTime.tsx
   lib/
@@ -376,6 +398,7 @@ src/
     matching.ts                       which walks to snap for "Follow roads"
     useSnappedWalks.ts                asks the server to snap walks, caches the results
     useAddress.ts                     the selected asset's address, asked again after 25 m
+    tracker.ts                        TrackerDetails type, signal labels
     share.ts                          share messages, times, the SharedView type
     shareSheet.ts                     share sheet, or copy as the fallback
     liveLinks.ts                      live links made in this browser (localStorage)

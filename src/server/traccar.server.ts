@@ -28,6 +28,8 @@ export type TraccarDevice = {
   disabled: boolean
   /** Filename of the image uploaded in Traccar's UI (attribute `deviceImage`), if any. */
   image: string | null
+  /** The model entered for the device in Traccar, if any. */
+  model: string | null
 }
 
 export type TraccarPosition = {
@@ -41,6 +43,8 @@ export type TraccarPosition = {
   accuracy: number
   /** The serving cell tower's ID, when Traccar decoded one (`network.cellTowers`). */
   cellId: number | null
+  /** The serving cell tower's country and network codes, when Traccar decoded them. */
+  cellNetwork: { mcc: number; mnc: number } | null
   attributes: Record<string, unknown>
 }
 
@@ -415,6 +419,7 @@ function parseDevice(value: unknown): TraccarDevice {
     lastUpdate: optionalString(value, 'lastUpdate', 'device'),
     disabled: value.disabled === true,
     image: readDeviceImage(value.attributes),
+    model: typeof value.model === 'string' && value.model.trim() !== '' ? value.model.trim() : null,
   }
 }
 
@@ -438,11 +443,20 @@ function parsePosition(value: unknown): TraccarPosition {
     longitude: number(value, 'longitude', 'position'),
     accuracy: value.accuracy == null ? 0 : number(value, 'accuracy', 'position'),
     cellId: readCellId(value.network),
+    cellNetwork: readCellNetwork(value.network),
     attributes,
   }
 }
 
 /** The first cell tower's ID from Traccar's `network` object; it's optional and loosely shaped, so no errors. */
+function readCellNetwork(network: unknown): TraccarPosition['cellNetwork'] {
+  if (!isObject(network) || !Array.isArray(network.cellTowers)) return null
+  const tower: unknown = network.cellTowers[0]
+  if (!isObject(tower)) return null
+  const { mobileCountryCode: mcc, mobileNetworkCode: mnc } = tower
+  return Number.isInteger(mcc) && Number.isInteger(mnc) ? { mcc: mcc as number, mnc: mnc as number } : null
+}
+
 function readCellId(network: unknown): number | null {
   if (!isObject(network) || !Array.isArray(network.cellTowers)) return null
   const tower: unknown = network.cellTowers[0]

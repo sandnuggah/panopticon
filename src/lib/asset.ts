@@ -47,3 +47,9 @@ export function contactIsNewerThanFix(asset: Asset): boolean {
   if (!asset.lastUpdate || !asset.location) return false
   return Date.parse(asset.lastUpdate) - Date.parse(asset.location.fixTime) > 5 * 60 * 1000
 }
+
+export function statusLabel(status: Asset['status']): string {
+  if (status === 'online') return 'Online'
+  if (status === 'offline') return 'Offline'
+  return 'No recent contact'
+}
