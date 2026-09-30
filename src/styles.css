@@ -197,9 +197,12 @@ input {
 /* App: map on top and asset list below on phones; list beside the map on wider screens */
 
 .app {
+  /* Pinned to the screen's edges rather than 100dvh: in the home-screen app, with the status bar
+     over the page, iOS makes 100dvh one status bar shorter than the screen, leaving a gap below. */
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
 }
 
 .map-area {
