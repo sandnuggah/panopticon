@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { mapStylesFor } from '../lib/mapStyles'
 import { MAX_POINTS_PER_WALK, MAX_WALKS_PER_REQUEST, type MatchablePoint } from '../lib/matching'
 import { lookUpAddress } from './address.server'
 import { env } from './env.server'
@@ -6,11 +7,11 @@ import { matchWalk } from './matching.server'
 import { withToken } from './session.server'
 
 /**
- * The maplibre style URL (not secret; it lives in env so it can point at a self-hosted tile server),
- * and whether "Follow roads" is available (MAP_MATCHING_URL is set).
+ * The map styles to choose between, from MAP_STYLE_URL (not secret; it lives in env so it can point
+ * at a self-hosted tile server), and whether "Follow roads" is available (MAP_MATCHING_URL is set).
  */
 export const getMapOptions = createServerFn({ method: 'GET' }).handler(() => ({
-  styleUrl: env().mapStyleUrl,
+  ...mapStylesFor(env().mapStyleUrl),
   followRoads: env().mapMatchingUrl !== undefined,
 }))
 

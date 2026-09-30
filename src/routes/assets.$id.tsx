@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
 import { AssetAvatar } from '../components/AssetAvatar'
+import { TrackerSection } from '../components/TrackerDetails'
 import { prepareAssetImage } from '../lib/assetImage'
 import { editErrorMessage } from '../lib/editErrors'
 import { getUser } from '../server/auth.functions'
@@ -106,6 +107,8 @@ function AssetPage() {
         </Link>
         <h1>{asset.name}</h1>
       </header>
+
+      <TrackerSection assetId={asset.id} />
 
       {!access.canEdit ? (
         <p className="muted">Your Traccar account can't change assets. An administrator can allow it in Traccar.</p>

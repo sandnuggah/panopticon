@@ -3,6 +3,7 @@ import { ClientOnly, createFileRoute } from '@tanstack/react-router'
 import { AssetAvatar } from '../components/AssetAvatar'
 import { LiveIndicator } from '../components/LiveIndicator'
 import { RelativeTime } from '../components/RelativeTime'
+import type { MapStyle } from '../lib/mapStyles'
 import { formatTime, type SharedView } from '../lib/share'
 import { useTheme } from '../lib/theme'
 import { useAddress } from '../lib/useAddress'
@@ -22,7 +23,7 @@ const nothing = () => {}
 export const Route = createFileRoute('/s/$link')({
   loader: async ({ params }) => {
     const [view, mapOptions] = await Promise.all([getSharedView({ data: params.link }), getMapOptions()])
-    return { view, styleUrl: mapOptions.styleUrl }
+    return { view, styles: mapOptions.styles, defaultStyle: mapOptions.defaultStyle }
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -34,15 +35,17 @@ export const Route = createFileRoute('/s/$link')({
 })
 
 function SharedPage() {
-  const { view, styleUrl } = Route.useLoaderData()
+  const { view, styles, defaultStyle } = Route.useLoaderData()
   const { link } = Route.useParams()
   if (view.kind !== 'live') return <SharedEnded kind={view.kind} />
-  return <SharedLive link={link} view={view} styleUrl={styleUrl} />
+  return <SharedLive link={link} view={view} styles={styles} defaultStyle={defaultStyle} />
 }
 
 type LiveView = Extract<SharedView, { kind: 'live' }>
 
-function SharedLive({ link, view, styleUrl }: { link: string; view: LiveView; styleUrl: string }) {
+type LiveProps = { link: string; view: LiveView; styles: MapStyle[]; defaultStyle: string }
+
+function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
   const { asset, status } = useSharedAsset(view.asset, link, view.expiresAt)
   const lookUp = useCallback(() => getSharedAddress({ data: link }), [link])
   const address = useAddress(asset, lookUp) ?? view.address ?? undefined
@@ -63,7 +66,8 @@ function SharedLive({ link, view, styleUrl }: { link: string; view: LiveView; st
               trails={noTrails}
               snappedWalks={noTrails}
               theme={theme}
-              styleUrl={styleUrl}
+              styles={styles}
+              defaultStyle={defaultStyle}
               selectedId={asset.id}
               focusToken={0}
               onSelect={nothing}

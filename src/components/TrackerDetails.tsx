@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { statusLabel, type Asset } from '../lib/asset'
+import { useEffect, useState, type ReactNode } from 'react'
+import { statusLabel } from '../lib/asset'
 import { formatTime } from '../lib/share'
 import { SIGNAL_LABELS, type TrackerDetails as Details } from '../lib/tracker'
 import { useNow } from '../lib/useNow'
@@ -9,46 +9,19 @@ import { RelativeTime } from './RelativeTime'
 /** How often the open panel refreshes. */
 const REFRESH_MS = 30_000
 
-type ButtonProps = { asset: Asset; className: string; children: ReactNode }
-
-/** A button that opens the asset's tracker details. */
-export function TrackerDetailsButton({ asset, className, children }: ButtonProps) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <button type="button" className={className} aria-haspopup="dialog" onClick={() => setOpen(true)}>
-        {children}
-      </button>
-      {open && <TrackerDialog asset={asset} onClose={() => setOpen(false)} />}
-    </>
-  )
-}
-
 /**
- * The tracker itself: connection, GPS, signal, network, battery, how often it reports, where its
- * last fix was, and its model (see lib/tracker.ts). A modal <dialog>: a bottom sheet on phones,
- * centred on wider screens. Escape, the close button and a tap outside close it.
+ * The tracker itself, on its asset's page (Settings → Manage assets): connection, GPS, signal,
+ * network, battery, how often it reports, where its last fix was, and its model (see
+ * lib/tracker.ts). Fetched when the page opens and every 30 s while it's open.
  */
-function TrackerDialog({ asset, onClose }: { asset: Asset; onClose: () => void }) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
-  const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose
+export function TrackerSection({ assetId }: { assetId: number }) {
   const [details, setDetails] = useState<Details>()
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    const closed = () => onCloseRef.current()
-    dialog.showModal()
-    dialog.addEventListener('close', closed)
-    return () => dialog.removeEventListener('close', closed)
-  }, [])
-
-  useEffect(() => {
     let cancelled = false
     const load = () =>
-      getTrackerDetails({ data: asset.id })
+      getTrackerDetails({ data: assetId })
         .then((loaded) => {
           if (cancelled) return
           setDetails(loaded)
@@ -63,26 +36,11 @@ function TrackerDialog({ asset, onClose }: { asset: Asset; onClose: () => void }
       cancelled = true
       clearInterval(timer)
     }
-  }, [asset.id])
+  }, [assetId])
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="tracker-dialog"
-      aria-labelledby="tracker-title"
-      // A click on the dialog element itself, not its contents, is a click on the backdrop.
-      onClick={(event) => {
-        if (event.target === event.currentTarget) dialogRef.current?.close()
-      }}
-    >
-      <div className="tracker-header">
-        <h2 id="tracker-title">{asset.name}’s tracker</h2>
-        <button type="button" className="icon-button" aria-label="Close" onClick={() => dialogRef.current?.close()}>
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-          </svg>
-        </button>
-      </div>
+    <section>
+      <h2>Tracker</h2>
       {details ? (
         <Rows details={details} />
       ) : failed ? (
@@ -92,7 +50,7 @@ function TrackerDialog({ asset, onClose }: { asset: Asset; onClose: () => void }
       ) : (
         <p className="muted">Loading…</p>
       )}
-    </dialog>
+    </section>
   )
 }
 

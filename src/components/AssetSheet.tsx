@@ -5,7 +5,6 @@ import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { RelativeTime } from './RelativeTime'
 import { ShareMenu } from './ShareMenu'
-import { TrackerDetailsButton } from './TrackerDetails'
 
 type Props = {
   assets: Asset[]
@@ -65,9 +64,6 @@ export function AssetSheet(props: Props) {
               {asset.id === selectedId && (
                 <div className="asset-card-actions">
                   <ShareMenu asset={asset} address={selectedAddress} />
-                  <TrackerDetailsButton asset={asset} className="button-quiet tracker-open">
-                    Tracker details
-                  </TrackerDetailsButton>
                 </div>
               )}
             </li>
@@ -137,14 +133,10 @@ function AssetDetails({ asset, activity, stay, address, onClose }: DetailsProps)
     <section className="asset-details" aria-label={asset.name}>
       <div className="asset-details-title">
         <span className="asset-details-name">{asset.name}</span>
-        <TrackerDetailsButton asset={asset} className="asset-details-status">
+        <span className="asset-details-status">
           <span className={`status-dot status-${asset.status}`} aria-hidden="true" />
           {statusLabel(asset.status)}
-          <span className="visually-hidden">: tracker details</span>
-          <svg className="chevron" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </TrackerDetailsButton>
+        </span>
         {percent !== undefined && (
           <span className="asset-details-battery">
             <BatteryGauge percent={percent} />

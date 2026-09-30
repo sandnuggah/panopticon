@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
   type GeoJSONSource,
   LngLatBounds,
@@ -18,7 +18,10 @@ import { walkKey } from '../lib/matching'
 import { classifyTrail, type LatLon } from '../lib/segments'
 import { useMyPosition, type MyPosition } from '../lib/useMyPosition'
 import { useNow } from '../lib/useNow'
-import { addMyPositionLayer, createMyPositionDot, MyPositionControl, setAccuracyCircle } from './myPosition'
+import { AUTO_STYLE, resolveStyle, type MapStyle } from '../lib/mapStyles'
+import { useSettings } from '../lib/settings'
+import { MapButtonControl } from './mapControls'
+import { addMyPositionLayer, createMyPositionDot, MY_POSITION_ICON, setAccuracyCircle } from './myPosition'
 
 setWorkerUrl(workerUrl)
 
@@ -47,7 +50,9 @@ type Props = {
   snappedWalks: Record<string, LatLon[]>
   /** Petopticon (the pet theme) draws trails as paw prints instead of a line. */
   theme: ThemeId
-  styleUrl: string
+  /** The map styles to choose between (see mapStyles.ts), and the default. */
+  styles: MapStyle[]
+  defaultStyle: string
   selectedId: number | undefined
   /** Changes on every selection, so selecting the already-selected asset again re-centres on it. */
   focusToken: number
@@ -61,7 +66,8 @@ export default function AssetMap({
   trails,
   snappedWalks,
   theme,
-  styleUrl,
+  styles,
+  defaultStyle,
   selectedId,
   focusToken,
   onSelect,
@@ -105,7 +111,7 @@ export default function AssetMap({
   const [showMe, setShowMe] = useState(false)
   const { position: me, note } = useMyPosition(showMe, () => setShowMe(false))
   const toggleMeRef = useRef(() => setShowMe((on) => !on))
-  const controlRef = useRef<MyPositionControl | null>(null)
+  const controlRef = useRef<MapButtonControl | null>(null)
   const meMarkerRef = useRef<Marker | null>(null)
   const framedRef = useRef(false)
 
@@ -125,26 +131,57 @@ export default function AssetMap({
     targetRef.current = following ? [targetLon, targetLat] : null
   })
 
+  // The map style: chosen with the map's style button and kept per browser, Auto following the
+  // device's light or dark mode. Switching keeps the view; the trails are added to the new style.
+  const [settings, updateSettings] = useSettings()
+  const prefersDark = usePrefersDark()
+  const styleChoice = settings.mapStyle ?? defaultStyle
+  const styleUrl = resolveStyle(styles, styleChoice, defaultStyle, prefersDark).url
+  const appliedStyleRef = useRef(styleUrl)
+  const [styleMenu, setStyleMenu] = useState<{ top: number; right: number }>()
+  const openStyleMenuRef = useRef((_button: HTMLButtonElement) => {})
+  const styleControlRef = useRef<MapButtonControl | null>(null)
+  openStyleMenuRef.current = (button) => {
+    if (styleMenu) return setStyleMenu(undefined)
+    const area = containerRef.current!.getBoundingClientRect()
+    const rect = button.getBoundingClientRect()
+    setStyleMenu({ top: rect.top - area.top, right: area.right - rect.left + 8 })
+  }
+
   useEffect(() => {
     const map = new MapLibreMap({
       container: containerRef.current!,
-      style: styleUrl,
+      style: appliedStyleRef.current,
       center: [0, 20],
       zoom: 1,
       attributionControl: { compact: true },
     })
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
-    const control = new MyPositionControl(() => toggleMeRef.current())
+    const control = new MapButtonControl('my-position-button', MY_POSITION_ICON, () => toggleMeRef.current(), {
+      off: 'Show my position',
+      on: 'Hide my position',
+    })
     map.addControl(control, 'top-right')
     controlRef.current = control
+    // Only when there's more than one style to choose between.
+    if (styles.length > 1) {
+      const styleControl = new MapButtonControl('map-style-button', MAP_STYLE_ICON, (button) => openStyleMenuRef.current(button), {
+        off: 'Map style',
+      })
+      map.addControl(styleControl, 'top-right')
+      styleControlRef.current = styleControl
+    }
+    // Every style load, the first and after switching: the trails and your position go on top.
+    map.on('style.load', () => {
+      addTrailLayers(map)
+      addMyPositionLayer(map)
+      setStyleLoaded(true)
+    })
     // The map data's licence requires visible attribution, but lets it shrink to the (i) button
     // after a few seconds. Maplibre collapses it on drag; this does the same on a timer, counted
     // from when the style has loaded and the attribution has something to show.
     let collapseAttribution: ReturnType<typeof setTimeout> | undefined
     map.on('load', () => {
-      addTrailLayers(map)
-      addMyPositionLayer(map)
-      setStyleLoaded(true)
       collapseAttribution = setTimeout(() => {
         map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show')
       }, ATTRIBUTION_SECONDS * 1000)
@@ -181,12 +218,26 @@ export default function AssetMap({
       markers.clear()
       meMarkerRef.current = null
       controlRef.current = null
+      styleControlRef.current = null
       map.remove()
       mapRef.current = null
       cameraPlacedRef.current = false
       setStyleLoaded(false)
     }
+  }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || appliedStyleRef.current === styleUrl) return
+    appliedStyleRef.current = styleUrl
+    setStyleLoaded(false)
+    // A full reload rather than a diff, so 'style.load' fires and the trails are added again.
+    map.setStyle(styleUrl, { diff: false })
   }, [styleUrl])
+
+  useEffect(() => {
+    styleControlRef.current?.setOn(styleMenu !== undefined)
+  }, [styleMenu])
 
   useEffect(() => {
     const map = mapRef.current
@@ -284,12 +335,12 @@ export default function AssetMap({
     map.scrollZoom.disable()
     map.scrollZoom.enable(options)
     map.touchZoomRotate.enable(options)
-  }, [following, styleUrl])
+  }, [following])
 
   useEffect(() => {
     controlRef.current?.setOn(showMe)
     if (showMe) framedRef.current = false
-  }, [showMe, styleUrl])
+  }, [showMe])
 
   // The blue dot and its accuracy circle.
   useEffect(() => {
@@ -323,7 +374,79 @@ export default function AssetMap({
           {note}
         </p>
       )}
+      {styleMenu && (
+        <StyleMenu
+          styles={styles}
+          choice={styleChoice}
+          place={styleMenu}
+          onChoose={(id) => {
+            updateSettings({ mapStyle: id })
+            setStyleMenu(undefined)
+          }}
+          onClose={() => setStyleMenu(undefined)}
+        />
+      )}
     </>
+  )
+}
+
+/** Folded map sheets, the usual "map style" symbol. */
+const MAP_STYLE_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 3.5 5.5 2l5 1.75L14.25 2.25v10.25L10.5 14l-5-1.75-3.75 1.5zM5.5 2v10.25M10.5 3.75V14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+
+type StyleMenuProps = {
+  styles: MapStyle[]
+  choice: string
+  place: { top: number; right: number }
+  onChoose: (id: string) => void
+  onClose: () => void
+}
+
+/** The map style list, beside the style button. Escape or a tap outside closes it. */
+function StyleMenu({ styles, choice, place, onChoose, onClose }: StyleMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    menuRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const options = [{ id: AUTO_STYLE, name: 'Auto' }, ...styles]
+  return (
+    <>
+      <div className="map-style-backdrop" onClick={onClose} />
+      <div ref={menuRef} className="map-style-menu" role="menu" aria-label="Map style" style={place}>
+        {options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            role="menuitemradio"
+            aria-checked={option.id === choice}
+            className="map-style-option"
+            onClick={() => onChoose(option.id)}
+          >
+            <span className={`map-style-swatch map-style-swatch-${option.id}`} aria-hidden="true" />
+            {option.name}
+            {option.id === AUTO_STYLE && <span className="muted"> · light or dark</span>}
+          </button>
+        ))}
+      </div>
+    </>
+  )
+}
+
+/** Whether the device is in dark mode, kept up to date. */
+function usePrefersDark(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia('(prefers-color-scheme: dark)')
+      query.addEventListener('change', onChange)
+      return () => query.removeEventListener('change', onChange)
+    },
+    () => window.matchMedia('(prefers-color-scheme: dark)').matches,
+    () => false,
   )
 }
 

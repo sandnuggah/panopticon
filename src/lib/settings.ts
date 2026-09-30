@@ -9,6 +9,8 @@ export type Settings = {
   trail: TrailLength
   /** Snap walks on the trail to streets and paths, when the server offers it. */
   followRoads: boolean
+  /** The map style's id, or Auto (see mapStyles.ts); unset means the server's default. */
+  mapStyle?: string
 }
 
 const STORAGE_KEY = 'panopticon.settings'
@@ -38,7 +40,9 @@ function parse(raw: string | null): Settings {
     // `trailMinutes` is what the trail length was saved as before "today" existed.
     const value = JSON.parse(raw) as Partial<Settings> & { trailMinutes?: unknown }
     const trail = nearestTrail(value.trail ?? value.trailMinutes) ?? DEFAULTS.trail
-    return { trail, followRoads: value.followRoads === true }
+    const settings: Settings = { trail, followRoads: value.followRoads === true }
+    if (typeof value.mapStyle === 'string') settings.mapStyle = value.mapStyle
+    return settings
   } catch {
     return DEFAULTS
   }

@@ -226,7 +226,7 @@ In the app:
 
 ## Tracker details
 
-Tapping **Online ›** in the phone details, or **Tracker details** under the selected card on desktop, opens a panel about the tracker itself (`TrackerDetails.tsx`): a modal `<dialog>`, as a bottom sheet on phones and centred on wider screens. Escape, the close button and a tap outside close it.
+Each asset's page under **Settings → Manage assets** starts with a **Tracker** section about the tracker itself (`TrackerDetails.tsx`), for anyone who can see the asset, including accounts that can't change it.
 
 | Row | From |
 |---|---|
@@ -239,8 +239,8 @@ Tapping **Online ›** in the phone details, or **Tracker details** under the se
 | Last fix: coordinates, with Copy | the latest position |
 | Model: ST-904L (h02) | the device's model in Traccar, and the protocol |
 
-- **Fetched when it opens** (`getTrackerDetails`), and every 30 s while open, rather than streamed with the map's data. It reads the device, the latest positions and an hour of that device's history. The mapping is a pure function (`tracker.server.ts`) with tests against real ST-904L values.
-- Only rows the tracker reports are shown. Never the tracker ID (IMEI) or the SIM's number, and live link viewers never see this panel.
+- **Fetched when the page opens** (`getTrackerDetails`), and every 30 s while it's open, rather than streamed with the map's data. It reads the device, the latest positions and an hour of that device's history. The mapping is a pure function (`tracker.server.ts`) with tests against real ST-904L values.
+- Only rows the tracker reports are shown. Never the tracker ID (IMEI) or the SIM's number, and live link viewers never see it.
 
 ## UI
 
@@ -292,7 +292,7 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
 
 ## Managing assets
 
-Settings → Manage assets lists every device the user can see, including ones disabled in Traccar. From there you can add an asset (name and tracker ID), and on each asset's page change its photo, rename it or remove it. Only these three fields are handled; groups, phone numbers, models and categories stay in Traccar's UI.
+Settings → Manage assets lists every device the user can see, including ones disabled in Traccar. From there you can add an asset (name and tracker ID), and on each asset's page see how its tracker is doing ([Tracker details](#tracker-details)), change its photo, rename it or remove it. Only these three fields are handled; groups, phone numbers, models and categories stay in Traccar's UI.
 
 - **Traccar calls** (`traccar.server.ts`):
   - Add: `POST /api/devices` with `{name, uniqueId}`. Traccar links the new device to the user who creates it.
@@ -330,6 +330,9 @@ Pick a theme on the Settings page, from a list with a colour preview for each. T
 ## Map tiles
 
 - `MAP_STYLE_URL` is optional. The default is OpenFreeMap's `liberty` style: free, no API key, no analytics. OpenFreeMap does see which map areas you load.
+- **Map style button** (under your-position in the map's controls): with OpenFreeMap, a list of its five free styles, **Standard** (liberty), **Light** (positron), **Bright**, **Dark** and **Dark blue** (fiord), plus **Auto**, which is Standard in light mode and Dark in dark mode (`mapStyles.ts`). The choice is kept per browser (`mapStyle` in the settings) and live link pages have it too. The default is the style `MAP_STYLE_URL` names. With a self-hosted style there's nothing to choose between, so there's no button.
+- **Switching keeps the view:** the map isn't rebuilt; `setStyle` loads the new style (a full reload, not a diff) and `style.load` adds the trail and your-position layers again. Markers are DOM elements, so they stay. All of OpenFreeMap's styles share one origin, so the Content-Security-Policy needs nothing new.
+- No satellite imagery: there's no free provider without an API key that doesn't see where you look.
 - To use no third-party service, run your own tile server and point `MAP_STYLE_URL` at its style JSON. For example: `pmtiles serve` with a Protomaps extract, or Martin. This needs no app code changes and adds no dependency.
 - The Content-Security-Policy allows the origin of `MAP_STYLE_URL` for tiles, fonts and sprites.
 
@@ -352,7 +355,7 @@ src/
     settings.tsx                      theme, trail length, manage assets link, live links, sign-out
     assets.index.tsx                  list of assets to manage
     assets.new.tsx                    add an asset
-    assets.$id.tsx                    photo, name, remove
+    assets.$id.tsx                    tracker details, photo, name, remove
     live.ts                           server route: SSE relay
     s.$link.tsx                       live location link page (public)
     s_.$link.live.ts                  server route: a live link's SSE stream
@@ -382,12 +385,13 @@ src/
     sso.server.ts                     /auth/sso, callback, Traccar email-link redirects
   components/
     AssetMap.tsx                      maplibre map + markers (browser only, lazy)
-    myPosition.ts                     your position on the map: dot, accuracy circle, button
+    myPosition.ts                     your position on the map: dot, accuracy circle, button icon
+    mapControls.ts                    a map button like maplibre's own (your position, map style)
     AssetSheet.tsx                    asset cards
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
     SettingsLink.tsx                  cog link to Settings, at the end of the asset list
-    TrackerDetails.tsx                the tracker details dialog
+    TrackerDetails.tsx                the Tracker section of an asset's page
     ShareMenu.tsx                     Share: send location, make and send live links
     RelativeTime.tsx
   lib/
@@ -399,6 +403,7 @@ src/
     segments.test.ts                  node --test
     matching.ts                       which walks to snap for "Follow roads"
     useSnappedWalks.ts                asks the server to snap walks, caches the results
+    mapStyles.ts                      the map styles to choose between, Auto + tests
     useMyPosition.ts                  your position from the browser (geolocation), while on
     useAddress.ts                     the selected asset's address, asked again after 25 m
     tracker.ts                        TrackerDetails type, signal labels

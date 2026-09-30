@@ -493,60 +493,7 @@ input {
   color: var(--muted);
 }
 
-/* The status opens the tracker details: a quiet button, with a chevron to say so. */
-button.asset-details-status {
-  padding: 0.2rem 0.1rem 0.2rem 0.35rem;
-  border: 0;
-  border-radius: calc(var(--radius) - 4px);
-  background: none;
-  color: var(--muted);
-}
-
-button.asset-details-status:hover {
-  background: var(--surface-selected);
-}
-
-.chevron {
-  width: 0.85rem;
-  height: 0.85rem;
-}
-
-/* Tracker details (TrackerDetails.tsx): a modal dialog, centred; a bottom sheet on phones. */
-.tracker-open {
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
-}
-
-.tracker-dialog {
-  width: min(26rem, calc(100vw - 16px));
-  padding: 1rem 1.1rem 1.1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow);
-  /* The phone toolbar it opens from turns selection off; coordinates are worth copying. */
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.tracker-dialog::backdrop {
-  background: rgb(0 0 0 / 0.35);
-}
-
-.tracker-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.75rem;
-}
-
-.tracker-header h2 {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
+/* Tracker details (TrackerDetails.tsx), a section of the asset's page. */
 .tracker-rows {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -652,11 +599,13 @@ button.asset-details-status:hover {
 /* Your own position on the map (myPosition.ts): the control under zoom, the dot, and a note when
    the browser won't say where you are. */
 /* The same dark grey as maplibre's own + and − icons, in either theme. */
-.my-position-button {
+.my-position-button,
+.map-style-button {
   color: #333;
 }
 
-.my-position-button svg {
+.my-position-button svg,
+.map-style-button svg {
   display: block;
   width: 15px;
   height: 15px;
@@ -690,6 +639,88 @@ button.asset-details-status:hover {
   font-size: 0.85rem;
   text-align: center;
   transform: translateX(-50%);
+}
+
+/* The map style list (AssetMap's StyleMenu), beside the style button in the map's controls. */
+.map-style-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+}
+
+.map-style-menu {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  min-width: 11rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.map-style-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: calc(var(--radius) - 4px);
+  background: none;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.map-style-option:hover,
+.map-style-option:focus-visible {
+  background: var(--surface-selected);
+  outline: none;
+}
+
+.map-style-option[aria-checked='true'] {
+  font-weight: 600;
+}
+
+/* A rough colour of each style, to tell them apart at a glance. */
+.map-style-swatch {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.map-style-option[aria-checked='true'] .map-style-swatch {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.map-style-swatch-auto {
+  background: linear-gradient(135deg, #efe9e1 50%, #2d2f33 50%);
+}
+
+.map-style-swatch-standard {
+  background: #efe9e1;
+}
+
+.map-style-swatch-light {
+  background: #fafaf8;
+}
+
+.map-style-swatch-bright {
+  background: #f7e7b4;
+}
+
+.map-style-swatch-dark {
+  background: #2d2f33;
+}
+
+.map-style-swatch-dark-blue {
+  background: #2b3a4a;
+}
+
+.map-style-swatch-custom {
+  background: var(--border);
 }
 
 /* The Share button and its menu (ShareMenu): a drop-down under the button, or an action sheet
@@ -1368,12 +1399,6 @@ a.manage-row:hover {
 
   .asset-card-actions {
     display: none;
-  }
-
-  .tracker-dialog {
-    width: auto;
-    max-width: none;
-    margin: auto 8px calc(8px + env(safe-area-inset-bottom));
   }
 
   /* The Share menu as an action sheet: across the bottom, above everything, with the page dimmed. */

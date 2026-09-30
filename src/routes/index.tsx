@@ -75,7 +75,8 @@ function Home() {
               trails={trails}
               snappedWalks={snappedWalks}
               theme={theme}
-              styleUrl={loaderData.mapOptions.styleUrl}
+              styles={loaderData.mapOptions.styles}
+              defaultStyle={loaderData.mapOptions.defaultStyle}
               selectedId={selectedId}
               focusToken={focusToken}
               onSelect={select}
