@@ -16,7 +16,9 @@ import type { ThemeId } from '../lib/theme'
 import type { TrailPoint, Trails } from '../lib/trail'
 import { walkKey } from '../lib/matching'
 import { classifyTrail, type LatLon } from '../lib/segments'
+import { useMyPosition, type MyPosition } from '../lib/useMyPosition'
 import { useNow } from '../lib/useNow'
+import { addMyPositionLayer, createMyPositionDot, MyPositionControl, setAccuracyCircle } from './myPosition'
 
 setWorkerUrl(workerUrl)
 
@@ -35,6 +37,8 @@ const ATTRIBUTION_SECONDS = 5
 const FOLLOW_MS = 1000
 /** How close to the middle of the map (px) a selected asset counts as centred. */
 const CENTRED_PX = 12
+/** Zoom when showing just your position. */
+const MY_POSITION_ZOOM = 16
 
 type Props = {
   assets: Asset[]
@@ -88,6 +92,23 @@ export default function AssetMap({
   /** True during a user gesture (zoom, pinch, drag); follow updates wait for it to finish. */
   const gestureRef = useRef(false)
 
+  // Moving the map yourself pauses following; zooming doesn't. The selection stays either way.
+  // Only uses refs and a state setter, so the map's event handlers can keep the first one.
+  const pauseFollowing = () => {
+    if (!targetRef.current) return
+    targetRef.current = null
+    setPausedAt(focusTokenRef.current)
+  }
+
+  // Your own position (useMyPosition): off until the map's button turns it on. The first fix frames
+  // you and the selected asset together, or just you.
+  const [showMe, setShowMe] = useState(false)
+  const { position: me, note } = useMyPosition(showMe, () => setShowMe(false))
+  const toggleMeRef = useRef(() => setShowMe((on) => !on))
+  const controlRef = useRef<MyPositionControl | null>(null)
+  const meMarkerRef = useRef<Marker | null>(null)
+  const framedRef = useRef(false)
+
   useEffect(() => {
     onMarkerTapRef.current = (id) => {
       const map = mapRef.current
@@ -113,24 +134,22 @@ export default function AssetMap({
       attributionControl: { compact: true },
     })
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
+    const control = new MyPositionControl(() => toggleMeRef.current())
+    map.addControl(control, 'top-right')
+    controlRef.current = control
     // The map data's licence requires visible attribution, but lets it shrink to the (i) button
     // after a few seconds. Maplibre collapses it on drag; this does the same on a timer, counted
     // from when the style has loaded and the attribution has something to show.
     let collapseAttribution: ReturnType<typeof setTimeout> | undefined
     map.on('load', () => {
       addTrailLayers(map)
+      addMyPositionLayer(map)
       setStyleLoaded(true)
       collapseAttribution = setTimeout(() => {
         map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show')
       }, ATTRIBUTION_SECONDS * 1000)
     })
 
-    // Moving the map yourself pauses following; zooming doesn't. The selection stays either way.
-    const pauseFollowing = () => {
-      if (!targetRef.current) return
-      targetRef.current = null
-      setPausedAt(focusTokenRef.current)
-    }
     map.on('dragstart', (event) => {
       // A pinch also nudges the centre, which maplibre reports as a drag; that's zooming.
       const original = event.originalEvent
@@ -160,6 +179,8 @@ export default function AssetMap({
     return () => {
       clearTimeout(collapseAttribution)
       markers.clear()
+      meMarkerRef.current = null
+      controlRef.current = null
       map.remove()
       mapRef.current = null
       cameraPlacedRef.current = false
@@ -265,7 +286,54 @@ export default function AssetMap({
     map.touchZoomRotate.enable(options)
   }, [following, styleUrl])
 
-  return <div ref={containerRef} className="map" />
+  useEffect(() => {
+    controlRef.current?.setOn(showMe)
+    if (showMe) framedRef.current = false
+  }, [showMe, styleUrl])
+
+  // The blue dot and its accuracy circle.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (styleLoaded) setAccuracyCircle(map, me, me ? circle(me, me.accuracy) : [])
+    if (!me) {
+      meMarkerRef.current?.remove()
+      meMarkerRef.current = null
+      return
+    }
+    if (!meMarkerRef.current) meMarkerRef.current = new Marker({ element: createMyPositionDot() }).setLngLat([me.lon, me.lat]).addTo(map)
+    else meMarkerRef.current.setLngLat([me.lon, me.lat])
+  }, [me, styleLoaded])
+
+  // On the first fix, show where you are: with the selected asset if there is one, which pauses
+  // following (tapping the asset resumes it), or on its own.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !me || framedRef.current) return
+    framedRef.current = true
+    frameMe(map, me, target ?? undefined)
+    if (target) pauseFollowing()
+  }, [me])
+
+  return (
+    <>
+      <div ref={containerRef} className="map" />
+      {note && (
+        <p className="my-position-note" role="status">
+          {note}
+        </p>
+      )}
+    </>
+  )
+}
+
+function frameMe(map: MapLibreMap, me: MyPosition, asset: LatLon | undefined) {
+  if (!asset) {
+    map.flyTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), MY_POSITION_ZOOM) })
+    return
+  }
+  const bounds = new LngLatBounds([me.lon, me.lat], [me.lon, me.lat]).extend([asset.lon, asset.lat])
+  map.fitBounds(bounds, { padding: 80, maxZoom: MY_POSITION_ZOOM + 1, duration: 800 })
 }
 
 /**

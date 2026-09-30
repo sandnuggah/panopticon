@@ -24,7 +24,8 @@ export function securityHeaders(): Record<string, string> {
     // Keeps selected-asset URLs out of requests to the map tile server.
     'Referrer-Policy': 'same-origin',
     'Cross-Origin-Opener-Policy': 'same-origin',
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    // Geolocation only for this site itself: "Show my position" on the map.
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(self), payment=()',
     // Nothing here is for search engines, least of all live location links (/s/<link>).
     'X-Robots-Tag': 'noindex, nofollow',
   }

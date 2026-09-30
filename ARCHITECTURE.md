@@ -265,6 +265,7 @@ Tapping **Online ›** in the phone details, or **Tracker details** under the se
   - **Zooming keeps following:** scroll wheel, pinch, +/− and double-tap. While following, wheel and pinch zoom around the centre instead of the cursor or fingers. After a zoom gesture (a double-tap zooms around the tap; a pinch drifts, which maplibre reports as a two-finger drag and is ignored) the map glides back to the asset.
   - Position updates that arrive during a selection flight or a zoom gesture don't interrupt it; the map catches up when it ends. Those waits only apply while the map is actually moving, so a missed end event can't stop following.
   - Only real gestures pause following: maplibre fires `dragstart` for user drags, never for the app's own camera moves.
+- **Your position:** a button under the zoom controls shows where you are, as a blue dot with a soft circle for its accuracy (`useMyPosition.ts`, `myPosition.ts`). It's off each time the app opens; the first tap asks the browser for permission. The first fix frames you and the selected asset together, which pauses following like a drag (tapping the asset resumes it), or just you when nothing is selected. Tapping the button again turns it off. If the browser refuses or can't find you, a short note says so and it switches off. Your position stays in the browser: it's only drawn, never sent anywhere. Live link pages have the button too.
 - **Markers:** maplibre DOM markers (enough for ≤5): a dot with the asset's initial and a name label. Greyed out when the fix is older than 30 minutes; a ring when selected (same size, so selecting doesn't shift it).
   - No accuracy circle yet: the ST-904L reports no accuracy, so it would never show. Add it when a tracker does.
 - **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first, and maplibre stays out of the first-load bundle.
@@ -381,6 +382,7 @@ src/
     sso.server.ts                     /auth/sso, callback, Traccar email-link redirects
   components/
     AssetMap.tsx                      maplibre map + markers (browser only, lazy)
+    myPosition.ts                     your position on the map: dot, accuracy circle, button
     AssetSheet.tsx                    asset cards
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
@@ -397,6 +399,7 @@ src/
     segments.test.ts                  node --test
     matching.ts                       which walks to snap for "Follow roads"
     useSnappedWalks.ts                asks the server to snap walks, caches the results
+    useMyPosition.ts                  your position from the browser (geolocation), while on
     useAddress.ts                     the selected asset's address, asked again after 25 m
     tracker.ts                        TrackerDetails type, signal labels
     share.ts                          share messages, times, the SharedView type
@@ -441,7 +444,7 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
   - `worker-src 'self'`: the maplibre worker is served from the app's own origin, so no `blob:` is needed.
   - `object-src 'none'`, `base-uri 'none'`, `form-action 'self'`, `frame-ancestors 'none'`.
   - Checked in a production build: map, worker, trail and live stream all load with no violations.
-- **Other headers** (dev and production): `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` (the tile server never sees app URLs), `Cross-Origin-Opener-Policy: same-origin`, a `Permissions-Policy` turning off camera, microphone, geolocation and payment, and `X-Robots-Tag: noindex, nofollow`. HSTS belongs on the HTTPS proxy.
+- **Other headers** (dev and production): `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` (the tile server never sees app URLs), `Cross-Origin-Opener-Policy: same-origin`, a `Permissions-Policy` turning off camera, microphone and payment, and allowing geolocation only for the site itself (for [your position](#ui) on the map), and `X-Robots-Tag: noindex, nofollow`. HSTS belongs on the HTTPS proxy.
 - **`src/start.ts` and CSRF:** having a `start.ts` switches off TanStack Start's default CSRF protection for server functions, so it's registered there explicitly. Checked in production: cross-site calls get 403. Behind an HTTPS proxy it still works, because modern browsers send `Sec-Fetch-Site`, which is checked before `Origin`.
 - No analytics or third-party scripts.
 - **Traccar `:latest` moves.** `traccar.ts` checks the fields it reads and fails loudly instead of rendering nonsense. I'd recommend pinning the Traccar image tag in your deployment.
