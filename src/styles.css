@@ -170,6 +170,8 @@ input {
   max-width: 40rem;
   margin: 0 auto;
   padding: 16px;
+  /* Below the status bar and notch, which lie over the page in the home-screen app. */
+  padding-top: calc(16px + env(safe-area-inset-top));
 }
 
 /* Login */
@@ -204,6 +206,24 @@ input {
   position: relative;
   flex: 1;
   min-height: 0;
+}
+
+/* The map runs up under the status bar and notch. A soft shade behind them keeps the phone's white
+   status text readable on light maps; with no top inset (browsers, desktop) it has no height. */
+.map-area::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+  height: calc(env(safe-area-inset-top) * 1.5);
+  background: linear-gradient(rgb(0 0 0 / 0.35), rgb(0 0 0 / 0));
+  pointer-events: none;
+}
+
+/* maplibre's own controls sit below the notch too, like the Live indicator. */
+.map-area .maplibregl-ctrl-top-right,
+.map-area .maplibregl-ctrl-top-left {
+  top: env(safe-area-inset-top);
 }
 
 /* Two classes so this beats maplibre's `.maplibregl-map { position: relative }`, which loads later. */

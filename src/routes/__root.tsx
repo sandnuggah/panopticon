@@ -18,6 +18,9 @@ export const Route = createRootRoute({
       { name: 'color-scheme', content: 'light dark' },
       { name: 'theme-color', content: '#2f6b4f' },
       { name: 'apple-mobile-web-app-title', content: 'Panopticon' },
+      // As a home-screen app, the status bar lies over the page instead of above it, so the map
+      // reaches the top of the screen. Pages keep their content below it with safe-area padding.
+      { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
       { title: 'Panopticon' },
     ],
     links: [
