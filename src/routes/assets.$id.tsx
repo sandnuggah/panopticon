@@ -108,10 +108,11 @@ function AssetPage() {
         <h1>{asset.name}</h1>
       </header>
 
-      <TrackerSection assetId={asset.id} />
-
       {!access.canEdit ? (
-        <p className="muted">Your Traccar account can't change assets. An administrator can allow it in Traccar.</p>
+        <>
+          <p className="muted">Your Traccar account can't change assets. An administrator can allow it in Traccar.</p>
+          <TrackerSection assetId={asset.id} />
+        </>
       ) : (
         <>
           <section>
@@ -158,6 +159,8 @@ function AssetPage() {
             </form>
             <StatusMessage status={name} busy="Saving…" />
           </section>
+
+          <TrackerSection assetId={asset.id} />
 
           <section>
             <h2>Remove</h2>

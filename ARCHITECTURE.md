@@ -226,7 +226,7 @@ In the app:
 
 ## Tracker details
 
-Each asset's page under **Settings → Manage assets** starts with a **Tracker** section about the tracker itself (`TrackerDetails.tsx`), for anyone who can see the asset, including accounts that can't change it.
+Each asset's page under **Settings → Manage assets** has a **Tracker** section, below Name, about the tracker itself (`TrackerDetails.tsx`), for anyone who can see the asset, including accounts that can't change it.
 
 | Row | From |
 |---|---|
