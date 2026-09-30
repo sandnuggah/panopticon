@@ -197,12 +197,29 @@ input {
 /* App: map on top and asset list below on phones; list beside the map on wider screens */
 
 .app {
-  /* Pinned to the screen's edges rather than 100dvh: in the home-screen app, with the status bar
-     over the page, iOS makes 100dvh one status bar shorter than the screen, leaving a gap below. */
   position: fixed;
   inset: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* The home-screen app on iOS, with the status bar over the page: the page starts under the status
+   bar, but iOS still reports the screen one status bar shorter, so 100%, 100dvh and bottom: 0 all
+   stop 59 points short of the real bottom (measured on an iPhone: 793 of 852). 100lvh is the full
+   852. Only here: in Safari itself 100lvh is the height with its toolbars hidden, which would put
+   the asset list under them. */
+@media (display-mode: standalone) {
+  html:has(.app),
+  body:has(.app) {
+    height: 100lvh;
+    overflow: hidden;
+  }
+
+  .app {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 100lvh;
+  }
 }
 
 .map-area {
