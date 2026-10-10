@@ -246,10 +246,13 @@ export default function AssetMap({
   }, [settings.pawPrints, styleLoaded])
 
   // Trail colour for light or dark mode. Runs after the page's .dark class has changed (see
-  // public/color-scheme.js), so --trail already has the new mode's value.
+  // public/color-scheme.js), so --trail already has the new mode's value. With the Auto map style
+  // the same change also switches to the other map style, which the effect above has just started
+  // loading; maplibre throws on the old layers then, and the new style's layers get the new
+  // colours as they're added (style.load).
   useEffect(() => {
     const map = mapRef.current
-    if (!styleLoaded || !map) return
+    if (!styleLoaded || !map || !map.isStyleLoaded()) return
     recolourTrails(map)
     recolourPlaces(map)
   }, [prefersDark, styleLoaded])

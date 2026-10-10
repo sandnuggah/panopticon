@@ -481,6 +481,19 @@ html.dark:has(.k-material) {
   }
 }
 
+/* The front page's screenshots (ScreenshotGallery.tsx): like a phone, with rounded corners and a
+   thin frame, lifted off the page. */
+.screenshot {
+  height: auto;
+  border: 4px solid #1c1c1e;
+  border-radius: 28px;
+  box-shadow: 0 10px 24px -10px rgb(0 0 0 / 0.45);
+}
+
+.dark .screenshot {
+  border-color: #3a3a3c;
+}
+
 /* The front and sign-in pages' titles: paper cutouts like the scene's, in SF Pro Rounded at its heaviest
    where the system has it (iOS, macOS), else the system's bold. White paper edge, hard shadow. */
 .paper-title {

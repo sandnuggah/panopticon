@@ -7,8 +7,8 @@
 // Event forwarding, for alerts: FORWARD_URL=http://localhost:3001/hooks/traccar-events and
 // FORWARD_HEADER='Authorization: Bearer <TRACCAR_EVENTS_SECRET>' post live events there, as
 // Traccar's event.forward.url and event.forward.header do.
-// Assets: Betty (photo, at one spot for two hours after a walk), Sixten (walking a loop, live) and
-// Bamse (offline, no position). Places: Daycare (Betty's spot) and Park (on Sixten's loop, so he
+// Assets: Betty (photo, at one spot for two hours after a walk), Sixten (on a dog walk, live) and
+// Bamse (offline, no position). Places: Daycare (Betty's spot) and Home (on Sixten's walk, so he
 // keeps arriving and leaving). Only the endpoints panopticon uses, roughly as Traccar answers them.
 
 import crypto from 'node:crypto'
@@ -68,7 +68,7 @@ let nextDeviceId = 100
 
 const geofences = [
   { id: 1, name: 'Daycare', description: null, area: 'CIRCLE (59.3577 18.0912, 120)', calendarId: 0, attributes: {} },
-  { id: 2, name: 'Park', description: null, area: 'CIRCLE (59.3155 18.0745, 70)', calendarId: 0, attributes: {} },
+  { id: 2, name: 'Home', description: null, area: 'CIRCLE (59.31565 18.07455, 60)', calendarId: 0, attributes: {} },
 ]
 let nextGeofenceId = 3
 /** Device-geofence links, as "deviceId:geofenceId". */
@@ -182,12 +182,108 @@ const jitter = () => (Math.random() - 0.5) * 0.0003
   }
 }
 
-// Sixten: a loop around a block on Södermalm, about 5 km/h.
-const LOOP = { lat: 59.3155, lon: 18.072, radius: 0.0025 }
+// Sixten: a made-up dog walk on Södermalm, round and round, along real streets and paths: from
+// Nytorget to Medborgarplatsen, a sniff about Björns trädgård (the Home place), through Vitabergsparken
+// and back. The route came once from OpenStreetMap's foot router (routing.openstreetmap.de) and is
+// kept here, simplified; nothing is fetched at run time. Each point: latitude, longitude, and how
+// long he stops there (s). Walking pace varies by stretch, and the fixes wobble a few metres.
+const ROUTE = [
+  [59.31254, 18.08158, 0],
+  [59.31202, 18.07777, 0],
+  [59.31181, 18.07713, 0],
+  [59.31209, 18.07474, 0],
+  [59.31208, 18.07461, 0],
+  [59.31409, 18.07365, 0],
+  [59.31415, 18.07371, 0],
+  [59.31432, 18.07364, 0],
+  [59.31437, 18.07356, 0],
+  [59.31432, 18.07315, 0],
+  [59.31427, 18.07317, 0],
+  [59.31422, 18.07284, 40],
+  [59.31425, 18.07306, 0],
+  [59.31433, 18.07302, 0],
+  [59.31439, 18.07342, 0],
+  [59.31523, 18.07345, 0],
+  [59.31523, 18.07337, 0],
+  [59.31534, 18.07334, 0],
+  [59.31534, 18.0732, 0],
+  [59.31547, 18.07316, 0],
+  [59.31563, 18.07449, 0],
+  [59.31563, 18.07466, 90],
+  [59.31555, 18.07472, 0],
+  [59.31556, 18.07484, 0],
+  [59.31562, 18.07488, 0],
+  [59.31559, 18.07499, 0],
+  [59.31504, 18.07525, 0],
+  [59.31518, 18.07622, 0],
+  [59.31469, 18.07645, 0],
+  [59.31526, 18.08112, 0],
+  [59.31404, 18.08181, 0],
+  [59.31407, 18.08204, 0],
+  [59.31404, 18.08211, 0],
+  [59.31388, 18.08212, 0],
+  [59.3134, 18.08238, 0],
+  [59.31337, 18.08251, 0],
+  [59.31326, 18.08257, 0],
+  [59.31352, 18.08455, 0],
+  [59.31349, 18.08463, 0],
+  [59.31309, 18.08481, 0],
+  [59.31311, 18.08494, 0],
+  [59.31294, 18.08501, 0],
+  [59.31296, 18.08534, 0],
+  [59.31293, 18.08525, 0],
+  [59.31267, 18.08549, 0],
+  [59.31264, 18.08606, 0],
+  [59.3123, 18.08615, 0],
+  [59.31213, 18.08649, 0],
+  [59.31195, 18.08659, 0],
+  [59.31188, 18.08653, 45],
+  [59.31195, 18.08659, 0],
+  [59.3121, 18.08653, 0],
+  [59.3123, 18.08615, 0],
+  [59.31264, 18.08606, 0],
+  [59.31267, 18.08549, 0],
+  [59.31293, 18.08525, 0],
+  [59.31296, 18.08534, 0],
+  [59.31294, 18.08501, 0],
+  [59.31301, 18.08498, 0],
+  [59.31254, 18.08158, 0],
+]
+const WALK = ROUTE.map(([lat, lon, wait]) => ({ at: [lat, lon], wait }))
+const METRES_PER_DEGREE = 111_320
+const walkLegs = WALK.slice(1).map((stop, index) => {
+  const from = WALK[index].at
+  const dy = (stop.at[0] - from[0]) * METRES_PER_DEGREE
+  const dx = (stop.at[1] - from[1]) * METRES_PER_DEGREE * Math.cos((from[0] * Math.PI) / 180)
+  // A pace of its own for each stretch, 1.1–1.6 m/s.
+  const speed = 1.1 + ((index * 7) % 6) * 0.1
+  return { from, to: stop.at, metres: Math.hypot(dx, dy), wait: stop.wait, seconds: Math.hypot(dx, dy) / speed }
+})
+/** Small, smooth noise from a number, so the same step always gives the same wobble. */
+const wobble = (n, seed) => Math.sin(n * 0.37 + seed) * 0.6 + Math.sin(n * 1.13 + seed * 2) * 0.4
 let sixtenStep = 0
+/** Where Sixten is at a step (STEP_MS apart): walking 1.1–1.6 m/s, waiting at stops, fixes off by ~5 m. */
 function sixtenAt(step) {
-  const angle = step * 0.02
-  return [LOOP.lat + Math.sin(angle) * LOOP.radius * 0.55, LOOP.lon + Math.cos(angle) * LOOP.radius]
+  let seconds = (step * STEP_MS) / 1000
+  const lap = walkLegs.reduce((sum, leg) => sum + leg.seconds + leg.wait, 0)
+  seconds %= lap
+  let position = WALK[0].at
+  for (const leg of walkLegs) {
+    const walk = leg.seconds
+    if (seconds < walk) {
+      const along = seconds / walk
+      position = [leg.from[0] + (leg.to[0] - leg.from[0]) * along, leg.from[1] + (leg.to[1] - leg.from[1]) * along]
+      break
+    }
+    seconds -= walk
+    if (seconds < leg.wait) {
+      position = leg.to
+      break
+    }
+    seconds -= leg.wait
+  }
+  const metres = 4.5 / METRES_PER_DEGREE
+  return [position[0] + wobble(step, 1) * metres, position[1] + (wobble(step, 7) * metres) / Math.cos((position[0] * Math.PI) / 180)]
 }
 for (let t = start - 3 * 3600_000; t <= start; t += STEP_MS) {
   history.get(10).push(report(10, t, ...sixtenAt(sixtenStep++)))
