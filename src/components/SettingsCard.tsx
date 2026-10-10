@@ -271,7 +271,7 @@ function AccountView({ user }: { user: SessionUser }) {
 
   async function signOut() {
     await logout()
-    await router.navigate({ to: '/login' })
+    await router.navigate({ to: '/welcome' })
   }
 
   return (

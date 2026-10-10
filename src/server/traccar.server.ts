@@ -99,13 +99,20 @@ export async function createPasswordSession(email: string, password: string, cod
  * Public server info. `openIdEnabled` says whether Traccar has SSO configured; `readonly` and
  * `deviceReadonly` are server-wide limits on what non-admin users may change.
  */
-export async function getServerInfo(): Promise<{ openIdEnabled: boolean; readonly: boolean; deviceReadonly: boolean }> {
+export async function getServerInfo(): Promise<{
+  openIdEnabled: boolean
+  /** Traccar only accepts OpenID sign-in (`openid.force`), so passwords are refused. */
+  openIdForce: boolean
+  readonly: boolean
+  deviceReadonly: boolean
+}> {
   const response = await request('/api/server')
   await ensureOk(response, 'GET /api/server')
   const value: unknown = await response.json()
   if (!isObject(value)) throw unexpected('server is not an object')
   return {
     openIdEnabled: value.openIdEnabled === true,
+    openIdForce: value.openIdForce === true,
     readonly: value.readonly === true,
     deviceReadonly: value.deviceReadonly === true,
   }

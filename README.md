@@ -205,6 +205,10 @@ panopticon uses Traccar's own OpenID Connect setup. Once panopticon is reachable
 2. In your identity provider, add `https://panopticon.example.com/api/session/openid/callback` to the
    Traccar client's callback URLs.
 
+To offer only one way to sign in, set `SIGN_IN_METHODS=sso` (single sign-on only) or
+`SIGN_IN_METHODS=password` in `.env`; the default offers both. The sign-in page shows only those,
+and panopticon's server refuses the other.
+
 Two side effects of step 1:
 - SSO inside Traccar's own web UI stops working; password sign-in there still works.
 - Links in Traccar's emails now point at panopticon, which forwards them to `TRACCAR_PUBLIC_URL`.

@@ -1,25 +1,36 @@
 import { createServerFn } from '@tanstack/react-start'
+import { env } from './env.server'
 import { getSessionUser, signIn, signOut } from './session.server'
 import { createPasswordSession, getServerInfo, TraccarError } from './traccar.server'
 
-export type LoginResult = { ok: true } | { ok: false; error: 'invalid' | 'code-required' | 'unavailable' }
+export type LoginResult = { ok: true } | { ok: false; error: 'invalid' | 'code-required' | 'unavailable' | 'turned-off' }
 
 export const getUser = createServerFn({ method: 'GET' }).handler(() => getSessionUser())
 
-/** Whether to offer SSO on the login page. False if Traccar is unreachable; password sign-in then reports it. */
+/**
+ * The sign-in methods the page offers: those SIGN_IN_METHODS allows, SSO only when Traccar has
+ * OpenID set up, and passwords not when Traccar forces OpenID (it refuses them then). `ssoMissing`:
+ * SSO is the only method allowed but Traccar can't do it right now.
+ */
 export const getLoginOptions = createServerFn({ method: 'GET' }).handler(async () => {
+  const allowed = env().signInMethods
+  let openIdEnabled = false
+  let openIdForce = false
   try {
-    const { openIdEnabled } = await getServerInfo()
-    return { sso: openIdEnabled }
+    ;({ openIdEnabled, openIdForce } = await getServerInfo())
   } catch (error) {
+    // Unreachable: offer what's allowed; password sign-in then reports it.
     console.warn('Could not read Traccar server info:', error instanceof Error ? error.message : error)
-    return { sso: false }
   }
+  const sso = allowed.sso && openIdEnabled
+  const password = allowed.password && !(openIdForce && sso)
+  return { sso, password, ssoMissing: allowed.sso && !sso && !password }
 })
 
 export const loginWithPassword = createServerFn({ method: 'POST' })
   .validator(parseLoginInput)
   .handler(async ({ data }): Promise<LoginResult> => {
+    if (!env().signInMethods.password) return { ok: false, error: 'turned-off' }
     try {
       const result = await createPasswordSession(data.email, data.password, data.code)
       if (result.kind !== 'ok') {

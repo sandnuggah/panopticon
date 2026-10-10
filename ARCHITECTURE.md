@@ -36,6 +36,10 @@ After that, REST calls use `Authorization: Bearer <token>` and the WebSocket use
 
 The app is stateless: the only state is the cookie.
 
+### Which methods
+
+`SIGN_IN_METHODS` chooses them: `sso`, `password`, or both (`sso,password`, the default). The sign-in page offers only those (`getLoginOptions`): SSO only when Traccar has OpenID set up, and the password form not when Traccar forces OpenID (it refuses passwords then). The server enforces it too: a password sign-in gets `turned-off`, and `/auth/sso` and its callback send the browser back to the sign-in page, when that method isn't allowed. With SSO as the only method and Traccar unable to do it (OpenID off, or Traccar unreachable), the page says single sign-on isn't available right now.
+
 ### Password
 
 A server function sends `POST /api/session` with `email` and `password` (form-encoded). If Traccar replies `401` with `WWW-Authenticate: TOTP`, the form asks for the 2FA code and retries with `code`.
@@ -279,7 +283,9 @@ Each asset's page under **Assets** (the Settings card) has a **Tracker** section
 
 The look is [Konsta UI](https://konstaui.com): native-looking iOS and Material components for React, on Tailwind CSS. See [Look and feel](#look-and-feel) for how it's set up.
 
-- **Pages:** `/login`, and `/`, the map, whose Settings card holds the settings and [managing assets](#managing-assets). `/s/<link>` is a [live location link](#sharing), the only page that doesn't need signing in. The selected asset and the Settings card's view are search params (`/?asset=12&settings=asset-30`), so they survive a reload.
+- **Front page** (`/welcome`, `welcome.tsx`): where the map sends visitors who aren't signed in, and where signing out lands. A picture on top (`WelcomeScene.tsx`, inline SVG and CSS, no requests): a folded paper map with a dog, a briefcase and a bike on it as paper cutouts with white backing and hard shadows, a little like Paper Mario or Yoshi's Island, in a few RAL colours; a day map in light mode and a night map in dark mode (`--scene-*` in styles.css). The cutouts bob, the trails march and the clouds drift, all still with Reduce Motion. Then the title, centred, as a paper cutout too (`.paper-title`: SF Pro Rounded at its heaviest via `ui-rounded`, built into iOS and macOS, with a white edge and hard shadow; other systems use their bold), a one-line tagline, **Sign in** (or **Open the map** when signed in), and **What it does**: the main features as a list (live map, trails, places, alerts, live links, privacy), and that it needs a Traccar server.
+- **Sign-in page** (`/login`, `login.tsx`): "‹ Panopticon" back to the front page, "Sign in" as a paper title, and the methods `SIGN_IN_METHODS` allows (see [Which methods](#which-methods)). A session that runs out sends the browser straight here.
+- **Pages:** `/welcome` (the front page), `/login`, and `/`, the map, whose Settings card holds the settings and [managing assets](#managing-assets). `/s/<link>` is a [live location link](#sharing), the only page that doesn't need signing in. The selected asset and the Settings card's view are search params (`/?asset=12&settings=asset-30`), so they survive a reload.
 - **Map screen:** the map fills the screen, with two bars floating along the bottom like Apple Maps' (`BottomBar.tsx`, the cards in `SettingsCard.tsx`): one with the your-position button and each asset's picture, as wide as they need (stale ones grey). When they don't fit, the pictures scroll sideways while the your-position button stays put, fading out to transparent at an edge with more past it (a CSS mask, updated on scroll), and at the right, a round one of its own, the Settings button (the signed-in user's initial). Both are 64 px tall with 48 px pictures and buttons. The map's zoom buttons sit above the bar, and fitting the map to assets leaves room for it (`clearOfBottom` in map/AssetMap.tsx).
   - **Asset pictures:** the first tap selects the asset and centres the map on it (and follows it, as selecting on the map does). Tapping the selected asset's picture again re-centres it and opens its **details card** (`AssetDetailsCard.tsx`) from the bottom, like Apple Maps' place card: its picture, name, status and battery, then what it's doing, the address, when it was seen, and **Share**. The card has no backdrop, so the map can still be moved; ✕, Escape or the back gesture closes it, and focus goes back to what opened it, the asset's picture (`?details=true`, with a history entry of its own when opened here, as the Settings card has). Selecting another asset on the map replaces it.
   - **Settings card:** the button opens a card from the bottom, like Apple Maps' profile card: the user's initial, name and email, then **Assets** (with the count), **Appearance**, **Places** (the count), **Live links** (the count made in this browser) and **Account**. Under the list, small, the map data's credits (see [Map tiles](#map-tiles)). It's as tall as both, at any text size, and scrolls on short screens. The button and the card are called Settings; the card's view is the `settings` search param.
@@ -382,6 +388,7 @@ src/
   router.tsx                          also sets the per-request CSP nonce for Start's inline scripts
   routes/
     __root.tsx
+    welcome.tsx                       the front page: what Panopticon does, and Sign in
     login.tsx
     index.tsx                         map, bottom bar and Settings card (protected)
     auth.sso.ts                       server route: start SSO
@@ -452,6 +459,7 @@ src/
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
     UpdateNotice.tsx                  Update available · Reload, after a new release
+    WelcomeScene.tsx                  the front page's picture: a paper map with a dog, a briefcase and a bike
     TrackerSection.tsx                the Tracker section of an asset's page
     Share.tsx                         Share: send location, make and send live links
     RelativeTime.tsx
@@ -499,6 +507,7 @@ src/
 | `MAP_STYLE_URL` | no | maplibre style, default OpenFreeMap `liberty` |
 | `MAP_EXTRA_ORIGINS` | no | Comma-separated extra origins the map style loads from (CSP) |
 | `MAP_MATCHING_URL` | no | Valhalla for Snap to paths, e.g. `http://valhalla:8002`; see [Snap to paths](#snap-to-paths-map-matching) |
+| `SIGN_IN_METHODS` | no | `sso`, `password` or `sso,password` (default): how people may sign in; see [Which methods](#which-methods) |
 | `TRACCAR_EVENTS_SECRET` | no | What Traccar sends with forwarded events, for [alerts](#alerts); without it, alerts aren't offered |
 | `PORT`, `HOST` | no | Production server listen address, default `3000` on all interfaces |
 

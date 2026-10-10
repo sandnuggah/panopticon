@@ -45,7 +45,8 @@ export const Route = createFileRoute('/')({
   },
   beforeLoad: async () => {
     const user = await getUser()
-    if (!user) throw redirect({ to: '/login' })
+    // Not signed in: the front page, which explains the app and links to the sign-in page.
+    if (!user) throw redirect({ to: '/welcome' })
     return { user }
   },
   loader: async () => {

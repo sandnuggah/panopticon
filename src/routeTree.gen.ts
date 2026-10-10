@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as AuthSsoRouteImport } from './routes/auth.sso'
 import { Route as HooksTraccarEventsRouteImport } from './routes/hooks.traccar-events'
 import { Route as SLinkRouteImport } from './routes/s.$link'
@@ -39,6 +40,11 @@ const LiveRoute = LiveRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthSsoRoute = AuthSsoRouteImport.update({
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
+  '/welcome': typeof WelcomeRoute
   '/auth/sso': typeof AuthSsoRoute
   '/hooks/traccar-events': typeof HooksTraccarEventsRoute
   '/s/$link': typeof SLinkRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
+  '/welcome': typeof WelcomeRoute
   '/auth/sso': typeof AuthSsoRoute
   '/hooks/traccar-events': typeof HooksTraccarEventsRoute
   '/s/$link': typeof SLinkRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
+  '/welcome': typeof WelcomeRoute
   '/auth/sso': typeof AuthSsoRoute
   '/hooks/traccar-events': typeof HooksTraccarEventsRoute
   '/s/$link': typeof SLinkRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/live'
     | '/login'
+    | '/welcome'
     | '/auth/sso'
     | '/hooks/traccar-events'
     | '/s/$link'
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/live'
     | '/login'
+    | '/welcome'
     | '/auth/sso'
     | '/hooks/traccar-events'
     | '/s/$link'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/live'
     | '/login'
+    | '/welcome'
     | '/auth/sso'
     | '/hooks/traccar-events'
     | '/s/$link'
@@ -165,6 +177,7 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   LiveRoute: typeof LiveRoute
   LoginRoute: typeof LoginRoute
+  WelcomeRoute: typeof WelcomeRoute
   AuthSsoRoute: typeof AuthSsoRoute
   HooksTraccarEventsRoute: typeof HooksTraccarEventsRoute
   SLinkRoute: typeof SLinkRoute
@@ -202,6 +215,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/sso': {
@@ -261,6 +281,7 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   LiveRoute: LiveRoute,
   LoginRoute: LoginRoute,
+  WelcomeRoute: WelcomeRoute,
   AuthSsoRoute: AuthSsoRoute,
   HooksTraccarEventsRoute: HooksTraccarEventsRoute,
   SLinkRoute: SLinkRoute,

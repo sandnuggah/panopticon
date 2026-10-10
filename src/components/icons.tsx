@@ -25,6 +25,31 @@ export function BellIcon() {
   )
 }
 
+/** A paw print: trails and walks. */
+export function PawIcon() {
+  return (
+    <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
+      <g fill="currentColor">
+        <ellipse cx="12" cy="15.5" rx="5" ry="4.5" />
+        <ellipse cx="5.5" cy="10" rx="2.2" ry="2.8" />
+        <ellipse cx="9.5" cy="5.5" rx="2.2" ry="2.8" />
+        <ellipse cx="14.5" cy="5.5" rx="2.2" ry="2.8" />
+        <ellipse cx="18.5" cy="10" rx="2.2" ry="2.8" />
+      </g>
+    </svg>
+  )
+}
+
+/** A padlock: private, on your own server. */
+export function LockIcon() {
+  return (
+    <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" strokeWidth="2.2" />
+      <rect x="5" y="10" width="14" height="10.5" rx="2.5" fill="currentColor" />
+    </svg>
+  )
+}
+
 /** A map pin: places. */
 export function PinIcon() {
   return (

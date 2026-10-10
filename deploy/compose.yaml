@@ -15,6 +15,8 @@ services:
       TRACCAR_PUBLIC_URL: ${TRACCAR_PUBLIC_URL:-}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       SESSION_DAYS: ${SESSION_DAYS:-30}
+      # sso, password, or sso,password (the default): how people may sign in.
+      SIGN_IN_METHODS: ${SIGN_IN_METHODS:-}
       MAP_STYLE_URL: ${MAP_STYLE_URL:-}
       MAP_EXTRA_ORIGINS: ${MAP_EXTRA_ORIGINS:-}
       # Valhalla for Snap to paths, e.g. http://valhalla:8002 (see README.md). Optional.

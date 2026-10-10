@@ -29,6 +29,7 @@ and cleared out now and then.
 ## Look and feel
 
 - [ ] Make the sign-in page (the landing page) more exciting: today it's a plain title and two buttons
+- [ ] Update the application icon (public/icon.svg, icon-192.png, icon-512.png, apple-touch-icon.png)
 - [x] "Update available · Reload" at the top right of the map when a newer release is running: each build has an ID, the live stream sends the server's, a page from an older build shows the notice after its stream reconnects. Released as `:49` (2026-10-10); first visible on the deploy after that one
 
 ## Later / maybe

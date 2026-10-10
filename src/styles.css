@@ -275,6 +275,156 @@ html.dark:has(.k-material) {
   transform: translateX(-50%);
 }
 
+/* The front page's picture (WelcomeScene.tsx): a day map in light mode, a night map in dark mode.
+   RAL colours, approximate sRGB: 1015 light ivory, 9016 traffic white, 7016 anthracite grey,
+   5015 sky blue, 6018 yellow green; at night 5011 steel blue, 9005 jet black, 5005 signal blue,
+   6001 emerald green. */
+.scene {
+  --scene-map: #eadebd;
+  --scene-ink: #293133;
+  --scene-road: #f6f6f6;
+  --scene-river: #2271b3;
+  --scene-park: #57a639;
+  --scene-trail: #293133;
+  --scene-shadow: rgb(41 49 51 / 0.22);
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.dark .scene {
+  --scene-map: #1a2b3c;
+  --scene-ink: #0a0a0a;
+  --scene-road: #293133;
+  --scene-trail: #eadebd;
+  --scene-river: #154889;
+  --scene-park: #287233;
+  --scene-shadow: rgb(0 0 0 / 0.45);
+}
+
+.scene-map {
+  fill: var(--scene-map);
+}
+
+.scene-map-edge {
+  fill: none;
+  stroke: var(--scene-ink);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.scene-map-shadow,
+.scene-ground-shadow {
+  fill: var(--scene-shadow);
+}
+
+.scene-map-fold {
+  fill: rgb(0 0 0 / 0.07);
+}
+
+.scene-park {
+  fill: var(--scene-park);
+  stroke: var(--scene-ink);
+  stroke-width: 2.5;
+}
+
+.scene-river {
+  fill: none;
+  stroke: var(--scene-river);
+  stroke-width: 22;
+  stroke-linecap: round;
+}
+
+.scene-river-shine {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.45);
+  stroke-width: 2.5;
+  stroke-dasharray: 10 18;
+  stroke-linecap: round;
+}
+
+.scene-road-edge,
+.scene-road {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.scene-road-edge {
+  stroke: var(--scene-ink);
+  stroke-width: 13;
+}
+
+.scene-road {
+  stroke: var(--scene-road);
+  stroke-width: 8;
+}
+
+.scene-trail {
+  fill: none;
+  stroke: var(--scene-trail);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 9;
+  animation: scene-trail 1.4s linear infinite;
+}
+
+.scene-bob {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: scene-bob 2.4s ease-in-out infinite;
+}
+
+.scene-cloud {
+  animation: scene-drift 8s ease-in-out infinite alternate;
+}
+
+@keyframes scene-trail {
+  to {
+    stroke-dashoffset: -9.1;
+  }
+}
+
+@keyframes scene-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(3deg);
+  }
+}
+
+@keyframes scene-drift {
+  to {
+    transform: translateX(14px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-trail,
+  .scene-bob,
+  .scene-cloud {
+    animation: none;
+  }
+}
+
+/* The front and sign-in pages' titles: paper cutouts like the scene's, in SF Pro Rounded at its heaviest
+   where the system has it (iOS, macOS), else the system's bold. White paper edge, hard shadow. */
+.paper-title {
+  color: var(--color-primary);
+  font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  -webkit-text-stroke: 7px #f6f6f6;
+  paint-order: stroke fill;
+  text-shadow: 3px 4px 0 rgb(41 49 51 / 0.28);
+}
+
+.dark .paper-title {
+  text-shadow: 3px 4px 0 rgb(0 0 0 / 0.6);
+}
+
 /* Places (map/placeLayers.ts): the name at the top edge of the area. */
 .place-label {
   padding: 0 6px 2px;

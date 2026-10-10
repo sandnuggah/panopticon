@@ -9,6 +9,7 @@ export type SsoError = 'sso-unavailable' | 'sso-failed' | 'sso-no-account' | 'ss
 
 /** GET /auth/sso: asks Traccar where to send the browser and remembers the state. */
 export async function startSso(): Promise<Response> {
+  if (!env().signInMethods.sso) return loginWithError('sso-unavailable')
   try {
     const providerUrl = await startOpenIdLogin()
     const state = new URL(providerUrl).searchParams.get('state')
@@ -23,6 +24,7 @@ export async function startSso(): Promise<Response> {
 
 /** GET /api/session/openid/callback: the identity provider sends the browser back here. */
 export async function finishSso(request: Request): Promise<Response> {
+  if (!env().signInMethods.sso) return loginWithError('sso-unavailable')
   const url = new URL(request.url)
   const expectedState = await takeSsoState()
   if (!expectedState || url.searchParams.get('state') !== expectedState) {

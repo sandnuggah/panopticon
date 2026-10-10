@@ -14,6 +14,8 @@ type Env = {
    * so only it can trigger alerts; without it, alerts aren't offered (see alerts.server.ts).
    */
   eventsSecret: string | undefined
+  /** How people may sign in (SIGN_IN_METHODS): single sign-on through Traccar, Traccar passwords, or both. */
+  signInMethods: { sso: boolean; password: boolean }
 }
 
 const DEFAULT_MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
@@ -34,6 +36,7 @@ export function env(): Env {
       mapOrigins: [new URL(mapStyleUrl).origin, ...readMapExtraOrigins()],
       mapMatchingUrl: readUrl('MAP_MATCHING_URL', false),
       eventsSecret: readEventsSecret(),
+      signInMethods: readSignInMethods(),
     }
   }
   return cached
@@ -81,6 +84,17 @@ function readSessionSecret(): string {
     throw new Error('SESSION_SECRET must be at least 32 characters. Generate one with: openssl rand -base64 32')
   }
   return secret
+}
+
+function readSignInMethods(): Env['signInMethods'] {
+  const raw = process.env.SIGN_IN_METHODS?.trim()
+  if (!raw) return { sso: true, password: true }
+  const methods = raw.split(',').map((method) => method.trim().toLowerCase())
+  const unknown = methods.filter((method) => method !== 'sso' && method !== 'password')
+  if (unknown.length > 0 || methods.length === 0) {
+    throw new Error(`SIGN_IN_METHODS must be sso, password, or sso,password; got ${raw}`)
+  }
+  return { sso: methods.includes('sso'), password: methods.includes('password') }
 }
 
 function readEventsSecret(): string | undefined {
