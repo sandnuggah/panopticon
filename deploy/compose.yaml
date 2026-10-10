@@ -19,6 +19,8 @@ services:
       MAP_EXTRA_ORIGINS: ${MAP_EXTRA_ORIGINS:-}
       # Valhalla for Snap to paths, e.g. http://valhalla:8002 (see README.md). Optional.
       MAP_MATCHING_URL: ${MAP_MATCHING_URL:-}
+      # What Traccar sends with forwarded events, for alerts (see README.md). Optional.
+      TRACCAR_EVENTS_SECRET: ${TRACCAR_EVENTS_SECRET:-}
     ports:
       # Only the reverse proxy on this host should reach it. If your proxy runs in Docker,
       # drop this and put both on a shared network instead.

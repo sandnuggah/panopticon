@@ -135,7 +135,8 @@ push service checks the address.
    ```bash
    openssl rand -hex 24
    ```
-2. Set it in panopticon's `.env` and restart panopticon:
+2. Set it in panopticon's `.env` (next to `deploy/compose.yaml`) and restart panopticon with
+   `docker compose up -d`:
    ```
    TRACCAR_EVENTS_SECRET=<the secret>
    ```
