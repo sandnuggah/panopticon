@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { sharedImageResponse } from '../server/sharing.server'
+import { sharedImageResponse } from '../server/liveLinks.server'
 
 export const Route = createFileRoute('/s_/$link/image')({
   server: {

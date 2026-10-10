@@ -10,10 +10,10 @@ import { useAddress } from '../lib/useAddress'
 import { useNow } from '../lib/useNow'
 import { useSharedAsset } from '../lib/useSharedAsset'
 import { getMapOptions } from '../server/map.functions'
-import { getSharedAddress, getSharedView } from '../server/sharing.functions'
+import { getSharedAddress, getSharedView } from '../server/liveLinks.functions'
 
 // A live location link: one asset, followed live, for anyone with the link and without signing in.
-// See sharing.server.ts for what it shows and how it ends.
+// See liveLinks.server.ts for what it shows and how it ends.
 
 const AssetMap = lazy(() => import('../components/AssetMap'))
 

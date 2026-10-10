@@ -194,15 +194,15 @@ The selected asset's card shows its street address, e.g. "Storviltsgatan 5, Stoc
 - The link is Google Maps' documented search URL with the exact coordinates, since it opens for anyone, on any phone, with or without the app. It's only text the user sends; panopticon itself calls nothing.
 - Browsers without a share sheet (desktop Firefox) copy the message instead and say so. Closing the share sheet does nothing.
 
-**Live location links** (`/s/<link>`) show one asset, followed live on a map, to anyone with the link and without signing in, for 1, 8 or 24 hours (`sharing.server.ts`, `s.$link.tsx`).
+**Live location links** (`/s/<link>`) show one asset, followed live on a map, to anyone with the link and without signing in, for 1, 8 or 24 hours (`liveLinks.server.ts`, `s.$link.tsx`).
 - **Why not Traccar's own sharing** (`POST /api/share/device`): it makes one temporary user per sharer and device and reuses it, and that user keeps the expiry of the first share. Once the first link expires, every later one for that device fails with "User has expired", and a normal user can't fix it.
-- **Making one:** the server checks the user can see the asset, asks Traccar for a new token for the same user expiring with the link (`POST /api/session/token`; Traccar caps it at the session's own expiry, and so does panopticon), and seals `{asset id, token, expiry}` with AES-256-GCM under a key derived from `SESSION_SECRET` by HKDF (`shareLink.server.ts`). That's the link: about 250 characters with a real Traccar token. Nothing is stored, so the read-only container stays stateless.
+- **Making one:** the server checks the user can see the asset, asks Traccar for a new token for the same user expiring with the link (`POST /api/session/token`; Traccar caps it at the session's own expiry, and so does panopticon), and seals `{asset id, token, expiry}` with AES-256-GCM under a key derived from `SESSION_SECRET` by HKDF (`liveLinkSeal.server.ts`). That's the link: about 250 characters with a real Traccar token. Nothing is stored, so the read-only container stays stateless.
 - **Opening one:** the server unseals it, checks the expiry, and reads only that asset with the link's token. The viewer gets the asset's name, picture, status, position and address; never its battery, trail, tracker ID, or anything about the sharer or their other assets. Its live stream (`/s/<link>/live`) relays Traccar's socket filtered to that asset, and its picture comes from `/s/<link>/image`.
 - **Ending:** at the expiry, Traccar refuses the token and the stream sends an `ended` event; the page then says the link has expired. **Stop** revokes the token (`POST /api/session/token/revoke`, with the link's own token so it can only revoke itself). Traccar keeps an already-open socket going after that, so each stream checks every minute that the token still works and ends if not: a stopped link goes blank within a minute even on a page that's open. Signing out of panopticon doesn't end links; they have their own tokens.
 - **Stop needs the link:** panopticon keeps no list, so the links made in a browser are kept in its localStorage (`liveLinks.ts`, with the asset's name) and listed in the Settings card's **Live links**, each with Stop. Other browsers don't see them.
 - **No "share" in class names or ids:** content blockers' social filter lists hide elements such as `.share-menu` and `.share-icon` (to remove share widgets from sites). On an iPhone with one, the menu got `display: none` and only its backdrop showed. The menu uses `location-*` and the link page `link-*` instead.
 - **Safari and the share sheet:** Safari only opens it straight after a tap. Making a link takes a request first, so if Safari refuses, the Share button turns into **Send link** for a second tap. If that fails too (no share sheet or clipboard, as on a page without HTTPS), the link is shown in a field to copy by hand.
-- **Security:** the link is a password to where that asset is until it expires, and anyone it's forwarded to can use it. It can't be read, edited or forged without `SESSION_SECRET` (tests: `shareLink.test.ts`). If the secret leaked, a link would be as powerful as a session cookie for that account until it expires; that's the same exposure as the cookie itself, and why links last at most 24 hours. The token never reaches the viewer's browser, and Traccar isn't reachable directly anyway. Pages are `noindex`, and `Referrer-Policy: same-origin` keeps the link out of requests to the tile server. Your reverse proxy's access log will contain links if it logs paths.
+- **Security:** the link is a password to where that asset is until it expires, and anyone it's forwarded to can use it. It can't be read, edited or forged without `SESSION_SECRET` (tests: `liveLinkSeal.test.ts`). If the secret leaked, a link would be as powerful as a session cookie for that account until it expires; that's the same exposure as the cookie itself, and why links last at most 24 hours. The token never reaches the viewer's browser, and Traccar isn't reachable directly anyway. Pages are `noindex`, and `Referrer-Policy: same-origin` keeps the link out of requests to the tile server. Your reverse proxy's access log will contain links if it logs paths.
 
 ## Battery
 
@@ -378,9 +378,9 @@ src/
     trails.functions.ts               getTrails (position history)
     security.server.ts                CSP nonce + security headers
     live.server.ts                    /live: WebSocket → SSE relay (also used by live links)
-    sharing.server.ts                 live location links: make, open, stream, stop
-    sharing.functions.ts              createLink / stopLink (signed in), getSharedView / getSharedAddress (public)
-    shareLink.server.ts               sealing links (AES-GCM, key from SESSION_SECRET) + tests
+    liveLinks.server.ts               live location links: make, open, stream, stop
+    liveLinks.functions.ts            createLink / stopLink (signed in), getSharedView / getSharedAddress (public)
+    liveLinkSeal.server.ts            sealing links (AES-GCM, key from SESSION_SECRET) + tests
     sso.server.ts                     /auth/sso, callback, Traccar email-link redirects
   components/
     AssetMap.tsx                      maplibre map + markers (browser only, lazy)

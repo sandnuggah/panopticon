@@ -6,7 +6,7 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:cr
 // browser, and a link can't be read, edited or forged without the secret. Only node:crypto here,
 // so Node can run its tests directly.
 
-export type ShareLinkData = {
+export type LiveLinkData = {
   assetId: number
   /** A Traccar token for the sharer's account, expiring with the link. */
   token: string
@@ -24,7 +24,7 @@ function key(secret: string): Buffer {
   return Buffer.from(hkdfSync('sha256', secret, 'panopticon', 'share-link-v1', 32))
 }
 
-export function sealShareLink(data: ShareLinkData, secret: string): string {
+export function sealLiveLink(data: LiveLinkData, secret: string): string {
   const iv = randomBytes(IV_BYTES)
   const cipher = createCipheriv('aes-256-gcm', key(secret), iv)
   cipher.setAAD(Buffer.from([VERSION]))
@@ -34,7 +34,7 @@ export function sealShareLink(data: ShareLinkData, secret: string): string {
 }
 
 /** The link's contents, or null when it isn't one of ours (malformed, edited, or another secret). */
-export function unsealShareLink(link: string, secret: string): ShareLinkData | null {
+export function unsealLiveLink(link: string, secret: string): LiveLinkData | null {
   if (!/^[A-Za-z0-9_-]{40,2000}$/.test(link)) return null
   const bytes = Buffer.from(link, 'base64url')
   if (bytes.length <= 1 + IV_BYTES + TAG_BYTES || bytes[0] !== VERSION) return null

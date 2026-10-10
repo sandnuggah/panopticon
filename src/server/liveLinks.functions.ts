@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { LIVE_LINK_HOURS } from '../lib/share'
 import { sessionExpiresAt, withToken } from './session.server'
-import { createLiveLink, loadSharedView, sharedAddress, stopLiveLink } from './sharing.server'
+import { createLiveLink, loadSharedView, sharedAddress, stopLiveLink } from './liveLinks.server'
 
 /** Signed in: a new live location link for one asset. */
 export const createLink = createServerFn({ method: 'POST' })

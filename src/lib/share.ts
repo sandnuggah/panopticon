@@ -2,7 +2,7 @@ import type { Asset, AssetLocation } from './asset'
 
 // Sharing where an asset is through the phone's share sheet: once, as a sentence and a map link that
 // opens for anyone, or as a live location link to a page that follows it until the link expires
-// (see sharing.server.ts).
+// (see liveLinks.server.ts).
 
 /** A fix older than this is shared as where the asset was, with the time. */
 const FRESH_MS = 5 * 60 * 1000

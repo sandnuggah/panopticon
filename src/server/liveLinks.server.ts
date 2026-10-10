@@ -6,7 +6,7 @@ import { toAsset, toDeviceUpdate, toPositionUpdate } from './assets.server'
 import { env } from './env.server'
 import { imageResponse } from './images.server'
 import { connectUpstream, relay } from './live.server'
-import { sealShareLink, unsealShareLink, type ShareLinkData } from './shareLink.server'
+import { sealLiveLink, unsealLiveLink, type LiveLinkData } from './liveLinkSeal.server'
 import {
   createToken,
   getDevice,
@@ -18,7 +18,7 @@ import {
 } from './traccar.server'
 
 // Live location links: /s/<link> shows one asset, following it live, to anyone with the link and
-// without signing in, until the link expires or is stopped. The link is sealed (shareLink.server.ts)
+// without signing in, until the link expires or is stopped. The link is sealed (liveLinkSeal.server.ts)
 // and holds a Traccar token of the sharer's own, made for this link and expiring with it, so Traccar
 // enforces the expiry too. Stopping a link revokes that token. What a viewer gets is deliberately
 // less than the app shows: the asset's name, picture, position, status and address; never its
@@ -35,12 +35,12 @@ export async function createLiveLink(
   if (!(await getDevice(sessionToken, assetId))) throw new Error('No such asset')
   const expiresAt = Math.min(Date.now() + hours * 60 * 60 * 1000, sessionExpiresAt)
   const token = await createToken(sessionToken, new Date(expiresAt))
-  return { link: sealShareLink({ assetId, token, expiresAt }, env().sessionSecret), expiresAt }
+  return { link: sealLiveLink({ assetId, token, expiresAt }, env().sessionSecret), expiresAt }
 }
 
 /** Stops a link at once: its token is revoked, and open pages end within a minute (see relay). */
 export async function stopLiveLink(link: string): Promise<void> {
-  const data = unsealShareLink(link, env().sessionSecret)
+  const data = unsealLiveLink(link, env().sessionSecret)
   if (!data || data.expiresAt <= Date.now()) return
   try {
     // With the link's own token, so it only ever revokes itself.
@@ -111,17 +111,17 @@ export async function sharedLiveResponse(request: Request, link: string): Promis
   })
 }
 
-type Opened = { kind: 'ok'; data: ShareLinkData } | { kind: 'invalid' } | { kind: 'expired' }
+type Opened = { kind: 'ok'; data: LiveLinkData } | { kind: 'invalid' } | { kind: 'expired' }
 
 function openLink(link: string): Opened {
-  const data = unsealShareLink(link, env().sessionSecret)
+  const data = unsealLiveLink(link, env().sessionSecret)
   if (!data) return { kind: 'invalid' }
   if (data.expiresAt <= Date.now()) return { kind: 'expired' }
   return { kind: 'ok', data }
 }
 
 /** The asset as a viewer sees it, or null when the sharer can no longer see it either. */
-async function loadShared(data: ShareLinkData, link: string): Promise<Asset | null> {
+async function loadShared(data: LiveLinkData, link: string): Promise<Asset | null> {
   const [device, positions] = await Promise.all([getDevice(data.token, data.assetId), getLatestPositions(data.token)])
   if (!device || device.disabled) return null
   const asset = toAsset(

@@ -3,9 +3,9 @@ import { BlockFooter, Button, List, ListItem } from 'konsta/react'
 import { useLiveLinks, type LiveLink } from '../lib/liveLinks'
 import { formatTime } from '../lib/share'
 import { useNow } from '../lib/useNow'
-import { stopLink } from '../server/sharing.functions'
+import { stopLink } from '../server/liveLinks.functions'
 
-/** The live location links made in this browser, each with Stop (see sharing.server.ts). */
+/** The live location links made in this browser, each with Stop (see liveLinks.server.ts). */
 export function LiveLinksList({ listColors }: { listColors?: { strongBgIos: string } }) {
   const now = useNow(30_000)
   const [links, , removeLink] = useLiveLinks(now)

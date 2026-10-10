@@ -7,7 +7,7 @@ import { useLiveLinks, type LiveLink } from '../lib/liveLinks'
 import { LIVE_LINK_HOURS, liveLinkShare, locationShare } from '../lib/share'
 import { shareOrCopy } from '../lib/shareSheet'
 import { useNow } from '../lib/useNow'
-import { createLink } from '../server/sharing.functions'
+import { createLink } from '../server/liveLinks.functions'
 import { Backdrop, CARD_BG, CloseButton, pageCardClass, ROWS } from './cards'
 
 type Props = {
@@ -22,7 +22,7 @@ const NOTICE_MS = 3_000
 
 /**
  * Share, and the Share card it opens, a second-level card like Settings' pages: send where the
- * asset is once, or share it live for 1, 8 or 24 hours (see sharing.server.ts). The card is drawn
+ * asset is once, or share it live for 1, 8 or 24 hours (see liveLinks.server.ts). The card is drawn
  * into the map screen (a portal), so it covers the screen rather than the details card it's in. While a live link made in this browser is active, Sharing live beside it
  * opens Settings → Live links, where links are stopped.
  */

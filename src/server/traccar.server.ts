@@ -178,7 +178,7 @@ export async function tokenWasRejected(token: string, error: unknown): Promise<b
 
 /**
  * A new token for the same user, expiring at `expiresAt` (Traccar caps it at the current token's
- * own expiry). Used for live location links; see sharing.server.ts.
+ * own expiry). Used for live location links; see liveLinks.server.ts.
  */
 export async function createToken(token: string, expiresAt: Date): Promise<string> {
   const response = await request('/api/session/token', {
