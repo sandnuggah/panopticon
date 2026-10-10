@@ -15,7 +15,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { assetInitial, isStale, type Asset } from '../lib/asset'
 import type { TrailPoint, Trails } from '../lib/trail'
 import { walkKey } from '../lib/matching'
-import { classifyTrail, type LatLon } from '../lib/segments'
+import { classifyTrail, mergeOverlappingStays, type LatLon, type Place } from '../lib/segments'
 import { useMyPosition, type MyPosition } from '../lib/useMyPosition'
 import { useNow } from '../lib/useNow'
 import { resolveStyle, type MapStyle } from '../lib/mapStyles'
@@ -604,6 +604,8 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
         coordinates: coordinates.map((point) => [point.lon, point.lat]),
       },
     })
+    // Stays are drawn after the loop: overlapping ones as one circle.
+    const stays: Place[] = []
     for (const piece of classifyTrail(points)) {
       if (piece.kind === 'move') {
         const walk = alongRoads(piece.points, snappedWalks[walkKey(piece.points)])
@@ -613,22 +615,18 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
         }
         paws.push(line('move', walk, walk.at(-1)!.time))
       } else if (piece.kind === 'stay') {
-        trail.push({
-          type: 'Feature',
-          properties: {
-            id: Number(id),
-            kind: 'stay',
-            opacity: opacity(piece.to),
-          },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [circle(piece.center, piece.radius)],
-          },
-        })
+        stays.push(piece)
       } else {
         // Through the fixes on the way; legs without GPS are straight lines, dotted.
         for (const leg of piece.legs) trail.push(line(leg.kind, leg.points, leg.points.at(-1)!.time))
       }
+    }
+    for (const place of mergeOverlappingStays(stays)) {
+      trail.push({
+        type: 'Feature',
+        properties: { id: Number(id), kind: 'stay', opacity: opacity(place.to) },
+        geometry: { type: 'Polygon', coordinates: [circle(place.center, place.radius)] },
+      })
     }
   }
   return {

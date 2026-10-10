@@ -64,6 +64,45 @@ export type Activity = 'vehicle' | 'underground'
 /** Staying put right now: since when, and whether that's when it began or only when the points do. */
 export type Stay = { since: number; began: boolean }
 
+/** A circle drawn on the map for one or more stays (see mergeOverlappingStays). */
+export type Place = { center: LatLon; radius: number; to: number }
+
+/**
+ * Stays whose circles overlap, whenever they were (back at the same place later, home on two
+ * days), as one circle around both, until no circles overlap. For drawing: the trail itself keeps
+ * each visit, so "Here since" comes from the current one. `to` is the latest visit's end, so a
+ * place fades by when it was last there.
+ */
+export function mergeOverlappingStays(stays: Place[]): Place[] {
+  const places = stays.map(({ center, radius, to }) => ({ center, radius, to }))
+  for (let merged = true; merged; ) {
+    merged = false
+    for (let i = 0; i < places.length && !merged; i++) {
+      for (let j = i + 1; j < places.length && !merged; j++) {
+        const [a, b] = [places[i]!, places[j]!]
+        if (distance(a.center, b.center) >= a.radius + b.radius) continue
+        places[i] = { ...enclosing(a, b), to: Math.max(a.to, b.to) }
+        places.splice(j, 1)
+        merged = true
+      }
+    }
+  }
+  return places
+}
+
+/** The smallest circle around two circles. Close enough for circles of a few hundred metres. */
+function enclosing(a: Place, b: Place): Omit<Place, 'to'> {
+  const d = distance(a.center, b.center)
+  if (d + b.radius <= a.radius) return a
+  if (d + a.radius <= b.radius) return b
+  const radius = (d + a.radius + b.radius) / 2
+  const along = (radius - a.radius) / d
+  return {
+    center: { lat: a.center.lat + (b.center.lat - a.center.lat) * along, lon: a.center.lon + (b.center.lon - a.center.lon) * along },
+    radius,
+  }
+}
+
 /** Great-circle distance in metres. */
 export function distance(a: LatLon, b: LatLon): number {
   const toRad = (degrees: number) => (degrees * Math.PI) / 180
