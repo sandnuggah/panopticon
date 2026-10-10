@@ -112,7 +112,7 @@ Consequences of pointing `web.url` at this app:
   - The stream ends (Traccar closed the socket): the browser reconnects after 5 s, then reloads the list and trail history to fill the gap.
   - The stream is refused: `/live` can't tell from the socket why, so it checks the token with a REST call. If the token is dead it clears the session and returns 401, and the page goes to `/login`. Otherwise it returns 502; the page keeps what it has, shows "Offline, retrying" and retries with backoff (5 s doubling to 60 s).
 - **Phones:** background tabs get suspended, so when the page becomes visible again it reloads the list and trail history and reopens the stream.
-- **Live indicator:** "Live", "Connecting…" or "Offline, retrying", as a pill floating over the map's top-left corner (zoom controls are top-right), so a still map isn't mistaken for a still asset.
+- **Live indicator:** "Live", "Connecting…" or "Offline, retrying", as a pill floating over the map's top-left corner, so a still map isn't mistaken for a still asset.
 - **Scale:** one upstream socket per open tab. At 1–5 assets and a handful of users that's fine.
 
 ## Trail
