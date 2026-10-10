@@ -1,8 +1,9 @@
-import { lazy, Suspense, useCallback } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import { ClientOnly, createFileRoute } from '@tanstack/react-router'
 import { Page } from 'konsta/react'
 import { AssetAvatar } from '../components/AssetAvatar'
 import { LiveIndicator } from '../components/LiveIndicator'
+import { MapCredits } from '../components/MapCredits'
 import { RelativeTime } from '../components/RelativeTime'
 import type { MapStyle } from '../lib/mapStyles'
 import { formatTime, type SharedView } from '../lib/share'
@@ -50,6 +51,9 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
   const lookUp = useCallback(() => getSharedAddress({ data: link }), [link])
   const address = useAddress(asset, lookUp) ?? view.address ?? undefined
   const now = useNow(30_000)
+  // Your own position, from the map's buttons; and the map data's credits, shown in the panel.
+  const [showMe, setShowMe] = useState(false)
+  const [credits, setCredits] = useState<string[]>([])
   const mapPlaceholder = <div className="map map-placeholder" />
 
   return (
@@ -70,6 +74,10 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
               focusToken={0}
               onSelect={nothing}
               onDeselect={nothing}
+              buttons="top-right"
+              showMe={showMe}
+              onShowMeChange={setShowMe}
+              onAttribution={setCredits}
             />
           </Suspense>
         </ClientOnly>
@@ -99,6 +107,7 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
               Shared until {formatTime(view.expiresAt, now)}
             </p>
           </div>
+          <MapCredits credits={credits} className="pt-3" />
         </div>
       </section>
     </main>

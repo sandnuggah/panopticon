@@ -123,6 +123,7 @@ function Home() {
               focusToken={focusToken}
               onSelect={select}
               onDeselect={deselect}
+              buttons="above-bar"
               showMe={showMe}
               onShowMeChange={setShowMe}
               onAttribution={setAttribution}

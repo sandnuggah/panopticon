@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { AttributionControl, LngLatBounds, MapLibreMap, Marker, NavigationControl, setWorkerUrl } from 'maplibre-gl'
+import { LngLatBounds, MapLibreMap, Marker, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 // maplibre looks for its worker next to its own file, which breaks once bundled.
 // Let Vite bundle the worker and hand maplibre the resulting same-origin URL.
@@ -11,17 +11,15 @@ import { useMyPosition, type MyPosition } from '../../lib/useMyPosition'
 import { useNow } from '../../lib/useNow'
 import { resolveStyle, type MapStyle } from '../../lib/mapStyles'
 import { useSettings } from '../../lib/settings'
-import { MapButtonControl } from './mapControls'
-import { addMyPositionLayer, createMyPositionDot, MY_POSITION_ICON, setAccuracyCircle } from './myPosition'
+import { addMyPositionLayer, createMyPositionDot, setAccuracyCircle } from './myPosition'
 import { circle } from './geometry'
 import { createMarkerElement, updateMarkerElement } from './markers'
 import { addTrailLayers, recolourTrails, setTrails, showPawPrints } from './trailLayers'
-import { ZoomButtons } from './ZoomButtons'
+import { MapButtons } from './MapButtons'
 
 setWorkerUrl(workerUrl)
 
 const ASSET_ZOOM = 15
-const ATTRIBUTION_SECONDS = 5
 /** How long the map takes to glide to the followed asset's new position. */
 const FOLLOW_MS = 1000
 /** How close to the middle of the map (px) a selected asset counts as centred. */
@@ -45,17 +43,16 @@ type Props = {
   focusToken: number
   onSelect: (id: number) => void
   onDeselect: () => void
+  /** Where the map's buttons go (see MapButtons): above the bottom bar, or top right with your position. */
+  buttons: 'above-bar' | 'top-right'
+  /** Your own position on the map, turned on and off by the bottom bar or the map's buttons. */
+  showMe: boolean
+  onShowMeChange: (on: boolean) => void
   /**
-   * Your own position, when a button outside the map turns it on and off (the map screen's bottom
-   * bar). Without these the map has its own button among its controls (live link pages).
+   * Gets the map data's credits (HTML from the map style's sources), which the page shows: in the
+   * Settings card on the map screen, in the panel on live link pages. The map shows none itself.
    */
-  showMe?: boolean
-  onShowMeChange?: (on: boolean) => void
-  /**
-   * Gets the map data's credits (HTML from the map style's sources) to show elsewhere, the
-   * Settings card on the map screen. Without it the map shows them itself, as an ⓘ button.
-   */
-  onAttribution?: (attributions: string[]) => void
+  onAttribution: (attributions: string[]) => void
 }
 
 /** Browser-only: load with React.lazy inside <ClientOnly>. */
@@ -69,7 +66,8 @@ export default function AssetMap({
   focusToken,
   onSelect,
   onDeselect,
-  showMe: showMeProp,
+  buttons,
+  showMe,
   onShowMeChange,
   onAttribution,
 }: Props) {
@@ -106,23 +104,13 @@ export default function AssetMap({
     setPausedAt(focusTokenRef.current)
   }
 
-  // Your own position (useMyPosition): off until a button turns it on, the bottom bar's or the
-  // map's own. The first fix frames you and the selected asset together, or just you.
-  const [ownShowMe, setOwnShowMe] = useState(false)
-  const controlsMe = onShowMeChange !== undefined
-  const showMe = controlsMe ? (showMeProp ?? false) : ownShowMe
-  const setShowMe = onShowMeChange ?? setOwnShowMe
-  const { position: me, note } = useMyPosition(showMe, () => setShowMe(false))
-  const toggleMeRef = useRef(() => {})
-  useEffect(() => {
-    toggleMeRef.current = () => setShowMe(!showMe)
-  })
-  const ownButtonRef = useRef(!controlsMe)
+  // Your own position (useMyPosition): off until a button turns it on. The first fix frames you and
+  // the selected asset together, or just you.
+  const { position: me, note } = useMyPosition(showMe, () => onShowMeChange(false))
   const onAttributionRef = useRef(onAttribution)
   useEffect(() => {
     onAttributionRef.current = onAttribution
   })
-  const controlRef = useRef<MapButtonControl | null>(null)
   const meMarkerRef = useRef<Marker | null>(null)
   const framedRef = useRef(false)
 
@@ -159,56 +147,24 @@ export default function AssetMap({
       // Added below, at the top.
       attributionControl: false,
     })
-    // On live link pages, maplibre's zoom and position buttons, top right. The map screen has its
-    // own zoom buttons instead (ZoomButtons, below), matching the bottom bar.
-    if (ownButtonRef.current) {
-      map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
-      const control = new MapButtonControl('my-position-button', MY_POSITION_ICON, () => toggleMeRef.current(), {
-        off: 'Show my position',
-        on: 'Hide my position',
-      })
-      map.addControl(control, 'top-right')
-      controlRef.current = control
-    }
     // Every style load, the first and after switching: the trails and your position go on top.
     map.on('style.load', () => {
       addTrailLayers(map)
       addMyPositionLayer(map)
       setStyleLoaded(true)
     })
-    // The map data's credits. On the map screen they're handed out to the Settings card, read from
-    // the style's sources as they load (as maplibre's own control does), and the map shows none.
-    let collapseAttribution: ReturnType<typeof setTimeout> | undefined
-    if (onAttributionRef.current) {
-      let reported = ''
-      const report = () => {
-        const sources = Object.keys(map.getStyle()?.sources ?? {})
-        const credits = [...new Set(sources.map((id) => map.getSource(id)?.attribution).filter((text): text is string => !!text))]
-        if (credits.join('\n') === reported) return
-        reported = credits.join('\n')
-        onAttributionRef.current?.(credits)
-      }
-      map.on('styledata', report)
-      map.on('sourcedata', report)
-    } else {
-      // Elsewhere (live link pages), maplibre's ⓘ in the top-right corner, below the buttons. The
-      // licence lets it shrink to the button. The first time the map opens in this browser it's
-      // shown in full: maplibre collapses it on drag, and this does the same on a timer, counted
-      // from when the style has loaded and the attribution has something to show. After that it
-      // starts as the button. Marking the container compact up front stops maplibre from opening
-      // it when the attributions arrive.
-      map.addControl(new AttributionControl({ compact: true }), 'top-right')
-      const attribution = map.getContainer().querySelector('.maplibregl-ctrl-attrib')
-      const firstTime = !attributionShown()
-      if (!firstTime) attribution?.classList.add('maplibregl-compact')
-      map.on('load', () => {
-        if (!firstTime) return
-        markAttributionShown()
-        collapseAttribution = setTimeout(() => {
-          attribution?.classList.remove('maplibregl-compact-show')
-        }, ATTRIBUTION_SECONDS * 1000)
-      })
+    // The map data's credits, read from the style's sources as they load (as maplibre's own
+    // control does) and handed to the page, which shows them; the map shows none itself.
+    let reported = ''
+    const reportAttribution = () => {
+      const sources = Object.keys(map.getStyle()?.sources ?? {})
+      const credits = [...new Set(sources.map((id) => map.getSource(id)?.attribution).filter((text): text is string => !!text))]
+      if (credits.join('\n') === reported) return
+      reported = credits.join('\n')
+      onAttributionRef.current(credits)
     }
+    map.on('styledata', reportAttribution)
+    map.on('sourcedata', reportAttribution)
 
     map.on('dragstart', (event) => {
       // A pinch also nudges the centre, which maplibre reports as a drag; that's zooming.
@@ -237,10 +193,8 @@ export default function AssetMap({
     mapRef.current = map
     const markers = markersRef.current
     return () => {
-      clearTimeout(collapseAttribution)
       markers.clear()
       meMarkerRef.current = null
-      controlRef.current = null
       map.remove()
       mapRef.current = null
       cameraPlacedRef.current = false
@@ -365,7 +319,6 @@ export default function AssetMap({
   }, [following])
 
   useEffect(() => {
-    controlRef.current?.setOn(showMe)
     if (showMe) framedRef.current = false
   }, [showMe])
 
@@ -396,7 +349,7 @@ export default function AssetMap({
   return (
     <>
       <div ref={containerRef} className="map" />
-      {!ownButtonRef.current && <ZoomButtons map={mapRef} />}
+      <MapButtons map={mapRef} placement={buttons} showMe={showMe} onToggleMe={() => onShowMeChange(!showMe)} />
       {note && (
         <p className="my-position-note" role="status">
           {note}
@@ -433,25 +386,6 @@ function frameMe(map: MapLibreMap, me: MyPosition, asset: LatLon | undefined) {
     maxZoom: MY_POSITION_ZOOM + 1,
     duration: 800,
   })
-}
-
-const ATTRIBUTION_KEY = 'panopticon.attributionShown'
-
-/** Whether the map's attribution has been shown in full in this browser (see the map's setup). */
-function attributionShown(): boolean {
-  try {
-    return localStorage.getItem(ATTRIBUTION_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function markAttributionShown() {
-  try {
-    localStorage.setItem(ATTRIBUTION_KEY, '1')
-  } catch {
-    // Storage unavailable: it's shown in full each time, as before.
-  }
 }
 
 /** Even padding, plus room for the bottom bar along the map's bottom edge. */

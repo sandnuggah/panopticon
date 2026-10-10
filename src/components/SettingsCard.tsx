@@ -14,6 +14,7 @@ import { AssetsList } from './AssetsList'
 import { Backdrop, CARD_BG, CloseButton, pageCardClass, ROWS } from './cards'
 import { AppearanceIcon, BackIcon, ListIcon, LiveIcon, PersonIcon } from './icons'
 import { LiveLinksList } from './LiveLinksList'
+import { MapCredits } from './MapCredits'
 import { UserInitial } from './UserInitial'
 
 /**
@@ -236,16 +237,7 @@ function MainView({ user, assetCount, attribution, onShow }: MainProps) {
         />
       </List>
       {/* The map data's credits, which the licence requires: here rather than on the map. */}
-      {attribution.length > 0 && (
-        <p className="px-8 pb-4 text-center text-xs opacity-60">
-          {attribution.map((html, index) => (
-            <span key={html}>
-              {index > 0 && ' · '}
-              {creditParts(html)}
-            </span>
-          ))}
-        </p>
-      )}
+      <MapCredits credits={attribution} className="px-8 pb-4" />
     </>
   )
 }
@@ -272,23 +264,6 @@ function AccountView({ user }: { user: SessionUser }) {
         </ListButton>
       </List>
     </>
-  )
-}
-
-/**
- * A map source's credit as text and links. It's HTML from the map style, so it isn't inserted as
- * HTML: only its text, and its links when they're http(s), as new-tab links.
- */
-function creditParts(html: string): ReactNode[] {
-  const body = new DOMParser().parseFromString(html, 'text/html').body
-  return [...body.childNodes].map((node, index) =>
-    node instanceof HTMLAnchorElement && /^https?:/.test(node.href) ? (
-      <a key={index} href={node.href} target="_blank" rel="noopener noreferrer" className="underline">
-        {node.textContent}
-      </a>
-    ) : (
-      node.textContent
-    ),
   )
 }
 
