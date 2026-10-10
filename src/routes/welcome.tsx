@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Block, BlockFooter, BlockTitle, Button, List, ListItem, Page } from 'konsta/react'
+import { Block, BlockTitle, Button, Page } from 'konsta/react'
+import { FeatureTrail, type Feature } from '../components/FeatureTrail'
 import { WelcomeScene } from '../components/WelcomeScene'
 import { BellIcon, LiveIcon, LocationIcon, LockIcon, PawIcon, PinIcon } from '../components/icons'
 import { getUser } from '../server/auth.functions'
@@ -19,7 +19,7 @@ export const Route = createFileRoute('/welcome')({
   component: WelcomePage,
 })
 
-const FEATURES: { title: string; text: string; color: string; icon: ReactNode }[] = [
+const FEATURES: Feature[] = [
   {
     title: 'A live map',
     text: 'Everything you track on one map, moving the moment its tracker reports, with its battery and when it was last seen.',
@@ -75,22 +75,12 @@ function WelcomePage() {
           </Button>
         </Block>
 
-        <BlockTitle className="mt-6! px-8! text-[0.9375rem]! font-medium! opacity-60">What it does</BlockTitle>
-        {/* Konsta clips a row's text to two lines; these are meant to be read in full. */}
-        <List strong inset className="[&_.line-clamp-2]:line-clamp-none">
-          {FEATURES.map((feature) => (
-            <ListItem
-              key={feature.title}
-              title={feature.title}
-              text={feature.text}
-              media={<span className={`grid size-9 place-items-center rounded-full text-white ${feature.color}`}>{feature.icon}</span>}
-            />
-          ))}
-        </List>
-        <BlockFooter inset>
+        <BlockTitle className="mt-6! mb-4! px-8! text-[0.9375rem]! font-medium! opacity-60">What it does</BlockTitle>
+        <FeatureTrail features={FEATURES} />
+        <p className="px-8 pt-6 text-center text-sm opacity-60">
           Panopticon works in any browser, and on iPhone and Android as an app on your Home Screen. It needs a Traccar server, which does
           the tracking.
-        </BlockFooter>
+        </p>
       </div>
     </Page>
   )

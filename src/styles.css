@@ -409,6 +409,64 @@ html.dark:has(.k-material) {
   }
 }
 
+/* The front page's features as stops on a trail (FeatureTrail.tsx): badges cut from paper, and a
+   dotted path between them that marches like the scene's trails. */
+.feature-stop {
+  border: 3px solid #f6f6f6;
+  box-shadow: 3px 4px 0 rgb(41 49 51 / 0.28);
+}
+
+.dark .feature-stop {
+  box-shadow: 3px 4px 0 rgb(0 0 0 / 0.6);
+}
+
+/* A stop's text on a post-it note: pale yellow paper, dark ink in either mode, a little shadow under
+   its lower edge as if it curls up off the page. */
+.feature-note {
+  padding: 12px 14px 14px;
+  border-radius: 2px 2px 6px 3px;
+  background: linear-gradient(#fff5a8, #fdf08e);
+  color: #293133;
+  box-shadow:
+    0 1px 1px rgb(0 0 0 / 0.08),
+    0 10px 12px -8px rgb(0 0 0 / 0.35);
+}
+
+.dark .feature-note {
+  background: linear-gradient(#e9dd8a, #ddd078);
+}
+
+.feature-trail {
+  overflow: visible;
+}
+
+.feature-trail-path {
+  fill: none;
+  stroke: #293133;
+  stroke-opacity: 0.45;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 11;
+  animation: feature-trail 1.6s linear infinite;
+}
+
+.dark .feature-trail-path {
+  stroke: #eadebd;
+  stroke-opacity: 0.6;
+}
+
+@keyframes feature-trail {
+  to {
+    stroke-dashoffset: -11.1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-trail-path {
+    animation: none;
+  }
+}
+
 /* The front and sign-in pages' titles: paper cutouts like the scene's, in SF Pro Rounded at its heaviest
    where the system has it (iOS, macOS), else the system's bold. White paper edge, hard shadow. */
 .paper-title {
