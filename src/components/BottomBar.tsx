@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { isStale, type Asset } from '../lib/asset'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
@@ -40,6 +40,7 @@ export function BottomBar({
   settingsButton,
 }: Props) {
   const now = useNow(30_000)
+  const { scroller, fadeStyle } = useEdgeFade(assets.length)
   const surface =
     'shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2'
   return (
@@ -55,8 +56,13 @@ export function BottomBar({
           >
             <LocationIcon filled={showMe} />
           </button>
-          {/* Each asset's picture: the first tap centres it on the map, the next opens its details. */}
-          <div className="flex min-w-0 items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none]">
+          {/* Each asset's picture: the first tap centres it on the map, the next opens its details.
+              They scroll sideways when they don't fit, your position staying put. */}
+          <div
+            ref={scroller}
+            className="flex min-w-0 items-center gap-2 overflow-x-auto overscroll-x-contain px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            style={fadeStyle}
+          >
             {assets.map((asset) => {
               const selected = asset.id === selectedId
               return (
@@ -87,4 +93,42 @@ export function BottomBar({
       </div>
     </div>
   )
+}
+
+/** How far the pictures fade out at an edge with more of them past it. */
+const FADE_PX = 28
+
+/**
+ * Fades a sideways-scrolling row out to transparent at each edge that has more past it, so it's
+ * clear there's more to scroll to, and not at an edge it's scrolled all the way to.
+ */
+function useEdgeFade(count: number) {
+  const scroller = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ start: false, end: false })
+
+  useEffect(() => {
+    const element = scroller.current
+    if (!element) return
+    const update = () => {
+      const max = element.scrollWidth - element.clientWidth
+      const start = element.scrollLeft > 1
+      const end = element.scrollLeft < max - 1
+      setEdges((current) => (current.start === start && current.end === end ? current : { start, end }))
+    }
+    update()
+    element.addEventListener('scroll', update, { passive: true })
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => {
+      element.removeEventListener('scroll', update)
+      observer.disconnect()
+    }
+  }, [count])
+
+  let fadeStyle: CSSProperties | undefined
+  if (edges.start || edges.end) {
+    const mask = `linear-gradient(to right, ${edges.start ? 'transparent' : '#000'}, #000 ${FADE_PX}px, #000 calc(100% - ${FADE_PX}px), ${edges.end ? 'transparent' : '#000'})`
+    fadeStyle = { maskImage: mask, WebkitMaskImage: mask }
+  }
+  return { scroller, fadeStyle }
 }
