@@ -16,6 +16,8 @@ export const Route = createRootRoute({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
+      // Android Chrome: follow the phone's text size, as iOS does through Dynamic Type (styles.css).
+      { name: 'text-scale', content: 'scale' },
       { name: 'color-scheme', content: 'light dark' },
       { name: 'theme-color', content: '#2f8f5b' },
       { name: 'apple-mobile-web-app-title', content: 'Panopticon' },

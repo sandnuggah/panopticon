@@ -93,7 +93,7 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
             <h1 className="min-w-0 flex-1 truncate text-xl font-bold">{asset.name}</h1>
           </div>
           <div className="space-y-0.5 pt-3">
-            {address && <p className="text-[17px] font-semibold">{address}</p>}
+            {address && <p className="text-[1.0625rem] font-semibold">{address}</p>}
             <p className="opacity-60">
               {asset.location ? (
                 <>

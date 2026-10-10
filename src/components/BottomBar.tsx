@@ -40,7 +40,7 @@ export function BottomBar({
 }: Props) {
   const now = useNow(30_000)
   return (
-    <div className="bottom-bar absolute inset-x-0 bottom-0 z-10 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+    <div className="bottom-bar fixed-size absolute inset-x-0 bottom-0 z-10 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
       <div className="mx-auto flex h-14 max-w-xl items-center justify-between rounded-full px-1.5 shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2">
         <button
           type="button"

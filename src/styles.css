@@ -26,6 +26,50 @@
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* Dynamic Type: on iPhones and iPads the root font follows the text size chosen in Settings →
+   Display & Text Size (17px at the default, as iOS's body text; up to about three times that at the
+   accessibility sizes). Text, row heights and the bar are sized in rem, so they grow with it.
+   Touch devices only: on a Mac the same font is 13px. Android Chrome follows its text size through
+   the text-scale meta tag (__root.tsx). */
+@supports (font: -apple-system-body) {
+  @media (hover: none) and (pointer: coarse) {
+    html {
+      font: -apple-system-body;
+    }
+  }
+}
+
+/* Konsta's few fixed text sizes (list buttons, large buttons, inputs, block titles) in rem, so they
+   follow Dynamic Type like the rest: 17px and 15px at the default 16px root. Large titles use
+   calc(0.7rem + 22px) instead: like iOS's, they grow more slowly than body text, 34px at the
+   default size and about 59px at the largest. */
+.text-\[17px\] {
+  font-size: 1.0625rem;
+}
+
+.text-\[15px\] {
+  font-size: 0.9375rem;
+}
+
+.min-h-\[56px\] {
+  min-height: 3.5rem;
+}
+
+/* The map's chrome stays one size, as iOS's tab bars and Maps' controls do: the bottom bar, the
+   map's buttons and the Live pill; so do pictures and the cards' close buttons. Tailwind sizes everything from these variables, so fixing them
+   here keeps those elements at their default size whatever the text size. */
+.fixed-size,
+.map-overlay {
+  --spacing: 4px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-4xl: 36px;
+}
+
+.map-overlay {
+  font-size: 16px;
+}
+
 .dark {
   --trail: #5cc98d;
   --marker: #5cc98d;
@@ -182,7 +226,8 @@
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
-  font-size: 0.8rem;
+  /* Fixed, like the map's own labels; the map doesn't follow Dynamic Type. */
+  font-size: 13px;
   white-space: nowrap;
   box-shadow: var(--shadow);
 }

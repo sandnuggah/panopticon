@@ -148,9 +148,9 @@ export function SettingsCard({
         inert={!open || pageOpen}
         className={`absolute inset-x-0 bottom-0 z-40 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out ${open ? '' : 'translate-y-full'}`}
       >
-        {/* Just tall enough for the main list and the map credits under it, or less on short screens. */}
+        {/* Just tall enough for the main list and the map credits under it (in rem, so it grows with Dynamic Type), or less on short screens. */}
         <div
-          className={`relative h-[min(472px,calc(100dvh-env(safe-area-inset-top)-96px))] overflow-y-auto rounded-[2.5rem] pt-5 shadow-2xl ${CARD_BG}`}
+          className={`relative h-[min(29.5rem,calc(100dvh-env(safe-area-inset-top)-96px))] overflow-y-auto rounded-[2.5rem] pt-5 shadow-2xl ${CARD_BG}`}
         >
           <CloseButton ref={settingsClose} className="absolute right-4 top-4 z-10" onClick={onClose} />
           <MainView user={user} assetCount={assets.length} attribution={attribution} onShow={onShow} />
@@ -172,12 +172,12 @@ export function SettingsCard({
                 <BackIcon />
                 Assets
               </button>
-              <h2 className="absolute inset-x-28 truncate text-center text-[17px] font-semibold">{title}</h2>
+              <h2 className="absolute inset-x-28 truncate text-center text-[1.0625rem] font-semibold">{title}</h2>
               <CloseButton onClick={onClosePage} />
             </div>
           ) : (
             <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-5">
-              <h2 className="truncate text-[34px] font-bold">{title}</h2>
+              <h2 className="truncate text-[calc(0.7rem+22px)] font-bold">{title}</h2>
               <CloseButton ref={pageHeader} onClick={onClosePage} />
             </div>
           )}

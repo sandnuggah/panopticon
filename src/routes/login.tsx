@@ -66,7 +66,7 @@ function LoginPage() {
   return (
     <Page>
       <div className="mx-auto max-w-md pb-8 pt-[max(56px,calc(env(safe-area-inset-top)+32px))]">
-        <h1 className="px-4 text-[34px] font-bold">Panopticon</h1>
+        <h1 className="px-4 text-[calc(0.7rem+22px)] font-bold">Panopticon</h1>
         {sso && (
           <>
             <Block>

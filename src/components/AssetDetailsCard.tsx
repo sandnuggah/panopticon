@@ -109,7 +109,7 @@ function Details({
       </div>
       <div className="space-y-0.5 py-4">
         {activity && <p className="font-semibold text-primary">{activityLabel(activity)}</p>}
-        {address && <p className="text-[17px] font-semibold">{address}</p>}
+        {address && <p className="text-[1.0625rem] font-semibold">{address}</p>}
         <p className="opacity-60">
           <Summary asset={asset} stay={activity ? undefined : stay} />
         </p>

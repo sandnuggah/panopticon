@@ -24,7 +24,7 @@ const ASSET_ZOOM = 15
 const FOLLOW_MS = 1000
 /** How close to the middle of the map (px) a selected asset counts as centred. */
 const CENTRED_PX = 12
-/** About how much of the map's bottom edge the bottom bar covers, in pixels. */
+/** About how much of the map's bottom edge the bottom bar covers, in pixels; it doesn't follow Dynamic Type. */
 const BOTTOM_BAR = 68
 
 /** Zoom when showing just your position. */

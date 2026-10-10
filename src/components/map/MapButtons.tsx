@@ -43,10 +43,10 @@ export function MapButtons({ map, placement, showMe, onToggleMe }: Props) {
     </div>
   )
   if (placement === 'top-right') {
-    return <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top)+12px)] z-[5]">{pill}</div>
+    return <div className="fixed-size pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top)+12px)] z-[5]">{pill}</div>
   }
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[calc(max(12px,env(safe-area-inset-bottom))+68px)] z-[5] px-3">
+    <div className="fixed-size pointer-events-none absolute inset-x-0 bottom-[calc(max(12px,env(safe-area-inset-bottom))+68px)] z-[5] px-3">
       <div className="mx-auto flex max-w-xl justify-end">{pill}</div>
     </div>
   )

@@ -26,7 +26,7 @@ export function CloseButton({ ref, className = '', onClick }: { ref?: Ref<HTMLBu
     <button
       ref={ref}
       type="button"
-      className={`grid size-11 shrink-0 place-items-center rounded-full bg-black/5 active:opacity-60 dark:bg-white/10 ${className}`}
+      className={`fixed-size grid size-11 shrink-0 place-items-center rounded-full bg-black/5 active:opacity-60 dark:bg-white/10 ${className}`}
       aria-label="Close"
       onClick={onClick}
     >

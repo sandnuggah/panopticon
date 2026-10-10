@@ -13,7 +13,7 @@ const labels: Record<LiveStatus, string> = {
 export function LiveIndicator({ status }: { status: LiveStatus }) {
   return (
     <span
-      className={`live-${status} inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[15px] font-medium shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2`}
+      className={`live-${status} inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[0.9375em] font-medium shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2`}
       role="status"
     >
       <span className="live-dot" aria-hidden="true" />

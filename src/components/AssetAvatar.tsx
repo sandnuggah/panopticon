@@ -15,7 +15,7 @@ export function AssetAvatar({ asset, size = 'small', stale = false }: Props) {
   const showImage = asset.imageUrl !== undefined && asset.imageUrl !== failedUrl
   return (
     <span
-      className={`relative grid shrink-0 place-items-center overflow-hidden rounded-full font-semibold text-white ${SIZES[size]} ${stale ? 'bg-gray-400 dark:bg-gray-600' : 'bg-primary'}`}
+      className={`fixed-size relative grid shrink-0 place-items-center overflow-hidden rounded-full font-semibold text-white ${SIZES[size]} ${stale ? 'bg-gray-400 dark:bg-gray-600' : 'bg-primary'}`}
       aria-hidden="true"
     >
       {assetInitial(asset.name)}
