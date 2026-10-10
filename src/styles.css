@@ -510,18 +510,25 @@ html.dark:has(.k-material) {
   text-shadow: 3px 4px 0 rgb(0 0 0 / 0.6);
 }
 
-/* Places (map/placeLayers.ts): the name at the top edge of the area. */
+/* Places (map/placeLayers.ts): the name at the top edge of the area, as a solid pill in the place's
+   colour, so it reads clearly on any map without a blurry halo. */
 .place-label {
-  padding: 0 6px 2px;
-  color: var(--place);
-  font-size: 12px;
+  margin-bottom: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--place);
+  color: #ffffff;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  line-height: 18px;
   white-space: nowrap;
-  text-shadow:
-    0 0 2px var(--surface),
-    0 0 4px var(--surface);
+  box-shadow: var(--shadow);
   pointer-events: none;
+}
+
+/* --place is lighter at night, too light behind white text: iOS's dark-mode indigo instead. */
+.dark .place-label {
+  background: #5e5ce6;
 }
 
 /* The circle being placed (map/PlacePicker.tsx), in the middle of the map above the editor card. */
