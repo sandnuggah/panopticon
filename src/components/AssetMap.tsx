@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
+  AttributionControl,
   type GeoJSONSource,
   LngLatBounds,
   MapLibreMap,
@@ -12,13 +13,12 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // Let Vite bundle the worker and hand maplibre the resulting same-origin URL.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { assetInitial, isStale, type Asset } from '../lib/asset'
-import type { ThemeId } from '../lib/theme'
 import type { TrailPoint, Trails } from '../lib/trail'
 import { walkKey } from '../lib/matching'
 import { classifyTrail, type LatLon } from '../lib/segments'
 import { useMyPosition, type MyPosition } from '../lib/useMyPosition'
 import { useNow } from '../lib/useNow'
-import { AUTO_STYLE, resolveStyle, type MapStyle } from '../lib/mapStyles'
+import { resolveStyle, type MapStyle } from '../lib/mapStyles'
 import { useSettings } from '../lib/settings'
 import { MapButtonControl } from './mapControls'
 import { addMyPositionLayer, createMyPositionDot, MY_POSITION_ICON, setAccuracyCircle } from './myPosition'
@@ -27,19 +27,22 @@ setWorkerUrl(workerUrl)
 
 const ASSET_ZOOM = 15
 const TRAILS = 'trails'
-const PAWS = 'paws'
 const RIDES_VEHICLE = 'trail-vehicle'
 const RIDES_UNDERGROUND = 'trail-underground'
 const STAYS_FILL = 'trail-stays'
 const STAYS_OUTLINE = 'trail-stays-outline'
+const PAWS = 'paws'
+const PAW_IMAGE = 'paw-prints'
 /** Walking is drawn in short pieces so the trail can fade with age, oldest faintest. */
 const HOPS_PER_PIECE = 3
-const PAW_IMAGE = 'paw-prints'
 const ATTRIBUTION_SECONDS = 5
 /** How long the map takes to glide to the followed asset's new position. */
 const FOLLOW_MS = 1000
 /** How close to the middle of the map (px) a selected asset counts as centred. */
 const CENTRED_PX = 12
+/** About how much of the map's bottom edge the bottom bar covers, in pixels. */
+const BOTTOM_BAR = 68
+
 /** Zoom when showing just your position. */
 const MY_POSITION_ZOOM = 16
 
@@ -48,8 +51,6 @@ type Props = {
   trails: Trails
   /** "Follow roads": walks snapped to streets and paths, by walk key; others are drawn as recorded. */
   snappedWalks: Record<string, LatLon[]>
-  /** Petopticon (the pet theme) draws trails as paw prints instead of a line. */
-  theme: ThemeId
   /** The map styles to choose between (see mapStyles.ts), and the default. */
   styles: MapStyle[]
   defaultStyle: string
@@ -58,6 +59,17 @@ type Props = {
   focusToken: number
   onSelect: (id: number) => void
   onDeselect: () => void
+  /**
+   * Your own position, when a button outside the map turns it on and off (the map screen's bottom
+   * bar). Without these the map has its own button among its controls (live link pages).
+   */
+  showMe?: boolean
+  onShowMeChange?: (on: boolean) => void
+  /**
+   * Gets the map data's credits (HTML from the map style's sources) to show elsewhere, the
+   * Settings card on the map screen. Without it the map shows them itself, as an ⓘ button.
+   */
+  onAttribution?: (attributions: string[]) => void
 }
 
 /** Browser-only: load with React.lazy inside <ClientOnly>. */
@@ -65,13 +77,15 @@ export default function AssetMap({
   assets,
   trails,
   snappedWalks,
-  theme,
   styles,
   defaultStyle,
   selectedId,
   focusToken,
   onSelect,
   onDeselect,
+  showMe: showMeProp,
+  onShowMeChange,
+  onAttribution,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -106,11 +120,22 @@ export default function AssetMap({
     setPausedAt(focusTokenRef.current)
   }
 
-  // Your own position (useMyPosition): off until the map's button turns it on. The first fix frames
-  // you and the selected asset together, or just you.
-  const [showMe, setShowMe] = useState(false)
+  // Your own position (useMyPosition): off until a button turns it on, the bottom bar's or the
+  // map's own. The first fix frames you and the selected asset together, or just you.
+  const [ownShowMe, setOwnShowMe] = useState(false)
+  const controlsMe = onShowMeChange !== undefined
+  const showMe = controlsMe ? (showMeProp ?? false) : ownShowMe
+  const setShowMe = onShowMeChange ?? setOwnShowMe
   const { position: me, note } = useMyPosition(showMe, () => setShowMe(false))
-  const toggleMeRef = useRef(() => setShowMe((on) => !on))
+  const toggleMeRef = useRef(() => {})
+  useEffect(() => {
+    toggleMeRef.current = () => setShowMe(!showMe)
+  })
+  const ownButtonRef = useRef(!controlsMe)
+  const onAttributionRef = useRef(onAttribution)
+  useEffect(() => {
+    onAttributionRef.current = onAttribution
+  })
   const controlRef = useRef<MapButtonControl | null>(null)
   const meMarkerRef = useRef<Marker | null>(null)
   const framedRef = useRef(false)
@@ -133,20 +158,11 @@ export default function AssetMap({
 
   // The map style: chosen with the map's style button and kept per browser, Auto following the
   // device's light or dark mode. Switching keeps the view; the trails are added to the new style.
-  const [settings, updateSettings] = useSettings()
+  const [settings] = useSettings()
   const prefersDark = usePrefersDark()
   const styleChoice = settings.mapStyle ?? defaultStyle
   const styleUrl = resolveStyle(styles, styleChoice, defaultStyle, prefersDark).url
   const appliedStyleRef = useRef(styleUrl)
-  const [styleMenu, setStyleMenu] = useState<{ top: number; right: number }>()
-  const openStyleMenuRef = useRef((_button: HTMLButtonElement) => {})
-  const styleControlRef = useRef<MapButtonControl | null>(null)
-  openStyleMenuRef.current = (button) => {
-    if (styleMenu) return setStyleMenu(undefined)
-    const area = containerRef.current!.getBoundingClientRect()
-    const rect = button.getBoundingClientRect()
-    setStyleMenu({ top: rect.top - area.top, right: area.right - rect.left + 8 })
-  }
 
   useEffect(() => {
     const map = new MapLibreMap({
@@ -154,22 +170,19 @@ export default function AssetMap({
       style: appliedStyleRef.current,
       center: [0, 20],
       zoom: 1,
-      attributionControl: { compact: true },
+      // Added below, at the top.
+      attributionControl: false,
     })
-    map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
-    const control = new MapButtonControl('my-position-button', MY_POSITION_ICON, () => toggleMeRef.current(), {
-      off: 'Show my position',
-      on: 'Hide my position',
-    })
-    map.addControl(control, 'top-right')
-    controlRef.current = control
-    // Only when there's more than one style to choose between.
-    if (styles.length > 1) {
-      const styleControl = new MapButtonControl('map-style-button', MAP_STYLE_ICON, (button) => openStyleMenuRef.current(button), {
-        off: 'Map style',
+    // On live link pages, maplibre's zoom and position buttons, top right. The map screen has its
+    // own zoom buttons instead (ZoomButtons, below), matching the bottom bar.
+    if (ownButtonRef.current) {
+      map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
+      const control = new MapButtonControl('my-position-button', MY_POSITION_ICON, () => toggleMeRef.current(), {
+        off: 'Show my position',
+        on: 'Hide my position',
       })
-      map.addControl(styleControl, 'top-right')
-      styleControlRef.current = styleControl
+      map.addControl(control, 'top-right')
+      controlRef.current = control
     }
     // Every style load, the first and after switching: the trails and your position go on top.
     map.on('style.load', () => {
@@ -177,15 +190,39 @@ export default function AssetMap({
       addMyPositionLayer(map)
       setStyleLoaded(true)
     })
-    // The map data's licence requires visible attribution, but lets it shrink to the (i) button
-    // after a few seconds. Maplibre collapses it on drag; this does the same on a timer, counted
-    // from when the style has loaded and the attribution has something to show.
+    // The map data's credits. On the map screen they're handed out to the Settings card, read from
+    // the style's sources as they load (as maplibre's own control does), and the map shows none.
     let collapseAttribution: ReturnType<typeof setTimeout> | undefined
-    map.on('load', () => {
-      collapseAttribution = setTimeout(() => {
-        map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show')
-      }, ATTRIBUTION_SECONDS * 1000)
-    })
+    if (onAttributionRef.current) {
+      let reported = ''
+      const report = () => {
+        const sources = Object.keys(map.getStyle()?.sources ?? {})
+        const credits = [...new Set(sources.map((id) => map.getSource(id)?.attribution).filter((text): text is string => !!text))]
+        if (credits.join('\n') === reported) return
+        reported = credits.join('\n')
+        onAttributionRef.current?.(credits)
+      }
+      map.on('styledata', report)
+      map.on('sourcedata', report)
+    } else {
+      // Elsewhere (live link pages), maplibre's ⓘ in the top-right corner, below the buttons. The
+      // licence lets it shrink to the button. The first time the map opens in this browser it's
+      // shown in full: maplibre collapses it on drag, and this does the same on a timer, counted
+      // from when the style has loaded and the attribution has something to show. After that it
+      // starts as the button. Marking the container compact up front stops maplibre from opening
+      // it when the attributions arrive.
+      map.addControl(new AttributionControl({ compact: true }), 'top-right')
+      const attribution = map.getContainer().querySelector('.maplibregl-ctrl-attrib')
+      const firstTime = !attributionShown()
+      if (!firstTime) attribution?.classList.add('maplibregl-compact')
+      map.on('load', () => {
+        if (!firstTime) return
+        markAttributionShown()
+        collapseAttribution = setTimeout(() => {
+          attribution?.classList.remove('maplibregl-compact-show')
+        }, ATTRIBUTION_SECONDS * 1000)
+      })
+    }
 
     map.on('dragstart', (event) => {
       // A pinch also nudges the centre, which maplibre reports as a drag; that's zooming.
@@ -218,7 +255,6 @@ export default function AssetMap({
       markers.clear()
       meMarkerRef.current = null
       controlRef.current = null
-      styleControlRef.current = null
       map.remove()
       mapRef.current = null
       cameraPlacedRef.current = false
@@ -236,10 +272,6 @@ export default function AssetMap({
   }, [styleUrl])
 
   useEffect(() => {
-    styleControlRef.current?.setOn(styleMenu !== undefined)
-  }, [styleMenu])
-
-  useEffect(() => {
     const map = mapRef.current
     if (!styleLoaded || !map) return
     const features = toTrailFeatures(trails, snappedWalks)
@@ -247,20 +279,25 @@ export default function AssetMap({
     void map.getSource<GeoJSONSource>(PAWS)?.setData(features.paws)
   }, [trails, snappedWalks, styleLoaded])
 
-  // Theme: trail colour, and line versus paw prints. Runs after <html data-theme> has changed,
-  // so --trail already has the new theme's value.
+  // Walks as a line or as paw prints (Trail → Paw prints). Again after each style load, which
+  // re-adds both layers.
   useEffect(() => {
     const map = mapRef.current
     if (!styleLoaded || !map) return
-    const rgb = trailRgb()
-    const color = `rgb(${rgb.join(', ')})`
+    map.setLayoutProperty(TRAILS, 'visibility', settings.pawPrints ? 'none' : 'visible')
+    map.setLayoutProperty(PAWS, 'visibility', settings.pawPrints ? 'visible' : 'none')
+  }, [settings.pawPrints, styleLoaded])
+
+  // Trail colour for light or dark mode. Runs after the page's .dark class has changed (see
+  // public/color-scheme.js), so --trail already has the new mode's value.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!styleLoaded || !map) return
+    const color = trailColor()
     for (const layer of [TRAILS, RIDES_VEHICLE, RIDES_UNDERGROUND, STAYS_OUTLINE]) map.setPaintProperty(layer, 'line-color', color)
     map.setPaintProperty(STAYS_FILL, 'fill-color', color)
-    map.updateImage(PAW_IMAGE, drawPawPrints(rgb))
-    const paws = theme === 'pet'
-    map.setLayoutProperty(TRAILS, 'visibility', paws ? 'none' : 'visible')
-    map.setLayoutProperty(PAWS, 'visibility', paws ? 'visible' : 'none')
-  }, [theme, styleLoaded])
+    map.updateImage(PAW_IMAGE, drawPawPrints(color))
+  }, [prefersDark, styleLoaded])
 
   // Keep one marker per located asset.
   useEffect(() => {
@@ -277,7 +314,11 @@ export default function AssetMap({
         marker.setLngLat(lngLat)
       } else {
         // A marker needs its position before it's added to the map.
-        marker = new Marker({ element: createMarkerElement(asset.id, onMarkerTapRef) }).setLngLat(lngLat).addTo(map)
+        marker = new Marker({
+          element: createMarkerElement(asset.id, onMarkerTapRef),
+        })
+          .setLngLat(lngLat)
+          .addTo(map)
         markers.set(asset.id, marker)
       }
       updateMarkerElement(marker.getElement(), asset, {
@@ -309,7 +350,13 @@ export default function AssetMap({
       const flightId = ++flightCountRef.current
       flightRef.current = flightId
       // The id comes back on this flight's moveend, which then lets follow updates through.
-      map.flyTo({ center: [target.lon, target.lat], zoom: Math.max(map.getZoom(), ASSET_ZOOM) }, { flightId })
+      map.flyTo(
+        {
+          center: [target.lon, target.lat],
+          zoom: Math.max(map.getZoom(), ASSET_ZOOM),
+        },
+        { flightId },
+      )
     }
     // Not keyed on `assets`: new positions of the selected asset are handled by following, below.
   }, [selectedId, focusToken])
@@ -369,71 +416,40 @@ export default function AssetMap({
   return (
     <>
       <div ref={containerRef} className="map" />
+      {!ownButtonRef.current && <ZoomButtons map={mapRef} />}
       {note && (
         <p className="my-position-note" role="status">
           {note}
         </p>
       )}
-      {styleMenu && (
-        <StyleMenu
-          styles={styles}
-          choice={styleChoice}
-          place={styleMenu}
-          onChoose={(id) => {
-            updateSettings({ mapStyle: id })
-            setStyleMenu(undefined)
-          }}
-          onClose={() => setStyleMenu(undefined)}
-        />
-      )}
     </>
   )
 }
 
-/** Folded map sheets, the usual "map style" symbol. */
-const MAP_STYLE_ICON =
-  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 3.5 5.5 2l5 1.75L14.25 2.25v10.25L10.5 14l-5-1.75-3.75 1.5zM5.5 2v10.25M10.5 3.75V14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
-
-type StyleMenuProps = {
-  styles: MapStyle[]
-  choice: string
-  place: { top: number; right: number }
-  onChoose: (id: string) => void
-  onClose: () => void
-}
-
-/** The map style list, beside the style button. Escape or a tap outside closes it. */
-function StyleMenu({ styles, choice, place, onChoose, onClose }: StyleMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    menuRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus()
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
-  const options = [{ id: AUTO_STYLE, name: 'Auto' }, ...styles]
+/**
+ * Zoom in and out, as a pill like the bottom bar (BottomBar.tsx): the same colours, shadow and
+ * line icons, at its right end, just above it.
+ */
+function ZoomButtons({ map }: { map: { current: MapLibreMap | null } }) {
+  const button = 'grid size-11 place-items-center active:opacity-50'
   return (
-    <>
-      <div className="map-style-backdrop" onClick={onClose} />
-      <div ref={menuRef} className="map-style-menu" role="menu" aria-label="Map style" style={place}>
-        {options.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            role="menuitemradio"
-            aria-checked={option.id === choice}
-            className="map-style-option"
-            onClick={() => onChoose(option.id)}
-          >
-            <span className={`map-style-swatch map-style-swatch-${option.id}`} aria-hidden="true" />
-            {option.name}
-            {option.id === AUTO_STYLE && <span className="muted"> · light or dark</span>}
+    <div className="pointer-events-none absolute inset-x-0 bottom-[calc(max(12px,env(safe-area-inset-bottom))+68px)] z-[5] px-3">
+      <div className="mx-auto flex max-w-xl justify-end">
+        <div className="pointer-events-auto flex flex-col items-center rounded-full shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2">
+          <button type="button" className={button} aria-label="Zoom in" onClick={() => map.current?.zoomIn()}>
+            <svg className="size-5" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+            </svg>
           </button>
-        ))}
+          <span className="h-px w-6 bg-black/10 dark:bg-white/15" aria-hidden="true" />
+          <button type="button" className={button} aria-label="Zoom out" onClick={() => map.current?.zoomOut()}>
+            <svg className="size-5" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M4 10h12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -452,22 +468,28 @@ function usePrefersDark(): boolean {
 
 function frameMe(map: MapLibreMap, me: MyPosition, asset: LatLon | undefined) {
   if (!asset) {
-    map.flyTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), MY_POSITION_ZOOM) })
+    map.flyTo({
+      center: [me.lon, me.lat],
+      zoom: Math.max(map.getZoom(), MY_POSITION_ZOOM),
+    })
     return
   }
   const bounds = new LngLatBounds([me.lon, me.lat], [me.lon, me.lat]).extend([asset.lon, asset.lat])
-  map.fitBounds(bounds, { padding: 80, maxZoom: MY_POSITION_ZOOM + 1, duration: 800 })
+  map.fitBounds(bounds, {
+    padding: clearOfBottom(80),
+    maxZoom: MY_POSITION_ZOOM + 1,
+    duration: 800,
+  })
 }
 
 /**
  * The trail, drawn by what the asset was doing (see segments.ts): walking as a line (or paw
- * prints, in the pet theme), rides as a dashed line (dotted underground) straight between where
- * the ride started and ended, and stays as a soft circle. Everything fades with age. Markers are
- * DOM elements, so they always sit above all of it.
+ * prints, with Trail → Paw prints), rides as a dashed line (dotted underground) straight between
+ * where the ride started and ended, and stays as a soft circle. Everything fades with age. Markers
+ * are DOM elements, so they always sit above all of it.
  */
 function addTrailLayers(map: MapLibreMap) {
-  const rgb = trailRgb()
-  const color = `rgb(${rgb.join(', ')})`
+  const color = trailColor()
   const empty = toTrailFeatures({}, {})
   const kind = (value: string) => ['==', ['get', 'kind'], value] as ['==', ['get', string], string]
   const lineLayout = { 'line-cap': 'round', 'line-join': 'round' } as const
@@ -477,14 +499,21 @@ function addTrailLayers(map: MapLibreMap) {
     type: 'fill',
     source: TRAILS,
     filter: kind('stay'),
-    paint: { 'fill-color': color, 'fill-opacity': ['*', 0.18, ['get', 'opacity']] },
+    paint: {
+      'fill-color': color,
+      'fill-opacity': ['*', 0.18, ['get', 'opacity']],
+    },
   })
   map.addLayer({
     id: STAYS_OUTLINE,
     type: 'line',
     source: TRAILS,
     filter: kind('stay'),
-    paint: { 'line-color': color, 'line-width': 1.5, 'line-opacity': ['*', 0.6, ['get', 'opacity']] },
+    paint: {
+      'line-color': color,
+      'line-width': 1.5,
+      'line-opacity': ['*', 0.6, ['get', 'opacity']],
+    },
   })
   map.addLayer({
     id: TRAILS,
@@ -492,7 +521,11 @@ function addTrailLayers(map: MapLibreMap) {
     source: TRAILS,
     filter: kind('move'),
     layout: lineLayout,
-    paint: { 'line-color': color, 'line-width': 4, 'line-opacity': ['get', 'opacity'] },
+    paint: {
+      'line-color': color,
+      'line-width': 4,
+      'line-opacity': ['get', 'opacity'],
+    },
   })
   map.addLayer({
     id: RIDES_VEHICLE,
@@ -500,7 +533,12 @@ function addTrailLayers(map: MapLibreMap) {
     source: TRAILS,
     filter: kind('vehicle'),
     layout: lineLayout,
-    paint: { 'line-color': color, 'line-width': 3, 'line-opacity': ['get', 'opacity'], 'line-dasharray': [2, 1.6] },
+    paint: {
+      'line-color': color,
+      'line-width': 3,
+      'line-opacity': ['get', 'opacity'],
+      'line-dasharray': [2, 1.6],
+    },
   })
   map.addLayer({
     id: RIDES_UNDERGROUND,
@@ -509,10 +547,18 @@ function addTrailLayers(map: MapLibreMap) {
     filter: kind('underground'),
     layout: lineLayout,
     // Zero-length dashes with round caps: a dotted line.
-    paint: { 'line-color': color, 'line-width': 5, 'line-opacity': ['get', 'opacity'], 'line-dasharray': [0, 1.8] },
+    paint: {
+      'line-color': color,
+      'line-width': 5,
+      'line-opacity': ['get', 'opacity'],
+      'line-dasharray': [0, 1.8],
+    },
   })
 
-  map.addImage(PAW_IMAGE, drawPawPrints(rgb), { pixelRatio: PAW_PIXEL_RATIO })
+  // Walking as paw prints instead of the line: shown in place of TRAILS when the setting is on.
+  map.addImage(PAW_IMAGE, drawPawPrints(color), {
+    pixelRatio: PAW_PIXEL_RATIO,
+  })
   map.addSource(PAWS, { type: 'geojson', data: empty.paws })
   map.addLayer({
     id: PAWS,
@@ -553,7 +599,10 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
     const line = (kind: string, coordinates: LatLon[], time: number): TrailFeature => ({
       type: 'Feature',
       properties: { id: Number(id), kind, opacity: opacity(time) },
-      geometry: { type: 'LineString', coordinates: coordinates.map((point) => [point.lon, point.lat]) },
+      geometry: {
+        type: 'LineString',
+        coordinates: coordinates.map((point) => [point.lon, point.lat]),
+      },
     })
     for (const piece of classifyTrail(points)) {
       if (piece.kind === 'move') {
@@ -566,15 +615,25 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
       } else if (piece.kind === 'stay') {
         trail.push({
           type: 'Feature',
-          properties: { id: Number(id), kind: 'stay', opacity: opacity(piece.to) },
-          geometry: { type: 'Polygon', coordinates: [circle(piece.center, piece.radius)] },
+          properties: {
+            id: Number(id),
+            kind: 'stay',
+            opacity: opacity(piece.to),
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [circle(piece.center, piece.radius)],
+          },
         })
       } else {
         trail.push(line(piece.kind, [piece.from, piece.to], piece.to.time))
       }
     }
   }
-  return { trail: { type: 'FeatureCollection', features: trail }, paws: { type: 'FeatureCollection', features: paws } }
+  return {
+    trail: { type: 'FeatureCollection', features: trail },
+    paws: { type: 'FeatureCollection', features: paws },
+  }
 }
 
 /**
@@ -584,7 +643,10 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
 function alongRoads(points: TrailPoint[], snapped: LatLon[] | undefined): (LatLon & { time: number })[] {
   if (!snapped || snapped.length < 2) return points
   const [from, to] = [points[0]!.time, points.at(-1)!.time]
-  return snapped.map((point, index) => ({ ...point, time: from + ((to - from) * index) / (snapped.length - 1) }))
+  return snapped.map((point, index) => ({
+    ...point,
+    time: from + ((to - from) * index) / (snapped.length - 1),
+  }))
 }
 
 /** A circle of `radius` metres around `center`, as a closed ring of [lon, lat]. */
@@ -598,13 +660,32 @@ function circle(center: LatLon, radius: number): [number, number][] {
   })
 }
 
+const ATTRIBUTION_KEY = 'panopticon.attributionShown'
+
+/** Whether the map's attribution has been shown in full in this browser (see the map's setup). */
+function attributionShown(): boolean {
+  try {
+    return localStorage.getItem(ATTRIBUTION_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markAttributionShown() {
+  try {
+    localStorage.setItem(ATTRIBUTION_KEY, '1')
+  } catch {
+    // Storage unavailable: it's shown in full each time, as before.
+  }
+}
+
 const PAW_PIXEL_RATIO = 2
 
 /**
  * A left and a right paw print, staggered like a trotting dog, both pointing along +x. Drawn at
  * 2x for sharp edges. Drawn in code, so there's no image file to load.
  */
-function drawPawPrints([r, g, b]: [number, number, number]): ImageData {
+function drawPawPrints(color: string): ImageData {
   const width = 56
   const height = 36
   const canvas = document.createElement('canvas')
@@ -612,7 +693,7 @@ function drawPawPrints([r, g, b]: [number, number, number]): ImageData {
   canvas.height = height * PAW_PIXEL_RATIO
   const context = canvas.getContext('2d')!
   context.scale(PAW_PIXEL_RATIO, PAW_PIXEL_RATIO)
-  context.fillStyle = `rgb(${r}, ${g}, ${b})`
+  context.fillStyle = color
   const paw = (x: number, y: number, size: number) => {
     const ellipse = (dx: number, dy: number, rx: number, ry: number) => {
       context.beginPath()
@@ -630,12 +711,19 @@ function drawPawPrints([r, g, b]: [number, number, number]): ImageData {
   return context.getImageData(0, 0, canvas.width, canvas.height)
 }
 
-/** The theme's --trail colour as RGB; the map's paint properties can't read CSS variables. */
-function trailRgb(): [number, number, number] {
-  const value = getComputedStyle(document.documentElement).getPropertyValue('--trail').trim()
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value)
-  if (!match) return [47, 107, 79]
-  return [parseInt(match[1]!, 16), parseInt(match[2]!, 16), parseInt(match[3]!, 16)]
+/** The --trail colour for the current light or dark mode; the map's paint properties can't read CSS variables. */
+function trailColor(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue('--trail').trim() || '#2f8f5b'
+}
+
+/** Even padding, plus room for the bottom bar along the map's bottom edge. */
+function clearOfBottom(padding: number) {
+  return {
+    top: padding,
+    right: padding,
+    left: padding,
+    bottom: padding + BOTTOM_BAR,
+  }
 }
 
 function fitAll(map: MapLibreMap, assets: Asset[]) {
@@ -643,7 +731,11 @@ function fitAll(map: MapLibreMap, assets: Asset[]) {
   if (located.length === 0) return
   const bounds = new LngLatBounds()
   for (const { lon, lat } of located) bounds.extend([lon, lat])
-  map.fitBounds(bounds, { padding: 64, maxZoom: ASSET_ZOOM, duration: 0 })
+  map.fitBounds(bounds, {
+    padding: clearOfBottom(64),
+    maxZoom: ASSET_ZOOM,
+    duration: 0,
+  })
 }
 
 function createMarkerElement(assetId: number, onTapRef: { current: (id: number) => void }): HTMLElement {

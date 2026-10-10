@@ -1,11 +1,11 @@
 import { lazy, Suspense, useCallback } from 'react'
 import { ClientOnly, createFileRoute } from '@tanstack/react-router'
+import { Page } from 'konsta/react'
 import { AssetAvatar } from '../components/AssetAvatar'
 import { LiveIndicator } from '../components/LiveIndicator'
 import { RelativeTime } from '../components/RelativeTime'
 import type { MapStyle } from '../lib/mapStyles'
 import { formatTime, type SharedView } from '../lib/share'
-import { useTheme } from '../lib/theme'
 import { useAddress } from '../lib/useAddress'
 import { useNow } from '../lib/useNow'
 import { useSharedAsset } from '../lib/useSharedAsset'
@@ -49,7 +49,6 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
   const { asset, status } = useSharedAsset(view.asset, link, view.expiresAt)
   const lookUp = useCallback(() => getSharedAddress({ data: link }), [link])
   const address = useAddress(asset, lookUp) ?? view.address ?? undefined
-  const [theme] = useTheme()
   const now = useNow(30_000)
   const mapPlaceholder = <div className="map map-placeholder" />
 
@@ -65,7 +64,6 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
               assets={[asset]}
               trails={noTrails}
               snappedWalks={noTrails}
-              theme={theme}
               styles={styles}
               defaultStyle={defaultStyle}
               selectedId={asset.id}
@@ -76,15 +74,19 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
           </Suspense>
         </ClientOnly>
       </div>
-      <section className="sheet link-sheet" aria-label={asset.name}>
-        <div className="link-details">
-          <div className="asset-details-title">
+      {/* A floating panel over the map, with what a viewer may see. */}
+      <section
+        className="absolute inset-x-0 bottom-0 z-10 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))]"
+        aria-label={asset.name}
+      >
+        <div className="rounded-3xl p-4 shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-1 material:dark:bg-md-dark-surface-1">
+          <div className="flex items-center gap-3">
             <AssetAvatar asset={asset} />
-            <h1 className="asset-details-name">{asset.name}</h1>
+            <h1 className="min-w-0 flex-1 truncate text-xl font-bold">{asset.name}</h1>
           </div>
-          <div className="asset-details-facts">
-            {address && <span className="asset-card-address">{address}</span>}
-            <span>
+          <div className="space-y-0.5 pt-3">
+            {address && <p className="text-[17px] font-semibold">{address}</p>}
+            <p className="opacity-60">
               {asset.location ? (
                 <>
                   Seen <RelativeTime time={asset.location.fixTime} />
@@ -92,10 +94,10 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
               ) : (
                 'No location yet'
               )}
-            </span>
-            <span className="muted" suppressHydrationWarning>
+            </p>
+            <p className="opacity-60" suppressHydrationWarning>
               Shared until {formatTime(view.expiresAt, now)}
-            </span>
+            </p>
           </div>
         </div>
       </section>
@@ -113,9 +115,11 @@ const endings: Record<Exclude<SharedView['kind'], 'live'>, { title: string; text
 function SharedEnded({ kind }: { kind: Exclude<SharedView['kind'], 'live'> }) {
   const { title, text } = endings[kind]
   return (
-    <main className="page link-ended">
-      <h1>{title}</h1>
-      <p className="muted">{text}</p>
-    </main>
+    <Page>
+      <div className="mx-auto max-w-md px-6 pt-[20dvh] text-center">
+        <h1 className="text-2xl font-bold">{title}</h1>
+        <p className="pt-2 opacity-60">{text}</p>
+      </div>
+    </Page>
   )
 }

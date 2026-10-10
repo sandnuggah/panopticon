@@ -147,7 +147,7 @@ The trail is split using only the tracker's own reports: speed between fixes, ga
 
 ### Follow roads (map matching)
 
-Optional: with `MAP_MATCHING_URL` set, Settings offers **Follow roads** (off by default, per browser). Walks are then drawn along the streets and paths they most likely took, instead of straight lines between GPS fixes. Rides and stays are unchanged.
+Optional: with `MAP_MATCHING_URL` set, the Appearance page offers **Snap to paths** ("Follow roads" in the code; off by default, per browser; greyed out without the server). Walks are then drawn along the streets and paths they most likely took, instead of straight lines between GPS fixes. Rides and stays are unchanged.
 
 - **Engine:** [Valhalla](https://github.com/valhalla/valhalla), self-hosted next to Traccar (see README.md), built from an OpenStreetMap extract. `trace_route` with pedestrian costing, so footpaths and parks count. Only panopticon's server talks to it; trail points never go to a third party, and the browser and CSP are unchanged.
 - **Which walks** (`src/lib/matching.ts`, in the browser): `move` pieces from the classifier that end at least 75 m from where they started (wandering around a yard never qualifies), with standing-still jitter (points within 15 m of the previous) dropped, and at least 3 points left.
@@ -158,11 +158,12 @@ Optional: with `MAP_MATCHING_URL` set, Settings offers **Follow roads** (off by 
 
 ### Drawing
 
-- **Walking:** a 4 px line in `--trail`, in pieces of 3 hops so it can fade with age (opacity 0.2 at the oldest fix, 0.9 at the newest). In the pet theme, paw prints instead.
+- **Walking:** a 4 px line in `--trail`, in pieces of 3 hops so it can fade with age (opacity 0.2 at the oldest fix, 0.9 at the newest).
+- **Paw prints** (Appearance → Paw prints, per browser): walking as a dog's tracks instead of the line, a left and a right print 44 px apart along the walk, turned the way it went (a symbol layer with `symbol-placement: line` and an image drawn on a canvas in `--trail`, so there's no image file). Its own source holds each walk as one piece: in 3-hop pieces most would be too short for a print.
 - **Rides:** straight from the last fix before to the first fix after, since where exactly it went isn't known. Dashed for a vehicle, dotted for underground.
 - **Stays:** a soft filled circle with a thin outline.
-- All of it is one GeoJSON source with a `kind` property and a layer per kind; paw prints have their own source with longer pieces, since they're spaced 44 px apart.
-- **Length:** set in Settings with a stepped slider: Off, 1 hour (default), 6, 12 or 24 hours, or **Today**. Today is a different kind of length, everything since local midnight, so its label is an accent-coloured pill. It loads a day of history and draws from midnight, so just after midnight it shows almost nothing.
+- All of it is one GeoJSON source with a `kind` property and a layer per kind, plus the paw prints' source.
+- **Length:** set in the Settings card's Appearance → Trail: Off, 1 hour (default), 6, 12 or 24 hours, or **Today**, everything since local midnight. It loads a day of history and draws from midnight, so just after midnight it shows almost nothing.
   - An hour costs nothing extra, since 3 hours of history is always loaded. Longer means more per asset on each load: a day of reports every 30 s is about 2,900 points per asset.
   - Saved in the browser as `trail`. A saved length that's no longer offered moves to the closest one by ratio (anything up to 2 hours becomes 1 hour, never Off; 3 hours becomes 6); `trailMinutes`, the older name, is still read.
 
@@ -196,7 +197,7 @@ The selected asset's card shows its street address, e.g. "Storviltsgatan 5, Stoc
 - **Making one:** the server checks the user can see the asset, asks Traccar for a new token for the same user expiring with the link (`POST /api/session/token`; Traccar caps it at the session's own expiry, and so does panopticon), and seals `{asset id, token, expiry}` with AES-256-GCM under a key derived from `SESSION_SECRET` by HKDF (`shareLink.server.ts`). That's the link: about 250 characters with a real Traccar token. Nothing is stored, so the read-only container stays stateless.
 - **Opening one:** the server unseals it, checks the expiry, and reads only that asset with the link's token. The viewer gets the asset's name, picture, status, position and address; never its battery, trail, tracker ID, or anything about the sharer or their other assets. Its live stream (`/s/<link>/live`) relays Traccar's socket filtered to that asset, and its picture comes from `/s/<link>/image`.
 - **Ending:** at the expiry, Traccar refuses the token and the stream sends an `ended` event; the page then says the link has expired. **Stop** revokes the token (`POST /api/session/token/revoke`, with the link's own token so it can only revoke itself). Traccar keeps an already-open socket going after that, so each stream checks every minute that the token still works and ends if not: a stopped link goes blank within a minute even on a page that's open. Signing out of panopticon doesn't end links; they have their own tokens.
-- **Stop needs the link:** panopticon keeps no list, so the links made in a browser are kept in its localStorage (`liveLinks.ts`, with the asset's name) and listed in **Settings → Live links**, each with Stop. Other browsers don't see them.
+- **Stop needs the link:** panopticon keeps no list, so the links made in a browser are kept in its localStorage (`liveLinks.ts`, with the asset's name) and listed in the Settings card's **Live links**, each with Stop. Other browsers don't see them.
 - **No "share" in class names or ids:** content blockers' social filter lists hide elements such as `.share-menu` and `.share-icon` (to remove share widgets from sites). On an iPhone with one, the menu got `display: none` and only its backdrop showed. The menu uses `location-*` and the link page `link-*` instead.
 - **Safari and the share sheet:** Safari only opens it straight after a tap. Making a link takes a request first, so if Safari refuses, the Share button turns into **Send link** for a second tap. If that fails too (no share sheet or clipboard, as on a page without HTTPS), the link is shown in a field to copy by hand.
 - **Security:** the link is a password to where that asset is until it expires, and anyone it's forwarded to can use it. It can't be read, edited or forged without `SESSION_SECRET` (tests: `shareLink.test.ts`). If the secret leaked, a link would be as powerful as a session cookie for that account until it expires; that's the same exposure as the cookie itself, and why links last at most 24 hours. The token never reaches the viewer's browser, and Traccar isn't reachable directly anyway. Pages are `noindex`, and `Referrer-Policy: same-origin` keeps the link out of requests to the tile server. Your reverse proxy's access log will contain links if it logs paths.
@@ -226,7 +227,7 @@ In the app:
 
 ## Tracker details
 
-Each asset's page under **Settings → Manage assets** has a **Tracker** section, below Name, about the tracker itself (`TrackerDetails.tsx`), for anyone who can see the asset, including accounts that can't change it.
+Each asset's page under **Assets** (the Settings card) has a **Tracker** section, below Name, about the tracker itself (`TrackerDetails.tsx`), for anyone who can see the asset, including accounts that can't change it.
 
 | Row | From |
 |---|---|
@@ -244,36 +245,44 @@ Each asset's page under **Settings → Manage assets** has a **Tracker** section
 
 ## UI
 
-- **Pages:** `/login`, `/`, `/settings`, and `/assets`, `/assets/new` and `/assets/<id>` for [managing assets](#managing-assets). `/s/<link>` is a [live location link](#sharing), the only page that doesn't need signing in. The selected asset is a search param (`/?asset=12`), so it survives a reload.
-- **App name:** the desktop sidebar starts with the app's name as the theme shows it ("Panopticon 👁️", or "Petopticon 🐾" in the pet theme). On phones that heading is hidden visually but kept for screen readers, so the compact list stays one row.
-- **Settings link:** a round cog button (an 8-tooth gear, generated rather than hand-drawn so it's symmetric) at the end of the asset list: at the right end of the bottom bar on phones, at the bottom of the sidebar on desktop. The live indicator stays in the map's top-left corner. It's a plain link straight to Settings (`SettingsLink.tsx`); an earlier version opened a menu, which was one tap too many. Who's signed in is shown on the Settings page.
-  - A profile picture was considered and dropped. Traccar has no user pictures, and the one Pocket ID sends at sign-in reaches only Traccar, which discards it. Getting it would need either a Pocket ID API key (which can't be scoped, so a full admin key) or a second OIDC client in panopticon.
-- **Home-screen app and the status bar:** the page asks for `viewport-fit=cover` and a see-through status bar (`apple-mobile-web-app-status-bar-style: black-translucent`), so the map reaches the top of the screen. A soft shade behind the status bar keeps its white text readable, and the map's controls and the Live indicator sit below `env(safe-area-inset-top)`; other pages pad their tops by it.
-  - **An iOS quirk**, measured on an iPhone (screen 852 pt, status bar 59): in that mode the page starts under the status bar, but iOS reports the viewport one status bar shorter. `100%`, `100dvh` and `position: fixed; bottom: 0` all stop at 793, and fixed elements are cut off below it, which first showed as a tall empty band under the avatar row. Only `100vh`/`100lvh` are the full 852. So in `display-mode: standalone` the map page is laid out with `position: absolute` and `height: 100lvh`, with scrolling turned off, instead of pinned. Not in Safari itself: there `100lvh` is the height with its toolbars hidden, which would put the asset list under them.
-- **Layout:** on phones (under 768 px), the map fills the screen and the assets form one compact row along the bottom: each is just its picture or initial, with a status dot on one bottom corner, a small battery gauge on the other (when the tracker reports one), and a ring when selected (about 74 px tall in all). The name and details stay in each button for screen readers but are hidden visually. Selecting an asset opens its **details** above the row (`AssetDetails`): picture, name, status, battery gauge with percentage and a close button, then the lines listed below for the card. They push the map up rather than cover it; tapping them keeps the selection, and the close button deselects. From 768 px wide, the assets become full cards in a 22 rem side panel. The list never covers the map, so the map needs no padding tricks. Each full card shows:
-  - the asset's picture from Traccar, or its initial if there's none or it fails to load (like the map marker);
-  - the name, an online/offline dot and a status label;
-  - "Seen 4 minutes ago", from `fixTime` using `Intl.RelativeTimeFormat` and re-rendered every 30 s;
-  - the street address, for the selected asset (see [Addresses](#addresses));
-  - "Here since 07:12" after "Seen …" while it's staying put (`currentStay` in segments.ts): the trail's last piece is a stay and reports are recent. When the stay goes back to the start of the loaded history, it says "since before";
-  - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
-  - while riding, **In a vehicle** or **Moving underground** with a transit icon, in the accent colour (on phones, a small badge on the avatar's top-right corner);
-  - battery, when available: a gauge with 0–4 bars (empty below 5%, then one bar per started quarter) at the end of the name row, in the warning colour at 20% or below. The exact percentage is its label, for screen readers and as the hover tooltip. Readings near empty jump by several points as the voltage recovers, and bars hide most of that. Trackers that report volts only get a text line instead.
-- **Share:** a button in the phone details, and under the selected card on desktop. It opens a menu: a drop-down under the button on wider screens, an action sheet from the bottom on phones (with Cancel). Items: **Send location**, and **Share live location** for 1, 8 or 24 hours. While a live link made in this browser is active, a **Sharing live** button sits beside Share and leads to Settings → Live links (`/settings#live-links`), where links are stopped. See [Sharing](#sharing).
-- **Map:** tapping a card selects that asset and flies to it; tapping the selected card again re-centres. Tapping a marker selects its asset. Tapping the selected asset's marker deselects it when it's centred (being followed, or within 12 px of the middle); when it's off-centre, for example after a drag, the tap re-centres it and resumes following instead. On load the map shows the asset in `?asset=`, or fits all assets.
-- **Deselecting:** only by tapping the selected asset's marker while it's centred, tapping the asset panel away from its cards and buttons (the gaps in the phone bar, the sidebar's title and empty space), or the close button in the phone details. Tapping or dragging the map keeps the selection.
+The look is [Konsta UI](https://konstaui.com): native-looking iOS and Material components for React, on Tailwind CSS. See [Look and feel](#look-and-feel) for how it's set up.
+
+- **Pages:** `/login`, and `/`, the map, whose Settings card holds the settings and [managing assets](#managing-assets). `/s/<link>` is a [live location link](#sharing), the only page that doesn't need signing in. The selected asset and the Settings card's view are search params (`/?asset=12&settings=asset-30`), so they survive a reload.
+- **Map screen:** the map fills the screen, with a bar floating along the bottom like Apple Maps' search bar (`BottomBar.tsx`): the your-position button at its left end, each asset's picture (scrolling sideways when there are many; stale ones grey), and the Settings button (the signed-in user's initial) at its right. The map's zoom buttons sit above the bar, and fitting the map to assets leaves room for it (`clearOfBottom` in AssetMap).
+  - **Asset pictures:** the first tap selects the asset and centres the map on it (and follows it, as selecting on the map does). Tapping the selected asset's picture again re-centres it and opens its **details card** (`AssetCard.tsx`) from the bottom, like Apple Maps' place card: its picture, name, status and battery, then what it's doing, the address, when it was seen, and **Share**. The card has no backdrop, so the map can still be moved; ✕, Escape or the back gesture closes it (`?details=true`, with a history entry of its own when opened here, as the Settings card has). Selecting another asset on the map replaces it.
+  - **Settings card:** the button opens a card from the bottom, like Apple Maps' profile card: the user's initial, name and email, then **Assets** (with the count), **Appearance**, **Live links** (the count made in this browser) and **Account**. Under the list, small, the map data's credits (see [Map tiles](#map-tiles)). It's 472 px tall, just fitting both, or less on short screens. The button and the card are called Settings; the card's view is the `settings` search param.
+  - **Page card:** Assets, Appearance, Live links and Account each open a second card from the bottom, over the Settings card, like Apple Maps' Places: from just below the status bar to the bottom of the screen, with a large title and ✕ back to the Settings card. Appearance has **Map style** (see [Map tiles](#map-tiles)) and **Trail** as checkmark lists, then **Walks**: **Paw prints** and **Snap to paths** as switches, the second greyed out without a map-matching server (`Appearance.tsx`), Live links the list with Stop (`LiveLinksList.tsx`), Account the signed-in name and email with **Sign out**, and Assets the asset list (see [Managing assets](#managing-assets)). Add asset and an asset's own page open inside the Assets card, sliding in sideways (`.card-view-forward`/`-back`, none with reduced motion), with "‹ Assets" back. The map stays behind the cards, so a new trail length or a renamed asset shows at once.
+  - **Views in the address:** `?settings=main` (the Settings card), and `appearance`, `live-links`, `account`, `assets`, `add-asset` or `asset-<id>` for the page card over it (`parseSettingsView`). Opening the Settings card adds a history entry, and opening a page card from it another, so the back gesture closes them one at a time; moving within the page card replaces its entry. ✕, Escape or tapping outside closes the top card. When a card was opened here, closing it goes back in history past its entries; when the page loaded with it open, closing just changes the param.
+  - Focus moves to the top card's ✕ (or "‹ Assets") as it opens, and back to the Settings button when everything closes, with `preventScroll`: without it the browser scrolls the map screen to bring the button into view while the card is still moving, and the whole screen jumps. For the same reason the map screen is `overflow: clip`, not `hidden`: a hidden box can still be scrolled, and focusing a control in a card that's off-screen shifted it up by 250 px in testing. Cards underneath and closed cards are `inert`.
+  - Not Konsta's `Sheet`: it's `position: fixed`, which stops 59 pt short of the screen's bottom in the iOS home-screen app (see Home screen below). The bar, the card and its backdrop are absolute inside the map screen.
+  - The email is kept in the session cookie from sign-in; sessions from before it was kept show the name only.
+- The details card's content, from the old asset panel:
+  - **Nothing selected:** "Panopticon" with a cog that goes to Settings, then the assets as a list: picture (or initial), an online/offline dot and name, one line of what it's doing ("Seen 4 minutes ago · Here since 07:12", "In a vehicle", "No location yet"), and a battery gauge.
+  - **An asset selected:** "‹ Assets" back to the list, its picture, name, status and battery percentage, then:
+    - while riding, **In a vehicle** or **Moving underground**, in the accent colour;
+    - the street address (see [Addresses](#addresses));
+    - "Seen 4 minutes ago", from `fixTime` using `Intl.RelativeTimeFormat`, re-rendered every 30 s, with "Here since 07:12" while it's staying put (`currentStay` in segments.ts: the trail's last piece is a stay and reports are recent; when the stay goes back to the start of the loaded history, "since before");
+    - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
+    - **Share** (and **Sharing live**), see below.
+  - **Battery:** a gauge with 0–4 bars (empty below 5%, then one bar per started quarter), orange at 20% or below. The exact percentage is its label, for screen readers and as the hover tooltip. Readings near empty jump by several points as the voltage recovers, and bars hide most of that. Trackers that report volts only get a text line instead.
+  - The Live indicator sits in the map's top-left corner, and the zoom buttons (`ZoomButtons` in AssetMap) just above the bottom bar's right end. Both are pills like the bar: the same colours (Konsta's surface for iOS or Material, light or dark), shadow and line icons, 12 px from the screen's edges. Live link pages have a panel along the bottom, so there maplibre's own zoom and position buttons stay top-right, with the ⓘ below them; they follow dark mode too (dark grey, white icons), whichever map style is showing.
+- **Share:** a button in the details card. It opens the **Share card**, a second-level card like Settings' pages (full height, large title, ✕; drawn into the map screen with a portal, so it covers the screen rather than the details card): **Send location**, and **Share live location** for 1, 8 or 24 hours. Escape closes just it (a capture-phase listener that stops there), and closing the details card closes it too. While a live link made in this browser is active, a **Sharing live** button sits beside Share and opens the Settings card's Live links (`/?settings=live-links`), where links are stopped. See [Sharing](#sharing).
+- **Home-screen app and the status bar:** the page asks for `viewport-fit=cover` and a see-through status bar (`apple-mobile-web-app-status-bar-style: black-translucent`), so the map reaches the top of the screen. A soft shade behind the status bar keeps its white text readable, and the map's controls and the Live indicator sit below `env(safe-area-inset-top)`; the other pages' bars do the same (Konsta's safe areas).
+  - **An iOS quirk**, measured on an iPhone (screen 852 pt, status bar 59): in that mode the page starts under the status bar, but iOS reports the viewport one status bar shorter. `100%`, `100dvh` and `position: fixed; bottom: 0` all stop at 793, and fixed elements are cut off below it, which first showed as a tall empty band under the asset row. Only `100vh`/`100lvh` are the full 852. So in `display-mode: standalone` the map page is laid out with `position: absolute` and `height: 100lvh`, with scrolling turned off, instead of pinned. Not in Safari itself: there `100lvh` is the height with its toolbars hidden, which would put the map's bottom edge under them.
+- **Map:** tapping an asset in the list selects it and flies to it. Tapping a marker selects its asset. Tapping the selected asset's marker deselects it when it's centred (being followed, or within 12 px of the middle); when it's off-centre, for example after a drag, the tap re-centres it and resumes following instead. On load the map shows the asset in `?asset=`, or fits all assets.
+- **Deselecting:** "‹ Assets" in the panel, or tapping the selected asset's marker while it's centred. Tapping or dragging the map keeps the selection.
 - **Following:** while an asset is selected, the map keeps it centred, gliding to each new position (1 s).
-  - **Dragging pauses it:** a mouse or one-finger drag, or panning with the arrow keys, stops following but keeps the asset selected. Tapping its card or its marker again, or selecting another asset, resumes. The pause is tied to the selection it was made in (`focusToken`), so it never carries over to the next one.
+  - **Dragging pauses it:** a mouse or one-finger drag, or panning with the arrow keys, stops following but keeps the asset selected. Tapping its marker again, or selecting another asset, resumes. The pause is tied to the selection it was made in (`focusToken`), so it never carries over to the next one.
   - **Zooming keeps following:** scroll wheel, pinch, +/− and double-tap. While following, wheel and pinch zoom around the centre instead of the cursor or fingers. After a zoom gesture (a double-tap zooms around the tap; a pinch drifts, which maplibre reports as a two-finger drag and is ignored) the map glides back to the asset.
   - Position updates that arrive during a selection flight or a zoom gesture don't interrupt it; the map catches up when it ends. Those waits only apply while the map is actually moving, so a missed end event can't stop following.
   - Only real gestures pause following: maplibre fires `dragstart` for user drags, never for the app's own camera moves.
-- **Your position:** a button under the zoom controls shows where you are, as a blue dot with a soft circle for its accuracy (`useMyPosition.ts`, `myPosition.ts`). It's off each time the app opens; the first tap asks the browser for permission. The first fix frames you and the selected asset together, which pauses following like a drag (tapping the asset resumes it), or just you when nothing is selected. Tapping the button again turns it off. If the browser refuses or can't find you, a short note says so and it switches off. Your position stays in the browser: it's only drawn, never sent anywhere. Live link pages have the button too.
-- **Markers:** maplibre DOM markers (enough for ≤5): a dot with the asset's initial and a name label. Greyed out when the fix is older than 30 minutes; a ring when selected (same size, so selecting doesn't shift it).
+- **Your position:** the location arrow at the left of the bottom bar (on a live link page, a button under the zoom controls) shows where you are, as a blue dot with a soft circle for its accuracy (`useMyPosition.ts`, `myPosition.ts`). It's off each time the app opens; the first tap asks the browser for permission. The first fix frames you and the selected asset together, which pauses following like a drag (tapping the asset resumes it), or just you when nothing is selected. Tapping the button again turns it off. If the browser refuses or can't find you, a short note says so and it switches off. Your position stays in the browser: it's only drawn, never sent anywhere. Live link pages have the button too.
+- **Markers:** maplibre DOM markers (enough for ≤5): a dot with the asset's picture or initial and a name label. Greyed out when the fix is older than 30 minutes; a ring when selected (same size, so selecting doesn't shift it).
   - No accuracy circle yet: the ST-904L reports no accuracy, so it would never show. Add it when a tracker does.
-- **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows the asset list first, and maplibre stays out of the first-load bundle.
+- **Rendering:** maplibre runs in the browser only, lazy-loaded in a client-only component. The server-rendered HTML shows a placeholder where the map goes, and maplibre stays out of the first-load bundle.
 - **maplibre worker:** v6 looks for its worker script next to its own file, which breaks once bundled. Vite bundles it instead (`?worker&url`, `worker.format: 'es'`), and `setWorkerUrl` points maplibre at the same-origin result.
 - **Data freshness:** the `/` loader reloads when you arrive on the map (`shouldReload: cause !== 'stay'`), not when you select an asset. Live updates keep it current in between.
-- **Settings** (`/settings`): theme, trail length, "Follow roads" (only when the server has map matching), a link to manage assets, and the account section with sign-out. Settings live in `localStorage`, per browser. They're a convenience: without storage, the defaults apply. Server render and hydration use the defaults, so the page waits for the stored value before fetching trail history.
+- **Settings** (in the Settings card, above): Settings live in `localStorage`, per browser. They're a convenience: without storage, the defaults apply. Server render and hydration use the defaults, so the page waits for the stored value before fetching trail history.
 - **Home screen:** `public/manifest.webmanifest` plus icons (`icon.svg`, 192/512 px maskable PNGs, 180 px `apple-touch-icon`), so the app can be added to the home screen and opens full-screen. No service worker, and no offline use.
 
 ## Asset images
@@ -294,7 +303,7 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
 
 ## Managing assets
 
-Settings → Manage assets lists every device the user can see, including ones disabled in Traccar. From there you can add an asset (name and tracker ID), and on each asset's page see how its tracker is doing ([Tracker details](#tracker-details)), change its photo, rename it or remove it. Only these three fields are handled; groups, phone numbers, models and categories stay in Traccar's UI.
+**Assets**, in the Settings card (`AssetsList.tsx`), lists every device the user can see, including ones disabled in Traccar. From there you can add an asset (name and tracker ID, `AddAssetForm.tsx`), and on each asset's page (`AssetEditor.tsx`) see how its tracker is doing ([Tracker details](#tracker-details)), change its photo, rename it or remove it. Only these three fields are handled; groups, phone numbers, models and categories stay in Traccar's UI.
 
 - **Traccar calls** (`traccar.server.ts`):
   - Add: `POST /api/devices` with `{name, uniqueId}`. Traccar links the new device to the user who creates it.
@@ -307,33 +316,24 @@ Settings → Manage assets lists every device the user can see, including ones d
 - **Tracker ID:** the browser sends it once, when adding. It's never sent back: the pages show only name and photo, for the same reason as in [Asset images](#asset-images).
 - **After a change** the pages reload their data (`router.invalidate`), and the map reloads its list when you return to it.
 
-## Themes
+## Look and feel
 
-Pick a theme on the Settings page, from a list with a colour preview for each. Two themes so far:
-- **Classic** (default): the original look, following the device's light or dark mode.
-- **Petopticon** (theme id `pet`; formerly "Dog park" with id `dog`, which is still read as `pet` so saved choices carry over): renames the app to "Petopticon" on the login page and browser tab, and follows the device's light or dark mode (a pastel light palette, and a dark one with deep warm backgrounds and the same pastel accents), with a 🐾 after the login title, a gently softened map, and trails drawn as paw prints.
+[Konsta UI](https://konstaui.com) (v5) provides the components: lists, navigation bars with large titles, toggles, buttons, dialogs. It's built on Tailwind CSS v4, which the app uses for its own layout too. The one hand-written stylesheet left (`styles.css`) holds the accent colour and the map: markers, overlays, controls and the status-bar fixes.
 
-- **Storage:** the choice lives in the `panopticon-theme` cookie (one year, `SameSite=Lax`, `Secure` over HTTPS), per browser.
-  - A cookie rather than `localStorage`, so the server can render `<html data-theme>` straight away: no flash of the default theme on load.
-  - The root route's `beforeLoad` reads it on the server (`theme.server.ts`) or from `document.cookie` in the browser. `useTheme` keeps `<html>` in step when it changes. Unknown values fall back to Classic.
-- **Styling:** each theme is a set of CSS variables in `styles.css`, keyed on `:root[data-theme='…']`, which outranks the default and dark-mode rules.
-  - The CSP forbids inline `style` attributes, so everything theme-specific is done with classes, including the picker's colour previews.
-  - `--trail` is the trail colour. The map reads it via `getComputedStyle`, because map paint properties can't use CSS variables.
-- **Paw prints** (`AssetMap.tsx`):
-  - The icon is a staggered left-and-right pair, drawn on a canvas in the theme's `--trail` colour, so there's no image file.
-  - maplibre places the icons along each trail (`symbol-placement: line`, every 44 px) and turns them to face the direction of travel.
-  - A symbol layer can't fade along a line the way `line-gradient` does, so each trail is split into up to five pieces with rising opacity.
-  - The line and paw layers both exist; the theme decides which is visible, so switching themes needs no reload.
-- **Adding a theme:**
-  1. Add an entry to `THEMES` in `src/lib/theme.ts`.
-  2. Add a `:root[data-theme='<id>']` block of variables, plus `.theme-preview-<id>` swatches, to `styles.css`.
-  3. Optionally, give it special map behaviour in `AssetMap`, as the pet theme's paws do.
+- **iOS or Material:** Android gets Material Design, everything else (iPhones, iPads, desktops) iOS (`platform.ts`). It's decided from the User-Agent, on the server too (`platform.server.ts` in the root route's `beforeLoad`), and handed to Konsta's `<App theme>`, so the first render already has the right look. Konsta picks its classes in JavaScript, so this can't be left to CSS.
+- **Light and dark:** Konsta's dark mode is a `.dark` class on `<html>`. `public/color-scheme.js`, a blocking script in `<head>` (allowed by the CSP as a same-origin file), sets it from `prefers-color-scheme` and follows changes. It runs before the first paint, so there's no flash; `<html>` has `suppressHydrationWarning` because the server never renders the class. Redefining Tailwind's `dark:` variant as a media query instead doesn't work: Konsta's own definition wins.
+- **Colours:** the accent is the app's green (`--color-brand-primary` in `@theme`); Konsta derives its iOS and Material shades from it. The map's colours (`--trail`, `--marker`, online/offline/stale) are CSS variables with a `.dark` block. AssetMap reads `--trail` via `getComputedStyle`, because map paint properties can't use CSS variables, and repaints the trail when the mode changes. Online is iOS green, offline iOS orange.
+- **Older phones:** the costliest thing on old GPUs is blur (`backdrop-filter`) re-rendered under a moving map. Nothing over the map blurs: the cards and pills are solid. Tailwind v4 needs iOS 16.4 or later (`@property`, cascade layers): iPhone 8 and later.
+- **CSP:** Konsta ships static CSS and sets its few computed styles (segmented highlights, popovers) from JavaScript on the client, which `style-src 'self'` allows. Checked in a production build: no `style=""` attributes or `<style>` tags in the server-rendered HTML, and no violations on any page.
+- **Weight:** about 16 KB of CSS and 27 KB of JavaScript (both gzipped) for the whole app, against 280 KB for maplibre.
+- **Not used:** Konsta's strong `Segmented` control (its sliding highlight lagged one tap behind in testing), and its `Sheet` (no dragging). The pet theme ("Petopticon", pastels, and paw-print trails, now a setting of their own) was dropped with the move to Konsta.
 
 ## Map tiles
 
 - `MAP_STYLE_URL` is optional. The default is OpenFreeMap's `liberty` style: free, no API key, no analytics. OpenFreeMap does see which map areas you load.
-- **Map style button** (under your-position in the map's controls): with OpenFreeMap, a list of its five free styles, **Standard** (liberty), **Light** (positron), **Bright**, **Dark** and **Dark blue** (fiord), plus **Auto**, which is Standard in light mode and Dark in dark mode (`mapStyles.ts`). The choice is kept per browser (`mapStyle` in the settings) and live link pages have it too. The default is the style `MAP_STYLE_URL` names. With a self-hosted style there's nothing to choose between, so there's no button.
+- **Map style** (Settings → Appearance): with OpenFreeMap, a checkmark list of its five free styles, **Standard** (liberty), **Light** (positron), **Bright**, **Dark** and **Dark blue** (fiord), plus **Auto**, which is Standard in light mode and Dark in dark mode (`mapStyles.ts`). The choice is kept per browser (`mapStyle` in the settings); a live link page uses the viewer's stored choice, or the default, and has no picker of its own. The default is the style `MAP_STYLE_URL` names. With a self-hosted style there's nothing to choose between, so the section isn't shown.
 - **Switching keeps the view:** the map isn't rebuilt; `setStyle` loads the new style (a full reload, not a diff) and `style.load` adds the trail and your-position layers again. Markers are DOM elements, so they stay. All of OpenFreeMap's styles share one origin, so the Content-Security-Policy needs nothing new.
+- **Attribution** ("OpenFreeMap © OpenMapTiles Data from OpenStreetMap"): on the map screen it's in the Settings card, under its list, not on the map. AssetMap reads it from the style's sources as they load, as maplibre's own control does, and hands it out (`onAttribution`); it's HTML from the style, so the card shows only its text and its http(s) links, never the HTML itself. A self-hosted style's own credits show the same way. OpenStreetMap's attribution guidelines ask for credit on or next to the map, so this is a deliberate choice for a private app. Live link pages have no Settings card and keep maplibre's compact ⓘ, top-right below the buttons: in full the first time the map opens in a browser, shrinking to the button after 5 seconds or a drag, and starting as the button after that (`panopticon.attributionShown` in `localStorage`).
 - No satellite imagery: there's no free provider without an API key that doesn't see where you look.
 - To use no third-party service, run your own tile server and point `MAP_STYLE_URL` at its style JSON. For example: `pmtiles serve` with a Protomaps extract, or Martin. This needs no app code changes and adds no dependency.
 - The Content-Security-Policy allows the origin of `MAP_STYLE_URL` for tiles, fonts and sprites.
@@ -343,21 +343,18 @@ Pick a theme on the Settings page, from a list with a colour preview for each. T
 ```
 server.mjs                            production server: srvx + static files + Start handler
 Dockerfile, .dockerignore
-public/                               manifest + icons, copied to dist/client
+public/                               manifest + icons, color-scheme.js (dark mode), copied to dist/client
+dev/mock-traccar.mjs                  a stand-in Traccar with made-up assets, for development
 src/
   start.ts                            request middleware: CSRF for server functions, security headers
   router.tsx                          also sets the per-request CSP nonce for Start's inline scripts
   routes/
     __root.tsx
     login.tsx
-    index.tsx                         map + asset sheet (protected)
+    index.tsx                         map, bottom bar and Settings card (protected)
     auth.sso.ts                       server route: start SSO
     images.asset.$id.ts               server route: asset picture
     api.session.openid.callback.ts    server route: SSO return (path fixed by Traccar)
-    settings.tsx                      theme, trail length, manage assets link, live links, sign-out
-    assets.index.tsx                  list of assets to manage
-    assets.new.tsx                    add an asset
-    assets.$id.tsx                    tracker details, photo, name, remove
     live.ts                           server route: SSE relay
     s.$link.tsx                       live location link page (public)
     s_.$link.live.ts                  server route: a live link's SSE stream
@@ -372,12 +369,12 @@ src/
     assets.functions.ts               getAssets, getTrackerDetails
     tracker.server.ts                 Traccar → tracker details (SinoTrack io fields) + tests
     manage.server.ts                  add / rename / remove assets and photos; edit access; error mapping
-    manage.functions.ts               server functions for the /assets pages, with input checks
+    manage.functions.ts               server functions for managing assets, with input checks
     map.functions.ts                  getMapOptions (style URL, follow roads available), matchWalks, getAddress
     address.server.ts                 street addresses through Traccar's geocoder, cache
     matching.server.ts                Valhalla map matching, closeness check, cache
     images.server.ts                  /images/asset/<id>: device pictures from Traccar, cached
-    theme.server.ts                   theme from the request's cookie
+    platform.server.ts                iOS or Material, from the request's User-Agent
     trails.functions.ts               getTrails (position history)
     security.server.ts                CSP nonce + security headers
     live.server.ts                    /live: WebSocket → SSE relay (also used by live links)
@@ -388,11 +385,18 @@ src/
   components/
     AssetMap.tsx                      maplibre map + markers (browser only, lazy)
     myPosition.ts                     your position on the map: dot, accuracy circle, button icon
-    mapControls.ts                    a map button like maplibre's own (your position, map style)
-    AssetSheet.tsx                    asset cards
+    mapControls.ts                    a map button like maplibre's own (your position, on live link pages)
+    BatteryGauge.tsx                  battery as 0–4 bars
+    BottomBar.tsx                     the map's bottom bar and the Settings card (settings, assets)
+    AssetCard.tsx                     the selected asset's details card
+    cards.tsx                         what the map screen's cards share: colours, ✕, backdrop
+    AssetsList.tsx                    the assets to manage
+    AddAssetForm.tsx                  add an asset
+    AssetEditor.tsx                   an asset's photo, name, tracker details, remove
+    Appearance.tsx                    map style, trail length, paw prints, snap to paths
+    LiveLinksList.tsx                 this browser's live links, with Stop
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
-    SettingsLink.tsx                  cog link to Settings, at the end of the asset list
     TrackerDetails.tsx                the Tracker section of an asset's page
     ShareMenu.tsx                     Share: send location, make and send live links
     RelativeTime.tsx
@@ -414,7 +418,7 @@ src/
     liveLinks.ts                      live links made in this browser (localStorage)
     useSharedAsset.ts                 a live link page's EventSource
     settings.ts                       per-browser settings (localStorage)
-    theme.ts                          THEMES, useTheme (cookie)
+    platform.ts                       iOS or Material from a User-Agent
     assetImage.ts                     crop + shrink photos (browser), sniff image type (server)
     editErrors.ts                     messages for failed asset changes
     useLiveAssets.ts                  EventSource + trails + reconnect logic
@@ -458,10 +462,10 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 
 ## Dependencies
 
-- **Runtime:** `react`, `react-dom`, `@tanstack/react-start`, `@tanstack/react-router`, `maplibre-gl`, `srvx` (production HTTP server; already part of TanStack Start, so no extra code).
-- **Dev:** `vite`, `@vitejs/plugin-react`, `typescript`, plus `@types/react`, `@types/react-dom`, `@types/node` (type definitions only).
+- **Runtime:** `react`, `react-dom`, `@tanstack/react-start`, `@tanstack/react-router`, `maplibre-gl`, `konsta` (UI components; brings `tailwind-merge`), `srvx` (production HTTP server; already part of TanStack Start, so no extra code).
+- **Dev:** `vite`, `@vitejs/plugin-react`, `tailwindcss` and `@tailwindcss/vite` (build-time CSS for Konsta and the app), `typescript`, plus `@types/react`, `@types/react-dom`, `@types/node` (type definitions only).
 - **Node:** 24 LTS, pinned in `mise.toml`.
-- **Deliberately not added:** auth library, state library, date library, CSS framework, `ws`, zod, `pmtiles`.
+- **Deliberately not added:** auth library, state library, date library, animation library, `ws`, zod, `pmtiles`.
 
 ## Deployment
 

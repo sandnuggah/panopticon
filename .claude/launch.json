@@ -3,12 +3,46 @@
   "configurations": [
     {
       "name": "panopticon",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "/etc/profiles/per-user/adam/bin/mise",
       "runtimeArgs": [
+        "exec",
+        "--",
+        "npm",
         "run",
         "dev"
       ],
       "port": 3000
+    },
+    {
+      "name": "panopticon-lan",
+      "runtimeExecutable": "/etc/profiles/per-user/adam/bin/mise",
+      "runtimeArgs": [
+        "exec",
+        "--",
+        "npm",
+        "run",
+        "dev",
+        "--",
+        "--host"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "panopticon-mock",
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": [
+        "TRACCAR_URL=http://127.0.0.1:8082",
+        "/etc/profiles/per-user/adam/bin/mise",
+        "exec",
+        "--",
+        "npm",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3001"
+      ],
+      "port": 3001
     }
   ]
 }

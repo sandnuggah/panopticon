@@ -9,9 +9,11 @@ type SessionData = {
   token: string
   expiresAt: number
   name: string
+  /** Missing in sessions made before it was kept. */
+  email?: string
 }
 
-export type SessionUser = { name: string }
+export type SessionUser = { name: string; email?: string }
 
 function appSession() {
   const { sessionSecret, sessionDays } = env()
@@ -67,7 +69,7 @@ export async function signIn(traccarSessionCookie: string, user: TraccarUser): P
   const expiresAt = Date.now() + env().sessionDays * 24 * 60 * 60 * 1000
   const token = await exchangeSessionForToken(traccarSessionCookie, new Date(expiresAt))
   const session = await appSession()
-  await session.update({ token, expiresAt, name: user.name || user.email })
+  await session.update({ token, expiresAt, name: user.name || user.email, email: user.email })
 }
 
 export async function signOut(): Promise<void> {
@@ -80,7 +82,8 @@ export async function signOut(): Promise<void> {
 export async function getSessionUser(): Promise<SessionUser | null> {
   if (!(await getSessionToken())) return null
   const session = await appSession()
-  return { name: session.data.name ?? '' }
+  const { name, email } = session.data
+  return email ? { name: name ?? '', email } : { name: name ?? '' }
 }
 
 /** The signed-in user's Traccar token, or null when signed out or expired. */

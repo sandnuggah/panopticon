@@ -19,6 +19,9 @@ npm run dev            # http://localhost:3000
 
 `npm run typecheck` checks types; `npm run build && npm start` runs the production build locally.
 
+No Traccar to hand? `node dev/mock-traccar.mjs` runs a stand-in with three made-up assets on port 8082. Put
+`TRACCAR_URL=http://127.0.0.1:8082` in `.env.development.local` and sign in as `pet@example.com` / `secret`.
+
 ## Configure
 
 All configuration is environment variables; `.env.example` documents each one. The required ones:
@@ -81,10 +84,10 @@ stream.
 
 ## Follow roads (optional)
 
-"Follow roads" in Settings draws walks along the streets and paths they most likely took, using
-[Valhalla](https://github.com/valhalla/valhalla), a routing engine built from OpenStreetMap data that
-you run yourself. Trail points only go to it, never to a third party. Without it the setting isn't
-offered.
+"Snap to paths" (Settings → Appearance; "Follow roads" in the code) draws walks along the streets and
+paths they most likely took, using [Valhalla](https://github.com/valhalla/valhalla), a routing engine
+built from OpenStreetMap data that you run yourself. Trail points only go to it, never to a third
+party. Without it the switch is greyed out.
 
 1. Add Valhalla to `compose.yaml`, on the same network as panopticon:
    ```yaml

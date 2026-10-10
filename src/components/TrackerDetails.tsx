@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { BlockTitle, Button, List, ListItem } from 'konsta/react'
 import { statusLabel } from '../lib/asset'
 import { formatTime } from '../lib/share'
 import { SIGNAL_LABELS, type TrackerDetails as Details } from '../lib/tracker'
@@ -14,7 +15,7 @@ const REFRESH_MS = 30_000
  * network, battery, how often it reports, where its last fix was, and its model (see
  * lib/tracker.ts). Fetched when the page opens and every 30 s while it's open.
  */
-export function TrackerSection({ assetId }: { assetId: number }) {
+export function TrackerSection({ assetId, listColors }: { assetId: number; listColors?: { strongBgIos: string } }) {
   const [details, setDetails] = useState<Details>()
   const [failed, setFailed] = useState(false)
 
@@ -39,18 +40,16 @@ export function TrackerSection({ assetId }: { assetId: number }) {
   }, [assetId])
 
   return (
-    <section>
-      <h2>Tracker</h2>
+    <>
+      <BlockTitle>Tracker</BlockTitle>
       {details ? (
         <Rows details={details} />
-      ) : failed ? (
-        <p className="error" role="alert">
-          Couldn't load the tracker's details.
-        </p>
       ) : (
-        <p className="muted">Loading…</p>
+        <List strong inset colors={listColors}>
+          <ListItem title={failed ? "Couldn't load the tracker's details" : 'Loading…'} />
+        </List>
       )}
-    </section>
+    </>
   )
 }
 
@@ -58,7 +57,7 @@ function Rows({ details }: { details: Details }) {
   const now = useNow(30_000)
   const { gps, signal, network, battery, position } = details
   return (
-    <dl className="tracker-rows">
+    <List strong inset>
       <Row label="Connection">
         {statusLabel(details.status)}
         {details.lastContact && (
@@ -110,17 +109,12 @@ function Rows({ details }: { details: Details }) {
       {(details.model || details.protocol) && (
         <Row label="Model">{[details.model, details.protocol && `(${details.protocol})`].filter(Boolean).join(' ')}</Row>
       )}
-    </dl>
+    </List>
   )
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <>
-      <dt>{label}</dt>
-      <dd>{children}</dd>
-    </>
-  )
+  return <ListItem title={label} after={<span className="flex items-center gap-1.5 text-right">{children}</span>} />
 }
 
 function interval(seconds: number): string {
@@ -137,10 +131,12 @@ function CopyText({ text }: { text: string }) {
   }, [copied])
   return (
     <>
-      <span className="tracker-copy-text">{text}</span>
-      <button
-        type="button"
-        className="button-quiet tracker-copy"
+      <span className="select-text">{text}</span>
+      <Button
+        small
+        rounded
+        tonal
+        className="w-auto! px-2.5"
         onClick={() => {
           navigator.clipboard
             ?.writeText(text)
@@ -149,7 +145,7 @@ function CopyText({ text }: { text: string }) {
         }}
       >
         {copied ? 'Copied' : 'Copy'}
-      </button>
+      </Button>
     </>
   )
 }
@@ -157,7 +153,7 @@ function CopyText({ text }: { text: string }) {
 /** Four rising bars, the filled ones in the text colour. Decorative; the word beside it says it. */
 function SignalBars({ bars }: { bars: number }) {
   return (
-    <svg className="signal-bars" viewBox="0 0 16 12" aria-hidden="true">
+    <svg className="h-3 w-4" viewBox="0 0 16 12" aria-hidden="true">
       {[0, 1, 2, 3].map((bar) => (
         <rect
           key={bar}

@@ -13,10 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as AssetsIndexRouteImport } from './routes/assets.index'
-import { Route as AssetsIdRouteImport } from './routes/assets.$id'
-import { Route as AssetsNewRouteImport } from './routes/assets.new'
 import { Route as AuthSsoRouteImport } from './routes/auth.sso'
 import { Route as SLinkRouteImport } from './routes/s.$link'
 import { Route as ImagesAssetIdRouteImport } from './routes/images.asset.$id'
@@ -42,26 +38,6 @@ const LiveRoute = LiveRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AssetsIndexRoute = AssetsIndexRouteImport.update({
-  id: '/assets/',
-  path: '/assets/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AssetsIdRoute = AssetsIdRouteImport.update({
-  id: '/assets/$id',
-  path: '/assets/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AssetsNewRoute = AssetsNewRouteImport.update({
-  id: '/assets/new',
-  path: '/assets/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthSsoRoute = AuthSsoRouteImport.update({
@@ -101,12 +77,8 @@ export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
-  '/settings': typeof SettingsRoute
-  '/assets/$id': typeof AssetsIdRoute
-  '/assets/new': typeof AssetsNewRoute
   '/auth/sso': typeof AuthSsoRoute
   '/s/$link': typeof SLinkRoute
-  '/assets/': typeof AssetsIndexRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
   '/s/$link/image': typeof SLinkImageRoute
   '/s/$link/live': typeof SLinkLiveRoute
@@ -117,12 +89,8 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
-  '/settings': typeof SettingsRoute
-  '/assets/$id': typeof AssetsIdRoute
-  '/assets/new': typeof AssetsNewRoute
   '/auth/sso': typeof AuthSsoRoute
   '/s/$link': typeof SLinkRoute
-  '/assets': typeof AssetsIndexRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
   '/s/$link/image': typeof SLinkImageRoute
   '/s/$link/live': typeof SLinkLiveRoute
@@ -134,12 +102,8 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
-  '/settings': typeof SettingsRoute
-  '/assets/$id': typeof AssetsIdRoute
-  '/assets/new': typeof AssetsNewRoute
   '/auth/sso': typeof AuthSsoRoute
   '/s/$link': typeof SLinkRoute
-  '/assets/': typeof AssetsIndexRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
   '/s_/$link/image': typeof SLinkImageRoute
   '/s_/$link/live': typeof SLinkLiveRoute
@@ -152,12 +116,8 @@ export interface FileRouteTypes {
     | '/$'
     | '/live'
     | '/login'
-    | '/settings'
-    | '/assets/$id'
-    | '/assets/new'
     | '/auth/sso'
     | '/s/$link'
-    | '/assets/'
     | '/images/asset/$id'
     | '/s/$link/image'
     | '/s/$link/live'
@@ -168,12 +128,8 @@ export interface FileRouteTypes {
     | '/$'
     | '/live'
     | '/login'
-    | '/settings'
-    | '/assets/$id'
-    | '/assets/new'
     | '/auth/sso'
     | '/s/$link'
-    | '/assets'
     | '/images/asset/$id'
     | '/s/$link/image'
     | '/s/$link/live'
@@ -184,12 +140,8 @@ export interface FileRouteTypes {
     | '/$'
     | '/live'
     | '/login'
-    | '/settings'
-    | '/assets/$id'
-    | '/assets/new'
     | '/auth/sso'
     | '/s/$link'
-    | '/assets/'
     | '/images/asset/$id'
     | '/s_/$link/image'
     | '/s_/$link/live'
@@ -201,12 +153,8 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   LiveRoute: typeof LiveRoute
   LoginRoute: typeof LoginRoute
-  SettingsRoute: typeof SettingsRoute
-  AssetsIdRoute: typeof AssetsIdRoute
-  AssetsNewRoute: typeof AssetsNewRoute
   AuthSsoRoute: typeof AuthSsoRoute
   SLinkRoute: typeof SLinkRoute
-  AssetsIndexRoute: typeof AssetsIndexRoute
   ImagesAssetIdRoute: typeof ImagesAssetIdRoute
   SLinkImageRoute: typeof SLinkImageRoute
   SLinkLiveRoute: typeof SLinkLiveRoute
@@ -241,34 +189,6 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/assets/': {
-      id: '/assets/'
-      path: '/assets'
-      fullPath: '/assets/'
-      preLoaderRoute: typeof AssetsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/assets/$id': {
-      id: '/assets/$id'
-      path: '/assets/$id'
-      fullPath: '/assets/$id'
-      preLoaderRoute: typeof AssetsIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/assets/new': {
-      id: '/assets/new'
-      path: '/assets/new'
-      fullPath: '/assets/new'
-      preLoaderRoute: typeof AssetsNewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/sso': {
@@ -321,12 +241,8 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   LiveRoute: LiveRoute,
   LoginRoute: LoginRoute,
-  SettingsRoute: SettingsRoute,
-  AssetsIdRoute: AssetsIdRoute,
-  AssetsNewRoute: AssetsNewRoute,
   AuthSsoRoute: AuthSsoRoute,
   SLinkRoute: SLinkRoute,
-  AssetsIndexRoute: AssetsIndexRoute,
   ImagesAssetIdRoute: ImagesAssetIdRoute,
   SLinkImageRoute: SLinkImageRoute,
   SLinkLiveRoute: SLinkLiveRoute,

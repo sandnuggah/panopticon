@@ -25,6 +25,15 @@ export const TRAIL_OPTIONS: readonly TrailLength[] = [0, 60, 360, 720, 1440, 'to
 export const DEFAULT_TRAIL: TrailLength = 60
 export const MAX_TRAIL_MINUTES = 1440
 
+/** "1 hour", "6 hours", "Today", "Off": the trail length as the app shows it. */
+export function trailLabel(length: TrailLength): string {
+  if (length === 'today') return 'Today'
+  if (length === 0) return 'Off'
+  if (length < 60) return `${length} minutes`
+  const hours = length / 60
+  return hours === 1 ? '1 hour' : `${hours} hours`
+}
+
 /** Where the trail starts (ms since epoch), or null when trails are off. "Today" is local midnight. */
 export function trailStart(length: TrailLength, now: number): number | null {
   if (length === 'today') return new Date(now).setHours(0, 0, 0, 0)

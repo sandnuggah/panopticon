@@ -59,7 +59,9 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null)
     let cancelled = false
     getTrails({ data: { minutes: historyMinutes, assetIds: assetIdsKey.split(',').map(Number) } })
       .then((history) => {
-        if (!cancelled) setTrails(history)
+        // A failed server function can resolve with nothing (seen on a fresh dev server); keep
+        // the trails we have rather than crash the map.
+        if (!cancelled && history) setTrails(history)
       })
       .catch((error) => console.warn('Could not load trails:', error))
     return () => {

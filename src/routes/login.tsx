@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
+import { Block, BlockTitle, Button, List, ListInput, Page } from 'konsta/react'
 import { getLoginOptions, getUser, loginWithPassword } from '../server/auth.functions'
-import { appName, useTheme } from '../lib/theme'
 import type { SsoError } from '../server/sso.server'
 
 const ssoMessages: Record<SsoError, string> = {
@@ -20,7 +20,7 @@ export const Route = createFileRoute('/login')({
     if (await getUser()) throw redirect({ to: '/' })
   },
   loader: () => getLoginOptions(),
-  head: ({ match }) => ({ meta: [{ title: `Sign in · ${appName(match.context.theme)}` }] }),
+  head: () => ({ meta: [{ title: 'Sign in · Panopticon' }] }),
   component: LoginPage,
 })
 
@@ -28,7 +28,6 @@ function LoginPage() {
   const router = useRouter()
   const { sso } = Route.useLoaderData()
   const { error: ssoError } = Route.useSearch()
-  const [theme] = useTheme()
   const [needsCode, setNeedsCode] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -65,50 +64,50 @@ function LoginPage() {
   const shownError = error ?? (ssoError ? ssoMessages[ssoError] : null)
 
   return (
-    <main className="login">
-      <h1>{appName(theme)}</h1>
-      {sso && (
-        <>
-          {/* A full page load, not client routing: /auth/sso redirects to the identity provider. */}
-          <a className="button-primary" href="/auth/sso">
-            Sign in with SSO
-          </a>
-          <p className="divider">or with your Traccar password</p>
-        </>
-      )}
-      {/* method="post" keeps credentials out of the URL if someone submits before hydration */}
-      <form method="post" onSubmit={onSubmit}>
-        <label>
-          Email
-          <input name="email" type="text" autoComplete="username" autoCapitalize="none" required />
-        </label>
-        <label>
-          Password
-          <input name="password" type="password" autoComplete="current-password" required />
-        </label>
-        {needsCode && (
-          <label>
-            Code from your authenticator app
-            <input
-              name="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="\d{6}"
-              maxLength={6}
-              required
-              autoFocus
-            />
-          </label>
+    <Page>
+      <div className="mx-auto max-w-md pb-8 pt-[max(56px,calc(env(safe-area-inset-top)+32px))]">
+        <h1 className="px-4 text-[34px] font-bold">Panopticon</h1>
+        {sso && (
+          <>
+            <Block>
+              {/* A full page load, not client routing: /auth/sso redirects to the identity provider. */}
+              <Button large rounded href="/auth/sso">
+                Sign in with SSO
+              </Button>
+            </Block>
+            <BlockTitle>Or with your Traccar password</BlockTitle>
+          </>
         )}
-        {shownError && (
-          <p className="error" role="alert">
-            {shownError}
-          </p>
-        )}
-        <button type="submit" disabled={pending}>
-          {pending ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
-    </main>
+        {/* method="post" keeps credentials out of the URL if someone submits before hydration */}
+        <form method="post" onSubmit={onSubmit}>
+          <List strong inset className={sso ? 'mt-2!' : undefined}>
+            <ListInput label="Email" name="email" type="text" autoComplete="username" autoCapitalize="none" required />
+            <ListInput label="Password" name="password" type="password" autoComplete="current-password" required />
+            {needsCode && (
+              <ListInput
+                label="Code from your authenticator app"
+                name="code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="\d{6}"
+                maxLength={6}
+                required
+                autoFocus
+              />
+            )}
+          </List>
+          {shownError && (
+            <p className="px-8 text-sm text-red-500" role="alert">
+              {shownError}
+            </p>
+          )}
+          <Block>
+            <Button large rounded type="submit" disabled={pending}>
+              {pending ? 'Signing in…' : 'Sign in'}
+            </Button>
+          </Block>
+        </form>
+      </div>
+    </Page>
   )
 }

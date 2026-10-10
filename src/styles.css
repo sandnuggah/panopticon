@@ -1,213 +1,56 @@
+@import 'tailwindcss';
+@import 'konsta/react/theme.css';
+
+/* The look comes from Konsta UI (iOS on iPhones and desktops, Material on Android; see
+   __root.tsx) on Tailwind. This file only holds what Konsta doesn't cover: the app's accent, and
+   the map with its markers and overlays. Dark mode is Konsta's .dark class on <html>, kept in step
+   with the device by public/color-scheme.js. No class or id says "share": content blockers hide
+   elements like .share-menu. */
+
+/* The app's accent green; Konsta derives its iOS and Material shades from it. */
+@theme {
+  --color-brand-primary: #2f8f5b;
+}
+
+/* Colours for the map, which Konsta's components don't style. AssetMap reads --trail. */
 :root {
-  --bg: #f6f5f2;
+  --trail: #2f8f5b;
+  --marker: #2f8f5b;
+  --marker-text: #ffffff;
+  --online: #34c759;
+  --offline: #ff9500;
+  --stale: #8e8e93;
   --surface: #ffffff;
-  --surface-selected: #e8f1ec;
-  --text: #1c1b19;
-  --muted: #6b6860;
-  --border: #dedbd3;
-  --accent: #2f6b4f;
-  --accent-text: #ffffff;
-  --online: #2f8f5b;
-  --offline: #b0522d;
-  --stale: #8d8a82;
-  --error: #b3261e;
-  --warning: #9a5b00;
-  /* Colour of the movement trail on the map (read by AssetMap, which can't use CSS variables). */
-  --trail: #2f6b4f;
-  --radius: 12px;
+  --text: #000000;
   --shadow: 0 1px 3px rgb(0 0 0 / 0.25);
-  --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-family: var(--font);
-  line-height: 1.4;
-  color: var(--text);
-  background: var(--bg);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161614;
-    --surface: #22211e;
-    --surface-selected: #23372c;
-    --text: #edebe6;
-    --muted: #a19d93;
-    --border: #3a3833;
-    --accent: #6fbf95;
-    --accent-text: #10170f;
-    --online: #6fcf97;
-    --offline: #e0895f;
-    --stale: #77746c;
-    --error: #f2b8b5;
-    --warning: #f0b35c;
-    --trail: #6fbf95;
-  }
+.dark {
+  --trail: #5cc98d;
+  --marker: #5cc98d;
+  --marker-text: #06200f;
+  --online: #30d158;
+  --offline: #ff9f0a;
+  --stale: #636366;
+  --surface: #2c2c2e;
+  --text: #ffffff;
 }
 
-/* Petopticon (pet) theme: bright pastels; follows the device's light or dark mode.
-   `:root[data-theme]` outranks the plain `:root` rules above, including the dark-mode ones. */
-:root[data-theme='pet'] {
-  --bg: #fff6ee;
-  --surface: #ffffff;
-  --surface-selected: #ffe3ec;
-  --text: #4b3833;
-  --muted: #8f7a73;
-  --border: #f4d9cc;
-  --accent: #ff8fab;
-  --accent-text: #3d2522;
-  --online: #3fb57c;
-  --offline: #ff9f6b;
-  --stale: #c9bcb6;
-  --error: #c93c3c;
-  --warning: #b86e00;
-  --trail: #1a1614;
-  --shadow: 0 2px 8px rgb(224 100 138 / 0.3);
-}
-
-:root[data-theme='pet'] .login h1::after,
-:root[data-theme='pet'] .sheet-title::after {
-  content: ' 🐾';
-}
-
-/* Classic's mark after the app name, like the pet theme's paw. */
-:root[data-theme='classic'] .login h1::after,
-:root[data-theme='classic'] .sheet-title::after {
-  content: ' 👁️';
-}
-
-/* Dark mode: deep warm backgrounds, same pastel accents. The map tiles stay light (as in Classic),
-   so the near-black paw prints keep their colour. */
-@media (prefers-color-scheme: dark) {
-  :root[data-theme='pet'] {
-    --bg: #1f1a1d;
-    --surface: #2a2327;
-    --surface-selected: #3d2a33;
-    --text: #f6ece8;
-    --muted: #b9a8a3;
-    --border: #43383c;
-    --accent: #ff9fb6;
-    --accent-text: #2b1a1f;
-    --online: #7fd8b0;
-    --offline: #ffb38a;
-    --stale: #7d7176;
-    --error: #f2b8b5;
-    --warning: #f0c27a;
-    --shadow: 0 2px 8px rgb(0 0 0 / 0.5);
-  }
-}
-
-/* Softer, sunnier map tiles to match the pastels. */
-:root[data-theme='pet'] .maplibregl-canvas {
-  filter: saturate(0.75) brightness(1.06);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-}
-
-h1 {
-  font-size: 1.25rem;
-  margin: 0;
-}
-
-button {
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-button[type='submit'] {
-  padding: 0.6rem 1rem;
-  border: 0;
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: var(--accent-text);
-}
-
-button:disabled {
-  opacity: 0.6;
-}
-
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.button-quiet {
-  padding: 0.4rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: transparent;
-}
-
-input {
-  font: inherit;
-  font-size: max(16px, 1rem); /* stops iOS zooming in on focus */
-  width: 100%;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.muted {
-  color: var(--muted);
-}
-
-.error {
-  color: var(--error);
-  margin: 0;
-}
-
-/* Simple pages (not found) */
-
-.page {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 16px;
-  /* Below the status bar and notch, which lie over the page in the home-screen app. */
-  padding-top: calc(16px + env(safe-area-inset-top));
-}
-
-/* Login */
-
-.login {
-  max-width: 22rem;
-  margin: 15vh auto 0;
-  padding: 0 16px;
-}
-
-.login form {
-  display: grid;
-  gap: 1rem;
-  margin-top: 1.5rem;
-}
-
-.login label {
-  display: grid;
-  gap: 0.35rem;
-  font-size: 0.9rem;
-}
-
-/* App: map on top and asset list below on phones; list beside the map on wider screens */
-
+/* The map screen: the map fills it. Clip, not hidden: an overflow: hidden box can still be
+   scrolled, and the browser does that to bring a focused element into view, such as a control in
+   a card that's sliding away, which shifts the whole screen up. */
 .app {
   position: fixed;
   inset: 0;
-  display: flex;
-  flex-direction: column;
+  overflow: clip;
 }
 
 /* The home-screen app on iOS, with the status bar over the page: the page starts under the status
    bar, but iOS still reports the screen one status bar shorter, so 100%, 100dvh and bottom: 0 all
    stop 59 points short of the real bottom (measured on an iPhone: 793 of 852). 100lvh is the full
    852. Only here: in Safari itself 100lvh is the height with its toolbars hidden, which would put
-   the asset list under them. */
+   the map's bottom edge under them. */
 @media (display-mode: standalone) {
   html:has(.app),
   body:has(.app) {
@@ -223,9 +66,8 @@ input {
 }
 
 .map-area {
-  position: relative;
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
 }
 
 /* The map runs up under the status bar and notch. A soft shade behind them keeps the phone's white
@@ -240,12 +82,6 @@ input {
   pointer-events: none;
 }
 
-/* maplibre's own controls sit below the notch too, like the Live indicator. */
-.map-area .maplibregl-ctrl-top-right,
-.map-area .maplibregl-ctrl-top-left {
-  top: env(safe-area-inset-top);
-}
-
 /* Two classes so this beats maplibre's `.maplibregl-map { position: relative }`, which loads later. */
 .map-area > .map {
   position: absolute;
@@ -253,46 +89,100 @@ input {
 }
 
 .map-placeholder {
-  background: var(--border);
+  background: #e8e4da;
 }
 
-.sheet {
-  position: relative;
-  z-index: 1;
-  max-height: 45dvh;
-  overflow-y: auto;
-  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
-  background: var(--bg);
-  box-shadow: 0 -2px 8px rgb(0 0 0 / 0.12);
+.dark .map-placeholder {
+  background: #2b2b2b;
 }
 
-.sheet-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+/* maplibre's controls (live link pages): below the notch, as rounded iOS-style buttons. */
+.map-area .maplibregl-ctrl-top-right,
+.map-area .maplibregl-ctrl-top-left {
+  top: env(safe-area-inset-top);
 }
 
-.sheet-footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+/* The attribution, top right: in full (first launch) it wraps rather than run into the Live
+   indicator at top left on a narrow phone. */
+.map-area .maplibregl-ctrl-top-right .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  max-width: calc(100vw - 120px);
 }
 
-/* On the sheet's own background, not floating over the map. */
-.sheet .settings-link {
-  box-shadow: none;
+.map-area .maplibregl-ctrl-group {
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-/* Floats over the map's top-left corner (zoom controls are top-right). */
+.map-area .maplibregl-ctrl-group button {
+  width: 36px;
+  height: 36px;
+}
+
+/* The same dark grey as maplibre's own + and − icons. */
+.my-position-button {
+  color: #333;
+}
+
+.my-position-button svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+  margin: auto;
+}
+
+.my-position-button[aria-pressed='true'] {
+  color: #007aff;
+}
+
+/* Dark mode for maplibre's controls, which are white with dark icons: dark grey, as the app's
+   cards, with the icons inverted to white. Follows the device, like the rest of the app, whichever
+   map style is showing. */
+.dark .map-area .maplibregl-ctrl-group {
+  background: #2c2c2e;
+}
+
+.dark .map-area .maplibregl-ctrl-group:not(:empty) {
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.3);
+}
+
+.dark .map-area .maplibregl-ctrl-group button + button {
+  border-top-color: rgb(255 255 255 / 0.12);
+}
+
+.dark .map-area .maplibregl-ctrl-group .maplibregl-ctrl-icon,
+.dark .map-area .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+
+@media (hover: hover) {
+  .dark .map-area .maplibregl-ctrl button:not(:disabled):hover {
+    background-color: rgb(255 255 255 / 0.08);
+  }
+}
+
+.dark .my-position-button {
+  color: #fff;
+}
+
+.dark .my-position-button[aria-pressed='true'] {
+  color: #0a84ff;
+}
+
+.dark .map-area .maplibregl-ctrl-attrib.maplibregl-compact {
+  background-color: #2c2c2e;
+  color: #fff;
+}
+
+.dark .map-area .maplibregl-ctrl-attrib a {
+  color: rgb(255 255 255 / 0.75);
+}
+
+/* Floats over the map's top-left corner (the map's controls are top-right). */
 .map-overlay {
   position: absolute;
-  top: calc(10px + env(safe-area-inset-top));
-  left: 10px;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 12px;
   z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   pointer-events: none;
 }
 
@@ -300,360 +190,19 @@ input {
   pointer-events: auto;
 }
 
-.settings-link {
-  display: grid;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border: 1px solid var(--border);
+.live-dot {
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 50%;
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow);
-}
-
-.settings-link:hover {
-  background: var(--surface-selected);
-}
-
-.settings-link:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.settings-link-icon {
-  width: 1.35rem;
-  height: 1.35rem;
-}
-
-.map-overlay .live-indicator {
-  padding: 0.3rem 0.65rem;
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.sheet-user {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-@media (min-width: 768px) {
-  .app {
-    flex-direction: row-reverse;
-  }
-
-  /* Title on top, the list scrolling in between, and the footer pinned to the bottom. */
-  .sheet {
-    display: flex;
-    flex-direction: column;
-    width: 22rem;
-    max-height: none;
-    overflow: hidden;
-    box-shadow: 1px 0 0 var(--border);
-    padding-bottom: 16px;
-  }
-
-  .asset-cards {
-    min-height: 0;
-    overflow-y: auto;
-  }
-
-  .sheet-footer {
-    margin-top: auto;
-    padding-top: 12px;
-  }
-}
-
-/* Asset cards */
-
-.asset-cards {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 0.5rem;
-}
-
-.asset-card {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.asset-card-body {
-  display: grid;
-  gap: 0.15rem;
-  flex: 1;
-  min-width: 0;
-}
-
-/* Holds the avatar plus the compact list's status dot, which the avatar's round clipping would cut off. */
-.avatar-wrap {
-  position: relative;
-  flex: none;
-}
-
-.avatar-status {
-  display: none;
-}
-
-/* The asset's picture, or its initial underneath as the fallback (same idea as the map markers). */
-.avatar {
-  position: relative;
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 2.75rem;
-  height: 2.75rem;
-  overflow: hidden;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-weight: 700;
-  font-size: 1.1rem;
-}
-
-.avatar-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.asset-card-stale .avatar {
   background: var(--stale);
 }
 
-.asset-card-stale .avatar-image {
-  filter: grayscale(1);
-  opacity: 0.7;
-}
-
-.asset-card-selected {
-  background: var(--surface-selected);
-  border-color: var(--accent);
-}
-
-.asset-card-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.asset-card-name {
-  font-weight: 600;
-}
-
-.asset-card-status {
-  margin-left: auto;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.status-dot {
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 50%;
-  flex: none;
-}
-
-.status-online {
+.live-live .live-dot {
   background: var(--online);
 }
 
-.status-offline,
-.status-unknown {
+.live-offline .live-dot {
   background: var(--offline);
-}
-
-.battery-gauge {
-  flex: none;
-  /* The SVG's own grid size: see BatteryGauge. */
-  width: 16.5px;
-  height: 9px;
-  color: var(--muted);
-}
-
-.battery-gauge-low {
-  color: var(--warning);
-}
-
-/* The compact phone list's battery badge, on the avatar's bottom-left corner. */
-.avatar-battery {
-  display: none;
-}
-
-/* The selected asset above the phone toolbar (see AssetDetails); the desktop card shows the same. */
-.asset-details {
-  display: none;
-}
-
-.asset-details-title {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.asset-details-name {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-  font-size: 1.1rem;
-}
-
-.asset-details-status,
-.asset-details-battery {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-/* Tracker details (TrackerDetails.tsx), a section of the asset's page. */
-.tracker-rows {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.55rem 1rem;
-  margin: 0;
-}
-
-.tracker-rows dt {
-  color: var(--muted);
-}
-
-.tracker-rows dd {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0;
-}
-
-.tracker-copy {
-  padding: 0.1rem 0.5rem;
-  font-size: 0.85rem;
-}
-
-.signal-bars {
-  width: 1rem;
-  height: 0.75rem;
-}
-
-
-.asset-details-facts {
-  display: grid;
-  gap: 0.15rem;
-}
-
-.asset-details .asset-card-address,
-.link-details .asset-card-address {
-  font-size: 1.05rem;
-}
-
-/* A live location link's page (/s/<link>): the one asset, below the map on phones, beside it on wider screens. */
-.link-details {
-  display: grid;
-  gap: 0.6rem;
-  flex: 0 0 100%;
-  padding: 0.25rem 0;
-}
-
-.link-ended {
-  padding-top: 20dvh;
-  text-align: center;
-}
-
-.icon-button {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.icon-button:hover {
-  background: var(--surface-selected);
-  color: var(--text);
-}
-
-.icon-button svg {
-  width: 1rem;
-  height: 1rem;
-}
-
-/* Actions for the selected asset: under its card on desktop, in its details on phones. */
-.asset-card-actions {
-  margin-top: 0.5rem;
-}
-
-.location-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  justify-self: start;
-  padding: 0.35rem 0.75rem;
-  border: 0;
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.location-button-icon {
-  flex: none;
-  width: 1rem;
-  height: 1rem;
-}
-
-/* Your own position on the map (myPosition.ts): the control under zoom, the dot, and a note when
-   the browser won't say where you are. */
-/* The same dark grey as maplibre's own + and − icons, in either theme. */
-.my-position-button,
-.map-style-button {
-  color: #333;
-}
-
-.my-position-button svg,
-.map-style-button svg {
-  display: block;
-  width: 15px;
-  height: 15px;
-  margin: auto;
-}
-
-.my-position-button[aria-pressed='true'] {
-  color: #2f7bf6;
 }
 
 .my-position-dot {
@@ -661,7 +210,7 @@ input {
   height: 16px;
   border: 3px solid #fff;
   border-radius: 50%;
-  background: #2f7bf6;
+  background: #007aff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
 }
 
@@ -673,230 +222,16 @@ input {
   max-width: calc(100% - 140px);
   margin: 0;
   padding: 0.4rem 0.75rem;
-  border-radius: var(--radius);
+  border-radius: 12px;
   background: var(--surface);
+  color: var(--text);
   box-shadow: var(--shadow);
   font-size: 0.85rem;
   text-align: center;
   transform: translateX(-50%);
 }
 
-/* The map style list (AssetMap's StyleMenu), beside the style button in the map's controls. */
-.map-style-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 4;
-}
-
-.map-style-menu {
-  position: absolute;
-  z-index: 5;
-  display: grid;
-  min-width: 11rem;
-  padding: 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.map-style-option {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.45rem 0.6rem;
-  border: 0;
-  border-radius: calc(var(--radius) - 4px);
-  background: none;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.map-style-option:hover,
-.map-style-option:focus-visible {
-  background: var(--surface-selected);
-  outline: none;
-}
-
-.map-style-option[aria-checked='true'] {
-  font-weight: 600;
-}
-
-/* A rough colour of each style, to tell them apart at a glance. */
-.map-style-swatch {
-  flex: none;
-  width: 1.25rem;
-  height: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-.map-style-option[aria-checked='true'] .map-style-swatch {
-  box-shadow: 0 0 0 2px var(--accent);
-}
-
-.map-style-swatch-auto {
-  background: linear-gradient(135deg, #efe9e1 50%, #2d2f33 50%);
-}
-
-.map-style-swatch-standard {
-  background: #efe9e1;
-}
-
-.map-style-swatch-light {
-  background: #fafaf8;
-}
-
-.map-style-swatch-bright {
-  background: #f7e7b4;
-}
-
-.map-style-swatch-dark {
-  background: #2d2f33;
-}
-
-.map-style-swatch-dark-blue {
-  background: #2b3a4a;
-}
-
-.map-style-swatch-custom {
-  background: var(--border);
-}
-
-/* The Share button and its menu (ShareMenu): a drop-down under the button, or an action sheet
-   from the bottom of the screen on phones. No class or id here says "share": content blockers'
-   social filter lists hide elements like .share-menu and .share-icon, which on an iPhone left
-   only the dimmed backdrop. */
-.location-actions {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem;
-  justify-self: stretch;
-}
-
-/* Share and Sharing live each take half the row; Share keeps its size when it's alone. */
-.location-actions > .location-button,
-.location-actions > .location-live {
-  flex: 0 0 calc(50% - 0.3rem);
-  justify-content: center;
-}
-
-/* The base input size (16px) stays, or iOS zooms in when it's tapped. */
-.location-link-field {
-  flex: 1 0 100%;
-}
-
-.location-notice {
-  flex: 1 0 100%;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.location-notice:empty {
-  display: none;
-}
-
-/* Beside Share while a live link is active; leads to Settings → Live links. */
-.location-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: var(--radius);
-  box-shadow: inset 0 0 0 1px var(--accent);
-  color: var(--accent);
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.location-live-dot {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 50%;
-  background: var(--online);
-}
-
-/* Catches taps outside the menu, so they close it rather than reach the map or the list. */
-.location-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-}
-
-.location-menu {
-  position: fixed;
-  z-index: 41;
-  display: grid;
-  min-width: 14rem;
-  padding: 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.location-menu-group {
-  display: grid;
-  margin-top: 0.25rem;
-  padding-top: 0.25rem;
-  border-top: 1px solid var(--border);
-}
-
-.location-menu-heading {
-  padding: 0.35rem 0.65rem 0.15rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.location-menu-item {
-  padding: 0.5rem 0.65rem;
-  border: 0;
-  border-radius: calc(var(--radius) - 4px);
-  background: none;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.location-menu-item:hover,
-.location-menu-item:focus-visible {
-  background: var(--surface-selected);
-  outline: none;
-}
-
-.location-menu-cancel {
-  display: none;
-}
-
-/* Where the selected asset is, from Traccar's reverse geocoder. */
-.asset-card-address {
-  font-weight: 600;
-}
-
-/* Riding right now (see segments.ts): a line on the card, and a badge on the phone avatar. */
-.asset-card-activity {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.transit-icon {
-  flex: none;
-  width: 1rem;
-  height: 1rem;
-}
-
-.avatar-activity {
-  display: none;
-}
-
-/* Map markers */
-
+/* Map markers: maplibre DOM markers (see AssetMap's createMarkerElement). */
 .marker {
   display: grid;
   justify-items: center;
@@ -914,8 +249,8 @@ input {
   height: 2rem;
   border-radius: 50%;
   border: 2px solid #ffffff;
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--marker);
+  color: var(--marker-text);
   font-weight: 700;
   box-shadow: var(--shadow);
 }
@@ -924,7 +259,7 @@ input {
 .marker-label {
   position: absolute;
   top: calc(100% + 2px);
-  padding: 0 0.35rem;
+  padding: 0 0.4rem;
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
@@ -962,632 +297,37 @@ input {
 
 /* Same size as unselected; the ring alone marks the selection. */
 .marker-selected .marker-dot {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--marker);
   outline-offset: 2px;
 }
 
-/* Live indicator */
-
-.live-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.live-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--stale);
-}
-
-.live-live .live-dot {
-  background: var(--online);
-}
-
-.live-offline {
-  color: var(--warning);
-}
-
-.live-offline .live-dot {
-  background: var(--warning);
-}
-
-/* Settings */
-
-.settings-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.settings section {
-  display: grid;
-  gap: 0.5rem;
-  justify-items: start;
-  padding: 1rem 0;
-  border-top: 1px solid var(--border);
-}
-
-.settings h2 {
-  font-size: 1rem;
-  margin: 0;
-}
-
-.settings p {
-  margin: 0;
-}
-
-.field {
-  display: grid;
-  gap: 0.35rem;
-  font-size: 0.9rem;
-}
-
-/* The trail length slider. The thumb has a fixed size in every browser so the stop labels
-   underneath can line up with where it rests. */
-.trail-field {
-  --thumb: 1.5rem;
-  --track: 6px;
-  justify-self: stretch;
-  max-width: 28rem;
-}
-
-.trail-label {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.trail-label output {
-  font-weight: 600;
-}
-
-.trail-slider {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  height: var(--thumb);
-  margin: 0;
-  /* Undo the text-input box from the `input` rule. */
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.trail-slider::-webkit-slider-runnable-track {
-  height: var(--track);
-  border-radius: 999px;
-  background: var(--border);
-}
-
-.trail-slider::-moz-range-track {
-  height: var(--track);
-  border-radius: 999px;
-  background: var(--border);
-}
-
-.trail-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: var(--thumb);
-  height: var(--thumb);
-  margin-top: calc((var(--track) - var(--thumb)) / 2);
-  border: 3px solid var(--surface);
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: var(--shadow);
-}
-
-.trail-slider::-moz-range-thumb {
-  box-sizing: border-box;
-  width: var(--thumb);
-  height: var(--thumb);
-  border: 3px solid var(--surface);
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: var(--shadow);
-}
-
-.trail-slider:focus-visible {
-  outline: none;
-}
-
-.trail-slider:focus-visible::-webkit-slider-thumb {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.trail-slider:focus-visible::-moz-range-thumb {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* A setting that's on or off, e.g. "Follow roads". */
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-top: 0.5rem;
-  cursor: pointer;
-}
-
-.toggle input {
-  width: 1.15rem;
-  height: 1.15rem;
-  margin: 0;
-  padding: 0;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-/* Each label is centred on its stop: the stops run from half a thumb in from either end. */
-.trail-stops {
-  display: flex;
-  justify-content: space-between;
-  padding: 0 calc(var(--thumb) / 2);
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.trail-stops > span {
-  display: flex;
-  justify-content: center;
-  width: 0;
-  white-space: nowrap;
-}
-
-.trail-stops .trail-stop-current {
-  color: var(--text);
-  font-weight: 600;
-}
-
-/* "Today" counts from midnight rather than back from now, so it's a pill in the accent colour,
-   filled when chosen. */
-.trail-stops .trail-stop-today {
-  padding: 0 0.35rem;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.trail-stops .trail-stop-current .trail-stop-today {
-  background: var(--accent);
-  color: var(--accent-text);
-}
-
-/* Settings → Live links. */
-.live-links {
-  display: grid;
-  justify-self: stretch;
-  gap: 0.5rem;
-  margin: 0 0 0.5rem;
-  padding: 0;
-  list-style: none;
-}
-
-.live-links li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.hint {
-  font-size: 0.85rem;
-}
-
-a.button-quiet {
-  color: inherit;
-  text-decoration: none;
-}
-
-/* Login: SSO */
-
-/* Managing assets (/assets pages) */
-
-.manage-list {
-  display: grid;
-  gap: 0.5rem;
-  margin: 0 0 1rem;
-  padding: 0;
-  list-style: none;
-}
-
-.manage-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  text-decoration: none;
-}
-
-a.manage-row:hover {
-  background: var(--surface-selected);
-}
-
-.manage-row-name {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.manage-row-chevron {
-  color: var(--muted);
-  font-size: 1.4rem;
-  line-height: 1;
-}
-
-.manage-form {
-  display: grid;
-  gap: 0.75rem;
-  justify-self: stretch;
-  max-width: 28rem;
-}
-
-.manage-form-inline {
-  grid-template-columns: 1fr auto;
-  align-items: end;
-}
-
-.asset-photo {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.asset-photo .avatar {
-  width: 5rem;
-  height: 5rem;
-  font-size: 2rem;
-}
-
-.button-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-/* A label styled as a button, wrapping a hidden file input. */
-.file-button {
-  cursor: pointer;
-}
-
-.file-button:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.file-button.is-busy {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.button-danger {
-  padding: 0.4rem 0.75rem;
-  border: 1px solid var(--error);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--error);
-}
-
-.button-primary {
-  display: block;
-  margin-top: 1.5rem;
-  padding: 0.6rem 1rem;
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: var(--accent-text);
-  text-align: center;
-  text-decoration: none;
-}
-
-.divider {
-  margin: 1.25rem 0 0;
-  text-align: center;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.login .divider + form {
-  margin-top: 0.75rem;
-}
-
-/* Theme picker (settings) */
-
-.theme-picker {
-  display: grid;
-  gap: 0.5rem;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.theme-picker legend {
-  padding: 0;
-  margin-bottom: 0.5rem;
-  font-size: 0.9rem;
-}
-
-.theme-option {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-}
-
-.theme-option-selected {
-  background: var(--surface-selected);
-  border-color: var(--accent);
-}
-
-.theme-option input {
-  /* Not the full-width text-input style. */
-  flex: none;
-  width: auto;
-  accent-color: var(--accent);
-  margin: 0;
-}
-
-.theme-text {
-  display: grid;
-  gap: 0.1rem;
-  font-size: 0.9rem;
-}
-
-/* Fixed colours, so each preview shows its own theme whatever theme is active. */
-.theme-preview {
-  display: flex;
-  flex: none;
-  gap: 3px;
-  padding: 5px;
-  border-radius: 10px;
-}
-
-.theme-preview span {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-}
-
-.theme-preview-classic {
-  background: #f6f5f2;
-  border: 1px solid #dedbd3;
-}
-
-.theme-preview-classic span:nth-child(1) {
-  background: #2f6b4f;
-}
-
-.theme-preview-classic span:nth-child(2) {
-  background: #2f8f5b;
-}
-
-.theme-preview-classic span:nth-child(3) {
-  background: #1c1b19;
-}
-
-.theme-preview-pet {
-  background: #fff6ee;
-  border: 1px solid #f4d9cc;
-}
-
-.theme-preview-pet span:nth-child(1) {
-  background: #ff8fab;
-}
-
-.theme-preview-pet span:nth-child(2) {
-  background: #7fd8b0;
-}
-
-.theme-preview-pet span:nth-child(3) {
-  background: #ffc59e;
-}
-
-/* Phones: a single row of pictures (or initials) with a status dot, leaving the screen to the map.
-   The details stay in the page for screen readers, just not visible. */
-@media (max-width: 767px) {
-  /* Like an app's toolbar: one fixed row that never scrolls or bounces. The avatars and the cog
-     sit --toolbar-space from its edges; part of that is --ring-space, the padding around the
-     avatars and the cog that leaves room for the selection ring. */
-  .sheet {
-    --toolbar-space: 12px;
-    --ring-space: 5px;
-    display: flex;
-    align-items: center;
-    gap: calc(var(--toolbar-space) - 2 * var(--ring-space));
-    max-height: none;
-    overflow: hidden;
-    overscroll-behavior: none;
-    user-select: none;
-    -webkit-user-select: none;
-    padding: calc(var(--toolbar-space) - var(--ring-space));
-    padding-bottom: calc(var(--toolbar-space) - var(--ring-space) + env(safe-area-inset-bottom));
+/* Within the Assets card (BottomBar.tsx), pages slide in sideways: Add asset or an asset's page
+   from the right, the list back from the left. */
+@keyframes card-view-forward {
+  from {
+    opacity: 0;
+    transform: translateX(32px);
   }
+}
 
-  /* The selected asset's details: a full-width row above the avatars, pushing the map up rather
-     than covering it. */
-  .sheet {
-    flex-wrap: wrap;
+@keyframes card-view-back {
+  from {
+    opacity: 0;
+    transform: translateX(-32px);
   }
+}
 
-  .asset-details {
-    display: grid;
-    gap: 0.6rem;
-    flex: 0 0 100%;
-    padding: var(--ring-space) var(--ring-space) var(--toolbar-space);
-    margin-bottom: calc(var(--toolbar-space) - var(--ring-space));
-    border-bottom: 1px solid var(--border);
-    /* The toolbar turns selection off; an address is worth copying. */
-    user-select: text;
-    -webkit-user-select: text;
-  }
+.card-view-forward {
+  animation: card-view-forward 0.25s ease-out;
+}
 
-  .asset-card-actions {
-    display: none;
-  }
+.card-view-back {
+  animation: card-view-back 0.25s ease-out;
+}
 
-  /* The Share menu as an action sheet: across the bottom, above everything, with the page dimmed. */
-  .location-menu-heading {
-    text-align: center;
-  }
-
-  .location-backdrop {
-    background: rgb(0 0 0 / 0.35);
-  }
-
-  .location-menu {
-    position: fixed;
-    top: auto;
-    left: 8px;
-    right: 8px;
-    bottom: calc(8px + env(safe-area-inset-bottom));
-    max-height: calc(100dvh - 16px - env(safe-area-inset-bottom));
-    overflow-y: auto;
-    padding: 0.5rem;
-    font-size: 1.05rem;
-  }
-
-  .location-menu-item {
-    padding: 0.8rem 0.75rem;
-    text-align: center;
-  }
-
-  .location-menu-cancel {
-    display: block;
-    margin-top: 0.4rem;
-    border-top: 1px solid var(--border);
-    border-radius: 0;
-    font-weight: 600;
-  }
-
-  /* Swiping on the toolbar would otherwise drag the whole page on iOS. */
-  html:has(.sheet) {
-    overscroll-behavior: none;
-  }
-
-  .sheet-footer {
-    margin-left: auto;
-    padding: var(--ring-space);
-  }
-
-  /* Same size as the avatars beside it, with the icon scaled to match. */
-  .sheet .settings-link {
-    width: 2.75rem;
-    height: 2.75rem;
-  }
-
-  .sheet .settings-link-icon {
-    width: 1.5rem;
-    height: 1.5rem;
-  }
-
-  .asset-cards {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    gap: var(--toolbar-space);
-    /* Only if there are more assets than fit; the bar itself stays put. */
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    padding: var(--ring-space);
-  }
-
-  .asset-card,
-  .asset-card-selected {
-    width: auto;
-    padding: 0;
-    background: none;
-    border: 0;
-    border-radius: 50%;
-  }
-
-  /* The app name: shown in the desktop sidebar, kept only for screen readers on phones. */
-  .sheet-header {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .asset-card-body {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .avatar-status {
-    display: block;
-    position: absolute;
-    right: -1px;
-    bottom: -1px;
-    width: 0.9rem;
-    height: 0.9rem;
-    border-radius: 50%;
-    border: 2px solid var(--bg);
-  }
-
-  .asset-card-selected .avatar {
-    outline: 3px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  .avatar-battery {
-    display: flex;
-    position: absolute;
-    left: -3px;
-    bottom: -1px;
-    padding: 2px;
-    border-radius: 4px;
-    background: var(--bg);
-  }
-
-  .avatar-battery .battery-gauge {
-    color: var(--text);
-  }
-
-  .avatar-battery .battery-gauge-low {
-    color: var(--warning);
-  }
-
-  .avatar-activity {
-    display: grid;
-    place-items: center;
-    position: absolute;
-    top: -3px;
-    right: -3px;
-    width: 1.25rem;
-    height: 1.25rem;
-    border-radius: 50%;
-    background: var(--accent);
-    color: var(--accent-text);
-    border: 2px solid var(--bg);
-  }
-
-  .avatar-activity .transit-icon {
-    width: 0.75rem;
-    height: 0.75rem;
+@media (prefers-reduced-motion: reduce) {
+  .card-view-forward,
+  .card-view-back {
+    animation: none;
   }
 }
