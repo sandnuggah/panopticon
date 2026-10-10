@@ -13,9 +13,10 @@ const SHOTS = [
 
 export function ScreenshotGallery() {
   return (
-    <ul className="screenshot-row flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    // On a phone a row that scrolls sideways; on a wide screen all four side by side.
+    <ul className="flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-4 [scrollbar-width:none] lg:justify-center lg:gap-8 lg:overflow-visible lg:px-0 [&::-webkit-scrollbar]:hidden">
       {SHOTS.map((shot) => (
-        <li key={shot.file} className="w-[min(62vw,240px)] shrink-0 snap-center">
+        <li key={shot.file} className="w-[min(62vw,240px)] shrink-0 snap-center lg:w-auto lg:min-w-0 lg:max-w-[230px] lg:flex-1">
           <figure>
             <picture>
               <source srcSet={`/screenshots/${shot.file}-dark.jpg`} media="(prefers-color-scheme: dark)" />

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Block, BlockTitle, Button, Page } from 'konsta/react'
+import { Block, Button, Page } from 'konsta/react'
 import { FeatureTrail, type Feature } from '../components/FeatureTrail'
 import { ScreenshotGallery } from '../components/ScreenshotGallery'
 import { WelcomeScene } from '../components/WelcomeScene'
@@ -62,34 +62,57 @@ const FEATURES: Feature[] = [
   },
 ]
 
+/**
+ * A section's heading: small and muted on a phone, like iOS's section headers; on a wide screen a
+ * centred heading that introduces the section.
+ */
+function SectionTitle({ children }: { children: string }) {
+  return (
+    <h2 className="px-8 pb-4 pt-8 text-[0.9375rem] font-medium opacity-60 lg:pb-8 lg:pt-20 lg:text-center lg:text-3xl lg:font-bold lg:opacity-100">
+      {children}
+    </h2>
+  )
+}
+
 function WelcomePage() {
   const { signedIn } = Route.useLoaderData()
   return (
     <Page>
-      <div className="mx-auto max-w-md pb-8 pt-[max(24px,calc(env(safe-area-inset-top)+12px))]">
-        <div className="px-3">
-          <WelcomeScene />
-        </div>
-        <h1 className="paper-title px-4 pt-5 text-center text-[calc(1rem+26px)] leading-tight">Panopticon</h1>
-        <p className="px-6 pb-2 pt-2.5 text-center opacity-60">Your dog, your bag, your bike: where they are, right now.</p>
-        <Block>
-          {/* A full page load, so the map starts fresh. */}
-          <Button large rounded href={signedIn ? '/' : '/login'}>
-            {signedIn ? 'Open the map' : 'Sign in'}
-          </Button>
-          <p className="pt-3 text-center text-[0.9375rem] opacity-80">
-            or{' '}
-            <a href={REPOSITORY} className="font-medium text-primary active:opacity-50" target="_blank" rel="noopener">
-              deploy it yourself
-            </a>
-          </p>
-        </Block>
+      {/* A phone's column; on a wide screen the picture and the title side by side, then wider sections. */}
+      <div className="mx-auto max-w-md pb-8 pt-[max(24px,calc(env(safe-area-inset-top)+12px))] lg:max-w-6xl lg:px-10 lg:pb-16 lg:pt-16">
+        <header className="lg:grid lg:grid-cols-[1.15fr_1fr] lg:items-center lg:gap-14">
+          <div className="px-3">
+            <WelcomeScene />
+          </div>
+          <div className="lg:text-left">
+            <h1 className="paper-title px-4 pt-5 text-center text-[calc(1rem+26px)] leading-tight lg:px-0 lg:pt-0 lg:text-left lg:text-[64px]">
+              Panopticon
+            </h1>
+            <p className="px-6 pb-2 pt-2.5 text-center opacity-60 lg:px-0 lg:pt-4 lg:text-left lg:text-xl">
+              Your dog, your bag, your bike: where they are, right now.
+            </p>
+            <Block className="lg:mx-0! lg:max-w-sm lg:px-0!">
+              {/* A full page load, so the map starts fresh. */}
+              <Button large rounded href={signedIn ? '/' : '/login'}>
+                {signedIn ? 'Open the map' : 'Sign in'}
+              </Button>
+              <p className="pt-3 text-center text-[0.9375rem] opacity-80 lg:text-left">
+                or{' '}
+                <a href={REPOSITORY} className="font-medium text-primary active:opacity-50" target="_blank" rel="noopener">
+                  deploy it yourself
+                </a>
+              </p>
+            </Block>
+          </div>
+        </header>
 
-        <BlockTitle className="mt-6! mb-4! px-8! text-[0.9375rem]! font-medium! opacity-60">What it does</BlockTitle>
-        <FeatureTrail features={FEATURES} />
-        <BlockTitle className="mt-10! mb-4! px-8! text-[0.9375rem]! font-medium! opacity-60">What it looks like</BlockTitle>
+        <SectionTitle>What it does</SectionTitle>
+        <div className="lg:mx-auto lg:max-w-3xl">
+          <FeatureTrail features={FEATURES} />
+        </div>
+        <SectionTitle>What it looks like</SectionTitle>
         <ScreenshotGallery />
-        <p className="px-8 pt-6 text-center text-sm opacity-60">
+        <p className="px-8 pt-6 text-center text-sm opacity-60 lg:pt-14">
           Panopticon works in any browser, and on iPhone and Android as an app on your Home Screen. It needs a Traccar server, which does
           the tracking.
         </p>

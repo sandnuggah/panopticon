@@ -79,7 +79,7 @@ export function FeatureTrail({ features }: { features: Feature[] }) {
             >
               {feature.icon}
             </span>
-            <div className={`feature-note min-w-0 flex-1 text-left ${right ? '-rotate-1' : 'rotate-1'}`}>
+            <div className={`feature-note min-w-0 flex-1 text-left lg:max-w-md ${right ? '-rotate-1' : 'rotate-1'}`}>
               <h3 className="text-[1.0625rem] font-semibold">{feature.title}</h3>
               <p className="text-[0.9375rem] opacity-75">{feature.text}</p>
             </div>
