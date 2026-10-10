@@ -3,7 +3,6 @@ import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { Block, BlockTitle, Button, List, ListInput, Page } from 'konsta/react'
 import { getLoginOptions, getUser, loginWithPassword } from '../server/auth.functions'
 import type { SsoError } from '../server/sso.server'
-import { BackIcon } from '../components/icons'
 
 const ssoMessages: Record<SsoError, string> = {
   'sso-unavailable': "Single sign-on isn't available right now. Try again, or sign in with your password.",
@@ -75,10 +74,6 @@ function LoginPage() {
   return (
     <Page>
       <div className="mx-auto max-w-md pb-8 pt-[max(24px,calc(env(safe-area-inset-top)+12px))]">
-        <a href="/welcome" className="inline-flex items-center gap-0.5 px-3 text-[1.0625rem] text-primary active:opacity-50">
-          <BackIcon />
-          Panopticon
-        </a>
         <h1 className="paper-title px-4 pt-4 pb-2 text-center text-[calc(1rem+26px)] leading-tight">Sign in</h1>
         {sso && (
           <>
@@ -123,6 +118,11 @@ function LoginPage() {
             </Block>
           </form>
         )}
+        <p className="px-4 pt-2 text-center">
+          <a href="/welcome" className="text-primary active:opacity-50">
+            What is Panopticon?
+          </a>
+        </p>
       </div>
     </Page>
   )

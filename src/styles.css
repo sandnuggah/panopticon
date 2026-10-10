@@ -379,6 +379,20 @@ html.dark:has(.k-material) {
   animation: scene-drift 8s ease-in-out infinite alternate;
 }
 
+/* Each cutout and cloud starts at a different point of its animation (in the stylesheet: the CSP
+   blocks style attributes in the server-rendered page). */
+.scene-bob.scene-delay-1 {
+  animation-delay: -0.8s;
+}
+
+.scene-bob.scene-delay-2 {
+  animation-delay: -1.6s;
+}
+
+.scene-cloud.scene-delay-1 {
+  animation-delay: -4s;
+}
+
 @keyframes scene-trail {
   to {
     stroke-dashoffset: -9.1;
