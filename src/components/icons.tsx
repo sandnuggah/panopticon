@@ -15,6 +15,16 @@ export function ListIcon() {
   )
 }
 
+/** A bell: alerts. */
+export function BellIcon() {
+  return (
+    <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3a6 6 0 0 0-6 6v3.6L4.4 15.5c-.4.7.1 1.5.9 1.5h13.4c.8 0 1.3-.8.9-1.5L18 12.6V9a6 6 0 0 0-6-6Z" fill="currentColor" />
+      <path d="M9.5 19a2.5 2.5 0 0 0 5 0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 /** A map pin: places. */
 export function PinIcon() {
   return (

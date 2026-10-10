@@ -200,7 +200,21 @@ Places such as Home or Daycare, each for some of the assets, are Traccar geofenc
 - **Where an asset is:** the details card says **Home** instead of the street address while the asset's latest position is inside a place.
 - **Arrivals and departures, live:** each live position carries its places, so a change from the asset's last ones is an arrival or a departure (`visitsBetween`). The map screen shows it as a banner at the top, "Betty left Home · 14:02", for 8 s, read out by screen readers; tapping it shows the asset. Only while the app is open: it isn't a notification. Traccar's socket only sends `events` to users with a "web" notification for them, so panopticon doesn't rely on them.
 - **Arrivals and departures, history:** the details card lists the latest five from the last week, from Traccar's events report (`GET /api/reports/events?type=geofenceEnter&type=geofenceExit`, asked for as JSON), which Traccar records whether or not anyone is notified. It's fetched again when the asset's places change.
-- **Not yet:** alerts when the app is closed. Traccar can send them itself (Telegram, its Manager app, email; `notificator.types` in traccar.xml), or panopticon could send Web Push, which needs storage it doesn't have. See TODO.md.
+- **Alerts** for arriving and leaving, also while the app is closed: see [Alerts](#alerts).
+
+## Alerts
+
+Notifications on a phone when an asset leaves or arrives at one of its places, or its tracker goes offline, also while Panopticon is closed (Settings → Alerts, `AlertsPage.tsx`). Panopticon's server sends them with Web Push when Traccar forwards the event. It still stores nothing.
+
+- **Why not Traccar's own notifications:** its push notificator (`traccar`) only sends to Traccar's Manager app, through traccar.org; the others are Telegram, email, SMS and the like. Panopticon's own notifications need Web Push, sent by panopticon.
+- **Hearing about events:** Traccar's event forwarding (`event.forward.url`) posts every event as JSON, with its position, device (and the device's attributes) and geofence, to `POST /hooks/traccar-events` (`alerts.server.ts`). It's only accepted with `Authorization: Bearer <TRACCAR_EVENTS_SECRET>` (`event.forward.header`), compared in constant time, and up to 256 KB; without the variable the route answers 404 and the Alerts page says alerts aren't set up. It always answers 204 once accepted, so Traccar doesn't retry. Events older than 15 minutes (buffered positions) are ignored.
+- **Which events:** `geofenceExit` and `geofenceEnter` (a place), and `deviceOffline` or `deviceUnknown` (the tracker went offline), at most once per 30 minutes per phone and asset, since trackers on flaky connections come and go (`lib/alerts.ts`, with tests).
+- **Where the choices are kept:** on the assets themselves, as the Traccar device attribute `panopticonAlerts`: per phone, its push subscription, Panopticon's address, its time zone and language (for "At 14:02"), and its rules (`leave:<place>`, `arrive:<place>`, `offline`). Sealed with AES-256-GCM under a key derived from `SESSION_SECRET` (`alertsSeal.server.ts`, with tests): a push subscription lets whoever has it send that phone notifications, and Traccar shows device attributes to everyone who can see the device. The device's id is part of the seal, so it can't be copied to another device. Traccar sends the attributes with each forwarded event, so panopticon needs no storage and no Traccar login of its own to send alerts. About 400 characters per phone; a device's alerts are capped at 3,500 characters (Traccar keeps attributes in a limited column), roughly eight phones, with a message to turn alerts off on an old phone if it's full.
+- **Who may change them:** writing the attribute is changing the device, so it needs the same Traccar rights as changing assets, with the user's own token.
+- **Web Push** (`webPush.server.ts`, only `node:crypto`, tests including RFC 8291's example message byte for byte): the message is encrypted for the phone (RFC 8291, aes128gcm) and signed with panopticon's VAPID key (RFC 8292). The key is derived from `SESSION_SECRET`, so there's nothing to configure or store; changing the secret turns everyone's alerts off. The VAPID subject is Panopticon's address as the phone opened it, which must be `https` on a real domain: Apple's push service refuses `localhost` and test domains (checked: a real-looking subject gets as far as "BadDeviceToken" for a made-up subscription). Messages go only to Apple's, Google's, Mozilla's and Microsoft's push services (`isPushEndpoint`), so a subscription can't make the server post elsewhere. A subscription the push service says is gone (404, 410) is dropped the next time that asset's alerts are saved.
+- **The message** is in Declarative Web Push's format (`{ web_push: 8030, notification: {...} }`): Safari 18.4 and later show it themselves; the service worker (`public/sw.js`, which caches nothing) shows it elsewhere. Tapping it opens the asset's details card (`/?asset=<id>&details=true`). A newer alert about the same asset replaces the last one (`tag`).
+- **The phone's side** (`usePhonePush.ts`): **Turn on alerts on this phone** registers the service worker and asks for permission on the tap (browsers only ask then). On iPhone and iPad in Safari it says to add Panopticon to the Home Screen, where push works. The iOS Simulator has no push: `getSubscription()` never answers there, so the check gives up after 10 s and says the browser can't show notifications. Turning alerts off removes the phone from every asset, then unsubscribes.
+- **Testing locally:** the mock Traccar forwards its live events when `FORWARD_URL` and `FORWARD_HEADER` are set (see `dev/mock-traccar.mjs`); the `panopticon-mock` launch config sets a matching mock-only `TRACCAR_EVENTS_SECRET`.
 
 ## Sharing
 
@@ -360,7 +374,7 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
 ```
 server.mjs                            production server: srvx + static files + Start handler
 Dockerfile, .dockerignore
-public/                               manifest + icons, color-scheme.js (dark mode), copied to dist/client
+public/                               manifest + icons, color-scheme.js (dark mode), sw.js (alerts), copied to dist/client
 dev/mock-traccar.mjs                  a stand-in Traccar with made-up assets, for development
 src/
   start.ts                            request middleware: CSRF for server functions, security headers
@@ -373,6 +387,7 @@ src/
     images.asset.$id.ts               server route: asset picture
     api.session.openid.callback.ts    server route: SSO return (path fixed by Traccar)
     live.ts                           server route: SSE relay
+    hooks.traccar-events.ts           server route: Traccar's forwarded events, for alerts
     s.$link.tsx                       live location link page (public)
     s_.$link.live.ts                  server route: a live link's SSE stream
     s_.$link.image.ts                 server route: a live link's asset picture
@@ -401,6 +416,10 @@ src/
     sso.server.ts                     /auth/sso, callback, Traccar email-link redirects
     places.server.ts                  places as Traccar geofences: load with their assets, save, remove, visits
     places.functions.ts               getPlaces, savePlaceChange, deletePlace, getPlaceVisits
+    alerts.server.ts                  alerts: the Traccar events hook, this phone's choices onto the devices
+    alerts.functions.ts               getAlertSetup, savePhoneAlertChoices, sendPhoneTestAlert
+    alertsSeal.server.ts              sealing a device's alert choices (AES-GCM) + tests
+    webPush.server.ts                 Web Push: encryption (RFC 8291), VAPID (RFC 8292), sending + tests
   components/
     map/
       AssetMap.tsx                    the maplibre map (browser only, lazy): following, selection, your position
@@ -428,6 +447,7 @@ src/
     PlaceEditor.tsx                   a place's name, size and assets, in a card over the map
     PlaceVisits.tsx                   an asset's latest arrivals and departures
     PlaceBanner.tsx                   "Betty left Home", at the top of the map
+    AlertsPage.tsx                    Settings → Alerts: this phone's alerts, test, turn off
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
     TrackerSection.tsx                the Tracker section of an asset's page
@@ -439,6 +459,8 @@ src/
     live.ts                           LiveUpdate type + applyUpdates (shared with the server)
     trail.ts                          trail types, extend/prune
     places.ts                         Place type, Traccar's WKT areas, arrivals and departures + tests
+    alerts.ts                         alert rules, which events they match, their text + tests
+    usePhonePush.ts                   this phone's push subscription and the service worker
     segments.ts                       walking / stay / vehicle / underground, and what's happening now
     segments.test.ts                  node --test
     matching.ts                       which walks to snap for Snap to paths
@@ -474,6 +496,7 @@ src/
 | `MAP_STYLE_URL` | no | maplibre style, default OpenFreeMap `liberty` |
 | `MAP_EXTRA_ORIGINS` | no | Comma-separated extra origins the map style loads from (CSP) |
 | `MAP_MATCHING_URL` | no | Valhalla for Snap to paths, e.g. `http://valhalla:8002`; see [Snap to paths](#snap-to-paths-map-matching) |
+| `TRACCAR_EVENTS_SECRET` | no | What Traccar sends with forwarded events, for [alerts](#alerts); without it, alerts aren't offered |
 | `PORT`, `HOST` | no | Production server listen address, default `3000` on all interfaces |
 
 There is no Traccar token in env: each user's own sign-in is the only way to reach Traccar data. `.env` is gitignored and `.env.example` is committed. No env var uses the `VITE_` prefix, so nothing server-side can land in the client bundle.
@@ -482,6 +505,7 @@ There is no Traccar token in env: each user's own sign-in is the only way to rea
 
 - The app calls only the Traccar endpoints listed here; there's no `/api/*` pass-through. The catch-all only redirects the browser and never proxies.
 - **Live location links** are the only way to see data without signing in; see [Sharing](#sharing).
+- **`/hooks/traccar-events`** is the only route Traccar calls. It takes events only with the shared secret, sends nothing back, and only ever pushes to known push services; see [Alerts](#alerts).
 - `/live` needs the session cookie. It's a same-origin GET with `SameSite=Lax`, so other sites can't open it with your cookie. Traccar only accepts the token as a URL parameter on its socket, which may put the token in Traccar's access logs. That's server to server and never visible to the browser.
 - **Content-Security-Policy** (production only; Vite's dev server needs inline scripts):
   - `script-src 'self' 'nonce-…'`: TanStack Start writes a few inline scripts into every page (hydration data, scroll restoration). `security.server.ts` makes a random nonce per request, and `getRouter` passes it to `ssr.nonce` so every one of those scripts carries it. No `'unsafe-inline'`.

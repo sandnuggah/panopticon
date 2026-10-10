@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { ClientOnly, createFileRoute, redirect, useRouter } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, isRedirect, redirect, useRouter } from '@tanstack/react-router'
 import { AssetDetailsCard } from '../components/AssetDetailsCard'
 import { LiveIndicator } from '../components/LiveIndicator'
 import { BottomBar } from '../components/BottomBar'
@@ -53,6 +53,8 @@ export const Route = createFileRoute('/')({
       getMapOptions(),
       // Without places the map still works.
       getPlaces().catch((error: unknown) => {
+        // Signed out: go to /login like the other calls do.
+        if (isRedirect(error)) throw error
         console.warn('Could not load places:', error)
         return []
       }),

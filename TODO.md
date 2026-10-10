@@ -15,7 +15,8 @@ and cleared out now and then.
 
 - [x] Steps 1 and 2: places as Traccar geofences: Settings → Places, an editor on the map (circle picker, size 50 m–2 km, which assets), places drawn on the map, "Home" instead of the address in the details card, arrivals and departures from Traccar's events, a banner when one happens while the app is open. Mock Traccar has geofences and events. Released as `:45` (2026-10-10)
 - [ ] Try places on the real Traccar with `:45`: a Home for Betty, then check her arrivals and departures list (it needs reports allowed for the user) and the banner when she leaves
-- [ ] Step 3: alerts while the app is closed. No Traccar notifications or notificators are set up yet. First choice: Traccar's own notifications (e.g. Telegram: one bot key in traccar.xml), with a "Notify me when Betty leaves" switch per place that creates the Traccar notification. Check whether this Traccar version can limit a notification to one geofence. Later maybe: panopticon's own Web Push (needs storage for subscriptions and Traccar's event forwarding)
+- [x] Step 3: alerts with Web Push (branch `web-push`): Settings → Alerts per phone (leaves/arrives at each place, tracker offline), Traccar's event forwarding to `/hooks/traccar-events`, choices sealed on the devices, VAPID key from SESSION_SECRET. Tested against the mock and Apple's push service with a made-up subscription; not yet on a real iPhone
+- [ ] Try alerts on the real iPhone: set TRACCAR_EVENTS_SECRET and the three traccar.xml lines (README → Alerts), turn on in the Home Screen app, Send a test alert, then a real "Betty leaves Home"
 - [ ] Watch for false "left Home" at the edge of a place (ST-904L fixes wander 15–25 m); the position filters below would help
 
 ## Code

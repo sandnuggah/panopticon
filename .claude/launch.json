@@ -32,6 +32,7 @@
       "runtimeExecutable": "/usr/bin/env",
       "runtimeArgs": [
         "TRACCAR_URL=http://127.0.0.1:8082",
+        "TRACCAR_EVENTS_SECRET=mock-only-events-secret-not-for-real-use",
         "/etc/profiles/per-user/adam/bin/mise",
         "exec",
         "--",

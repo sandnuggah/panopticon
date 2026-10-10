@@ -4,6 +4,9 @@
 //   echo TRACCAR_URL=http://127.0.0.1:8082 > .env.development.local
 //
 // Sign in as pet@example.com / secret, or viewer@example.com / secret (can't change assets).
+// Event forwarding, for alerts: FORWARD_URL=http://localhost:3001/hooks/traccar-events and
+// FORWARD_HEADER='Authorization: Bearer <TRACCAR_EVENTS_SECRET>' post live events there, as
+// Traccar's event.forward.url and event.forward.header do.
 // Assets: Betty (photo, at one spot for two hours after a walk), Sixten (walking a loop, live) and
 // Bamse (offline, no position). Places: Daycare (Betty's spot) and Park (on Sixten's loop, so he
 // keeps arriving and leaving). Only the endpoints panopticon uses, roughly as Traccar answers them.
@@ -74,6 +77,26 @@ const events = []
 let nextEventId = 1
 /** Each device's geofences at its latest position, to notice arriving and leaving. */
 const insideBefore = new Map()
+/** Set once the made-up history is in place: only live events are forwarded. */
+let forwarding = false
+
+/** Posts an event like Traccar's JSON event forwarder: the event with its position, device and geofence. */
+function forwardEvent(event, position) {
+  const url = process.env.FORWARD_URL
+  if (!forwarding || !url) return
+  const headers = { 'Content-Type': 'application/json' }
+  const [name, ...value] = (process.env.FORWARD_HEADER ?? '').split(':')
+  if (value.length) headers[name.trim()] = value.join(':').trim()
+  const body = {
+    event,
+    position,
+    device: devices.find((device) => device.id === event.deviceId),
+    geofence: geofences.find((geofence) => geofence.id === event.geofenceId),
+  }
+  fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
+    .then((response) => console.log(`forwarded ${event.type} → HTTP ${response.status}`))
+    .catch((error) => console.log(`forwarding ${event.type} failed: ${error.message}`))
+}
 
 function contains(area, lat, lon) {
   const circle = /^CIRCLE \((\S+) (\S+), (\S+)\)$/.exec(area)
@@ -101,8 +124,11 @@ function geofencesAt(deviceId, time, lat, lon, positionId) {
     .filter((geofence) => links.has(`${deviceId}:${geofence.id}`) && contains(geofence.area, lat, lon))
     .map((geofence) => geofence.id)
   const before = insideBefore.get(deviceId) ?? []
-  const event = (type, geofenceId) =>
-    events.push({ id: nextEventId++, type, eventTime: iso(time), deviceId, positionId, geofenceId, maintenanceId: 0, attributes: {} })
+  const event = (type, geofenceId) => {
+    const recorded = { id: nextEventId++, type, eventTime: iso(time), deviceId, positionId, geofenceId, maintenanceId: 0, attributes: {} }
+    events.push(recorded)
+    forwardEvent(recorded, { id: positionId, deviceId, latitude: lat, longitude: lon, fixTime: iso(time) })
+  }
   for (const id of before) if (!ids.includes(id)) event('geofenceExit', id)
   for (const id of ids) if (!before.includes(id)) event('geofenceEnter', id)
   insideBefore.set(deviceId, ids)
@@ -516,4 +542,5 @@ setInterval(() => {
   broadcast({ positions })
 }, STEP_MS)
 
+forwarding = true
 server.listen(PORT, '127.0.0.1', () => console.log(`Mock Traccar on http://127.0.0.1:${PORT}`))

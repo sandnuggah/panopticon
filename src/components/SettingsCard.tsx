@@ -13,7 +13,8 @@ import { Appearance } from './Appearance'
 import { AssetEditor } from './AssetEditor'
 import { AssetsList } from './AssetsList'
 import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass, ROWS } from './cards'
-import { AppearanceIcon, BackIcon, ListIcon, LiveIcon, PersonIcon, PinIcon } from './icons'
+import { AlertsPage } from './AlertsPage'
+import { AppearanceIcon, BackIcon, BellIcon, ListIcon, LiveIcon, PersonIcon, PinIcon } from './icons'
 import { LiveLinksList } from './LiveLinksList'
 import { MapCredits } from './MapCredits'
 import { PlacesList } from './PlacesList'
@@ -23,11 +24,12 @@ import { UserInitial } from './UserInitial'
  * What's open: the Settings card alone (`main`), or the page card over it. Assets opens the list of
  * assets, which opens Add asset or an asset's own page (`asset-12`) inside the same card.
  */
-export type SettingsView = 'main' | 'appearance' | 'places' | 'live-links' | 'account' | 'assets' | 'add-asset' | `asset-${number}`
+export type SettingsView =
+  'main' | 'appearance' | 'places' | 'alerts' | 'live-links' | 'account' | 'assets' | 'add-asset' | `asset-${number}`
 
 /** The view a `settings` search param names, or undefined when it names none. */
 export function parseSettingsView(value: unknown): SettingsView | undefined {
-  const named: unknown[] = ['main', 'appearance', 'places', 'live-links', 'account', 'assets', 'add-asset']
+  const named: unknown[] = ['main', 'appearance', 'places', 'alerts', 'live-links', 'account', 'assets', 'add-asset']
   if (named.includes(value)) return value as SettingsView
   if (typeof value === 'string' && /^asset-[1-9]\d{0,9}$/.test(value)) return value as SettingsView
   return undefined
@@ -70,8 +72,8 @@ type Props = {
 
 /**
  * The Settings card, opened by the Settings button in the bottom bar (BottomBar.tsx), from the
- * bottom like Apple Maps' profile card: who's signed in, and Assets, Appearance, Places, Live links
- * and Account. Each of those opens a second card from the bottom that covers the screen, like Apple
+ * bottom like Apple Maps' profile card: who's signed in, and Assets, Appearance, Places, Alerts, Live
+ * links and Account. Each of those opens a second card from the bottom that covers the screen, like Apple
  * Maps' Places, with a large title and ✕ back to the Settings card. Add asset and an asset's own
  * page open inside the Assets card; a place opens in the editor on the map (PlaceEditor).
  *
@@ -136,15 +138,17 @@ export function SettingsCard({
       ? 'Appearance'
       : page === 'places'
         ? 'Places'
-        : page === 'live-links'
-          ? 'Live links'
-          : page === 'account'
-            ? 'Account'
-            : page === 'assets'
-              ? 'Assets'
-              : page === 'add-asset'
-                ? 'Add asset'
-                : (assets.find((asset) => asset.id === assetId)?.name ?? 'Asset')
+        : page === 'alerts'
+          ? 'Alerts'
+          : page === 'live-links'
+            ? 'Live links'
+            : page === 'account'
+              ? 'Account'
+              : page === 'assets'
+                ? 'Assets'
+                : page === 'add-asset'
+                  ? 'Add asset'
+                  : (assets.find((asset) => asset.id === assetId)?.name ?? 'Asset')
 
   return (
     <>
@@ -193,6 +197,7 @@ export function SettingsCard({
           <div key={page} className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-[env(safe-area-inset-bottom)] ${slide}`}>
             {page === 'appearance' && <Appearance listColors={ROWS} {...mapStyles} canSnapToPaths={canSnapToPaths} />}
             {page === 'places' && <PlacesList places={places} assets={assets} listColors={ROWS} onOpen={onOpenPlace} />}
+            {page === 'alerts' && <AlertsPage listColors={ROWS} />}
             {page === 'live-links' && <LiveLinksList listColors={ROWS} />}
             {page === 'account' && <AccountView user={user} />}
             {page === 'assets' && <AssetsList listColors={ROWS} onOpen={(id) => onShow(`asset-${id}`)} onAdd={() => onShow('add-asset')} />}
@@ -239,6 +244,7 @@ function MainView({ user, assetCount, placeCount, attribution, onShow }: MainPro
           after={placeCount ? String(placeCount) : 'None'}
           onClick={() => onShow('places')}
         />
+        <ListItem link title="Alerts" media={<RowIcon className="bg-[#ff3b30]" icon={<BellIcon />} />} onClick={() => onShow('alerts')} />
         <ListItem
           link
           title="Live links"

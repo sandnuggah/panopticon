@@ -28,7 +28,7 @@ export type AssetAccess = {
   canAdd: boolean
 }
 
-export type EditError = 'not-allowed' | 'tracker-id-taken' | 'not-found' | 'invalid-image' | 'unavailable'
+export type EditError = 'not-allowed' | 'tracker-id-taken' | 'not-found' | 'invalid-image' | 'alerts-full' | 'unavailable'
 export type EditResult<T extends object = object> = ({ ok: true } & T) | { ok: false; error: EditError }
 
 export async function loadManagedAssets(token: string): Promise<{ access: AssetAccess; assets: ManagedAsset[] }> {

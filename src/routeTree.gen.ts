@@ -14,6 +14,7 @@ import { Route as SplatRouteImport } from './routes/$'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthSsoRouteImport } from './routes/auth.sso'
+import { Route as HooksTraccarEventsRouteImport } from './routes/hooks.traccar-events'
 import { Route as SLinkRouteImport } from './routes/s.$link'
 import { Route as ImagesAssetIdRouteImport } from './routes/images.asset.$id'
 import { Route as SLinkImageRouteImport } from './routes/s_.$link.image'
@@ -43,6 +44,11 @@ const LoginRoute = LoginRouteImport.update({
 const AuthSsoRoute = AuthSsoRouteImport.update({
   id: '/auth/sso',
   path: '/auth/sso',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HooksTraccarEventsRoute = HooksTraccarEventsRouteImport.update({
+  id: '/hooks/traccar-events',
+  path: '/hooks/traccar-events',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SLinkRoute = SLinkRouteImport.update({
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/hooks/traccar-events': typeof HooksTraccarEventsRoute
   '/s/$link': typeof SLinkRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
   '/s/$link/image': typeof SLinkImageRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/hooks/traccar-events': typeof HooksTraccarEventsRoute
   '/s/$link': typeof SLinkRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
   '/s/$link/image': typeof SLinkImageRoute
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/auth/sso': typeof AuthSsoRoute
+  '/hooks/traccar-events': typeof HooksTraccarEventsRoute
   '/s/$link': typeof SLinkRoute
   '/images/asset/$id': typeof ImagesAssetIdRoute
   '/s_/$link/image': typeof SLinkImageRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/login'
     | '/auth/sso'
+    | '/hooks/traccar-events'
     | '/s/$link'
     | '/images/asset/$id'
     | '/s/$link/image'
@@ -129,6 +139,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/login'
     | '/auth/sso'
+    | '/hooks/traccar-events'
     | '/s/$link'
     | '/images/asset/$id'
     | '/s/$link/image'
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/login'
     | '/auth/sso'
+    | '/hooks/traccar-events'
     | '/s/$link'
     | '/images/asset/$id'
     | '/s_/$link/image'
@@ -154,6 +166,7 @@ export interface RootRouteChildren {
   LiveRoute: typeof LiveRoute
   LoginRoute: typeof LoginRoute
   AuthSsoRoute: typeof AuthSsoRoute
+  HooksTraccarEventsRoute: typeof HooksTraccarEventsRoute
   SLinkRoute: typeof SLinkRoute
   ImagesAssetIdRoute: typeof ImagesAssetIdRoute
   SLinkImageRoute: typeof SLinkImageRoute
@@ -196,6 +209,13 @@ declare module '@tanstack/react-router' {
       path: '/auth/sso'
       fullPath: '/auth/sso'
       preLoaderRoute: typeof AuthSsoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hooks/traccar-events': {
+      id: '/hooks/traccar-events'
+      path: '/hooks/traccar-events'
+      fullPath: '/hooks/traccar-events'
+      preLoaderRoute: typeof HooksTraccarEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/s/$link': {
@@ -242,6 +262,7 @@ const rootRouteChildren: RootRouteChildren = {
   LiveRoute: LiveRoute,
   LoginRoute: LoginRoute,
   AuthSsoRoute: AuthSsoRoute,
+  HooksTraccarEventsRoute: HooksTraccarEventsRoute,
   SLinkRoute: SLinkRoute,
   ImagesAssetIdRoute: ImagesAssetIdRoute,
   SLinkImageRoute: SLinkImageRoute,

@@ -9,6 +9,11 @@ type Env = {
   mapOrigins: string[]
   /** Valhalla for Snap to paths (MAP_MATCHING_URL); without it, the switch is greyed out. */
   mapMatchingUrl: string | undefined
+  /**
+   * What Traccar sends with forwarded events (TRACCAR_EVENTS_SECRET, as `Authorization: Bearer …`),
+   * so only it can trigger alerts; without it, alerts aren't offered (see alerts.server.ts).
+   */
+  eventsSecret: string | undefined
 }
 
 const DEFAULT_MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
@@ -28,6 +33,7 @@ export function env(): Env {
       mapStyleUrl,
       mapOrigins: [new URL(mapStyleUrl).origin, ...readMapExtraOrigins()],
       mapMatchingUrl: readUrl('MAP_MATCHING_URL', false),
+      eventsSecret: readEventsSecret(),
     }
   }
   return cached
@@ -73,6 +79,15 @@ function readSessionSecret(): string {
   const secret = required('SESSION_SECRET')
   if (secret.length < 32) {
     throw new Error('SESSION_SECRET must be at least 32 characters. Generate one with: openssl rand -base64 32')
+  }
+  return secret
+}
+
+function readEventsSecret(): string | undefined {
+  const secret = process.env.TRACCAR_EVENTS_SECRET?.trim()
+  if (!secret) return undefined
+  if (secret.length < 24 || /\s/.test(secret)) {
+    throw new Error('TRACCAR_EVENTS_SECRET must be at least 24 characters, without spaces. Generate one with: openssl rand -hex 24')
   }
   return secret
 }

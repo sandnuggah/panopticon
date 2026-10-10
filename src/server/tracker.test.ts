@@ -12,6 +12,7 @@ const device: TraccarDevice = {
   disabled: false,
   image: null,
   model: 'ST-904L',
+  alerts: null,
 }
 
 /** An ST-904L report, as Traccar stores it: the extra values as text. */

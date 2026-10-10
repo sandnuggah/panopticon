@@ -11,6 +11,8 @@ export function editErrorMessage(error: EditError): string {
       return 'This asset no longer exists in Traccar.'
     case 'invalid-image':
       return "Traccar didn't accept that image. Try a different photo."
+    case 'alerts-full':
+      return 'Too many phones get alerts for this asset. Turn alerts off on a phone you no longer use.'
     case 'unavailable':
       return "Traccar couldn't save the change. Try again in a moment."
   }

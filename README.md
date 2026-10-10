@@ -120,6 +120,39 @@ party. Without it the switch is greyed out.
 
 To refresh the map data every few months, delete `./valhalla/valhalla_tiles.tar` and restart Valhalla.
 
+## Alerts (optional)
+
+Settings → Alerts sends notifications to a phone when an asset leaves or arrives at one of its
+places, or its tracker goes offline, also while Panopticon is closed. Traccar tells panopticon about
+each event (event forwarding), and panopticon sends the notification with Web Push. Each phone
+chooses its own alerts, and they're kept with the assets in Traccar, so panopticon still stores
+nothing. On iPhone and iPad they work in the Home Screen app (iOS 16.4 or later).
+
+Panopticon has to be on HTTPS at a real domain name: browsers only allow push there, and Apple's
+push service checks the address.
+
+1. Make a secret for Traccar to send with its events:
+   ```bash
+   openssl rand -hex 24
+   ```
+2. Set it in panopticon's `.env` and restart panopticon:
+   ```
+   TRACCAR_EVENTS_SECRET=<the secret>
+   ```
+3. Add three lines to Traccar's `traccar.xml`, with panopticon's address as Traccar reaches it
+   (in Docker, the service name), then restart Traccar:
+   ```xml
+   <entry key='event.forward.enable'>true</entry>
+   <entry key='event.forward.url'>http://panopticon:3000/hooks/traccar-events</entry>
+   <entry key='event.forward.header'>Authorization: Bearer <the secret></entry>
+   ```
+4. On the phone: open Panopticon from the Home Screen, then Settings → Alerts → **Turn on alerts on
+   this phone**, and choose which. **Send a test alert** checks the phone's side.
+
+Traccar forwards every event, not just these; panopticon ignores the rest. Alerts stay on for a
+phone until they're turned off there, also after signing out. Changing `SESSION_SECRET` turns
+everyone's alerts off: turn them on again on each phone.
+
 ## Street addresses (optional)
 
 The selected asset's card shows its street address, from Traccar's own reverse geocoder. Recent

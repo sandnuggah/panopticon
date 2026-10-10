@@ -30,6 +30,8 @@ export type TraccarDevice = {
   image: string | null
   /** The model entered for the device in Traccar, if any. */
   model: string | null
+  /** Which phones want alerts for it, sealed (attribute `panopticonAlerts`, see alertsSeal.server.ts). */
+  alerts: string | null
 }
 
 export type TraccarPosition = {
@@ -465,6 +467,7 @@ function parseDevice(value: unknown): TraccarDevice {
     disabled: value.disabled === true,
     image: readDeviceImage(value.attributes),
     model: typeof value.model === 'string' && value.model.trim() !== '' ? value.model.trim() : null,
+    alerts: isObject(value.attributes) && typeof value.attributes.panopticonAlerts === 'string' ? value.attributes.panopticonAlerts : null,
   }
 }
 
