@@ -23,12 +23,17 @@
   --surface: #ffffff;
   --text: #000000;
   --shadow: 0 1px 3px rgb(0 0 0 / 0.25);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
 }
 
 /* Dynamic Type: on iPhones and iPads the root font follows the text size chosen in Settings →
    Display & Text Size (17px at the default, as iOS's body text; up to about three times that at the
-   accessibility sizes). Text, row heights and the bar are sized in rem, so they grow with it.
+   accessibility sizes). Text is sized in rem, so it grows with it, and rows grow with their text.
    Touch devices only: on a Mac the same font is 13px. Android Chrome follows its text size through
    the text-scale meta tag (__root.tsx). */
 @supports (font: -apple-system-body) {
@@ -37,6 +42,79 @@
       font: -apple-system-body;
     }
   }
+}
+
+/* Margins, paddings and gaps stay one size, as in iOS, where only text and what holds it grow.
+   Tailwind's spacing is otherwise 0.25rem, so at the largest text sizes margins grew to 50px and
+   squeezed the text. The same 4px at the default 16px root. */
+:root {
+  --spacing: 4px;
+}
+
+/* Behind the pages, Konsta's page colour: Safari 26 and later also colour the strips under the
+   status bar and around their toolbar from it, which were white around the grey sign-in page. */
+html:has(.k-ios) {
+  background: var(--color-ios-light-surface);
+}
+
+html.dark:has(.k-ios) {
+  background: var(--color-ios-dark-surface);
+}
+
+html:has(.k-material) {
+  background: var(--color-md-light-surface);
+}
+
+html.dark:has(.k-material) {
+  background: var(--color-md-dark-surface);
+}
+
+/* Konsta's buttons, list buttons and inputs have a fixed height: here a minimum, so they grow
+   with their text instead of it spilling out. */
+.k-button,
+.k-list-button {
+  height: auto;
+}
+
+.k-button.h-7 {
+  min-height: 28px;
+}
+
+.k-button.h-8 {
+  min-height: 32px;
+}
+
+.k-button.h-8\.5 {
+  min-height: 34px;
+}
+
+.k-button.h-10 {
+  min-height: 40px;
+}
+
+.k-button.h-12,
+.k-list-button.h-12 {
+  min-height: 48px;
+}
+
+.k-list-button.h-13 {
+  min-height: 52px;
+}
+
+.k-list-input input {
+  height: auto;
+}
+
+.k-list-input input.h-10 {
+  min-height: 40px;
+}
+
+/* At the largest text sizes a single word can be wider than its row: it breaks, hyphenated where
+   the browser knows how, rather than running out of it. */
+.k-list-item,
+.k-list-button {
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 /* Konsta's few fixed text sizes (list buttons, large buttons, inputs, block titles) in rem, so they
@@ -51,16 +129,11 @@
   font-size: 0.9375rem;
 }
 
-.min-h-\[56px\] {
-  min-height: 3.5rem;
-}
-
-/* The map's chrome stays one size, as iOS's tab bars and Maps' controls do: the bottom bar, the
-   map's buttons and the Live pill; so do pictures and the cards' close buttons. Tailwind sizes everything from these variables, so fixing them
-   here keeps those elements at their default size whatever the text size. */
+/* The map's chrome keeps its text one size, as iOS's tab bars and Maps' controls do: the bottom
+   bar, the map's buttons and the Live pill; so do the initials in pictures. Tailwind sizes text
+   from these variables, so fixing them here keeps it at its default size whatever the text size. */
 .fixed-size,
 .map-overlay {
-  --spacing: 4px;
   --text-base: 16px;
   --text-lg: 18px;
   --text-4xl: 36px;
@@ -154,8 +227,8 @@
 }
 
 .live-dot {
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--stale);
 }
@@ -184,17 +257,18 @@
   z-index: 3;
   max-width: calc(100% - 140px);
   margin: 0;
-  padding: 0.4rem 0.75rem;
+  padding: 6px 12px;
   border-radius: 12px;
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow);
-  font-size: 0.85rem;
+  font-size: 14px;
   text-align: center;
   transform: translateX(-50%);
 }
 
-/* Map markers: maplibre DOM markers (see map/markers.ts). */
+/* Map markers: maplibre DOM markers (see map/markers.ts). In px, like the map's own labels: the
+   map doesn't follow Dynamic Type. */
 .marker {
   display: grid;
   justify-items: center;
@@ -208,12 +282,13 @@
   overflow: hidden;
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: 2px solid #ffffff;
   background: var(--marker);
   color: var(--marker-text);
+  font-size: 16px;
   font-weight: 700;
   box-shadow: var(--shadow);
 }
@@ -222,11 +297,10 @@
 .marker-label {
   position: absolute;
   top: calc(100% + 2px);
-  padding: 0 0.4rem;
+  padding: 0 6px;
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
-  /* Fixed, like the map's own labels; the map doesn't follow Dynamic Type. */
   font-size: 13px;
   white-space: nowrap;
   box-shadow: var(--shadow);
@@ -246,8 +320,8 @@
 }
 
 .marker-has-image .marker-dot {
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 44px;
+  height: 44px;
 }
 
 .marker-stale .marker-image {

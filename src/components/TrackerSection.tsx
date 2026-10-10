@@ -59,13 +59,16 @@ function Rows({ details }: { details: Details }) {
   return (
     <List strong inset>
       <Row label="Connection">
-        {statusLabel(details.status)}
-        {details.lastContact && (
-          <>
-            {' · last contact '}
-            <RelativeTime time={details.lastContact} />
-          </>
-        )}
+        {/* One span, so it wraps as one piece of text. */}
+        <span>
+          {statusLabel(details.status)}
+          {details.lastContact && (
+            <>
+              {' · last contact '}
+              <RelativeTime time={details.lastContact} />
+            </>
+          )}
+        </span>
       </Row>
       {gps && (
         <Row label="GPS">
@@ -111,8 +114,16 @@ function Rows({ details }: { details: Details }) {
   )
 }
 
+/** A label and its value, the value on a line of its own when both don't fit (large text sizes). */
 function Row({ label, children }: { label: string; children: ReactNode }) {
-  return <ListItem title={label} after={<span className="flex items-center gap-1.5 text-right">{children}</span>} />
+  return (
+    <ListItem
+      title={label}
+      // Konsta keeps the value from shrinking; here it may, and wraps.
+      titleWrapClassName="flex-wrap gap-x-3 [&>:last-child]:min-w-0 [&>:last-child]:shrink"
+      after={<span className="flex flex-wrap items-center justify-end gap-x-1.5 text-right">{children}</span>}
+    />
+  )
 }
 
 function interval(seconds: number): string {

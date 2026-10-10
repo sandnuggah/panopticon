@@ -4,7 +4,7 @@ import type { Activity, Stay } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { BatteryGauge } from './BatteryGauge'
-import { CARD_BG, CloseButton } from './cards'
+import { CARD_BG, CloseButton, moveFocus } from './cards'
 import { RelativeTime } from './RelativeTime'
 import { Share } from './Share'
 
@@ -36,15 +36,14 @@ export function AssetDetailsCard({ asset, activity, stay, address, onTop, onClos
   const shown = last.current
 
   // Focus moves to ✕ as the card opens, and back to what had it (the asset's picture in the bottom
-  // bar) as it closes, so it never stays on a button in the hidden card. preventScroll: see
-  // SettingsCard.tsx.
+  // bar) as it closes, so it never stays on a button in the hidden card.
   const opener = useRef<HTMLElement | null>(null)
   useEffect(() => {
     if (open) {
       opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-      closeButton.current?.focus({ preventScroll: true })
+      moveFocus(closeButton.current)
     } else if (opener.current) {
-      if (opener.current.isConnected) opener.current.focus({ preventScroll: true })
+      if (opener.current.isConnected) moveFocus(opener.current)
       opener.current = null
     }
   }, [open])
@@ -65,7 +64,7 @@ export function AssetDetailsCard({ asset, activity, stay, address, onTop, onClos
       inert={!open}
       className={`absolute inset-x-0 bottom-0 z-20 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out ${open ? '' : 'translate-y-[calc(100%+16px)]'}`}
     >
-      <div className={`relative max-h-[60dvh] overflow-y-auto rounded-[2.5rem] px-5 pb-5 pt-5 shadow-2xl ${CARD_BG}`}>
+      <div className={`relative max-h-[60dvh] overflow-y-auto rounded-[40px] px-5 pb-5 pt-5 shadow-2xl ${CARD_BG}`}>
         <CloseButton ref={closeButton} className="absolute right-4 top-4" onClick={onClose} />
         {shown && <Details {...shown} open={open} />}
       </div>
@@ -93,8 +92,8 @@ function Details({
       <div className="flex items-center gap-3 pr-12">
         <AssetAvatar asset={asset} stale={isStale(asset, now)} />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-2xl font-bold">{asset.name}</h2>
-          <div className="flex items-center gap-1.5 text-sm opacity-60">
+          <h2 className="text-2xl font-bold break-words">{asset.name}</h2>
+          <div className="flex flex-wrap items-center gap-x-1.5 text-sm opacity-60">
             <StatusDot status={asset.status} />
             {statusLabel(asset.status)}
             {percent !== undefined && (

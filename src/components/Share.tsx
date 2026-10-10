@@ -8,7 +8,7 @@ import { LIVE_LINK_HOURS, liveLinkShare, locationShare } from '../lib/share'
 import { shareOrCopy } from '../lib/shareSheet'
 import { useNow } from '../lib/useNow'
 import { createLink } from '../server/liveLinks.functions'
-import { Backdrop, CARD_BG, CloseButton, pageCardClass, ROWS } from './cards'
+import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass, ROWS } from './cards'
 import { ShareIcon } from './icons'
 
 type Props = {
@@ -150,7 +150,7 @@ export function Share({ asset, address, active }: Props) {
             onShareLive={(hours) => void shareLive(hours)}
             onClose={() => {
               setOpen(false)
-              shareButton.current?.focus({ preventScroll: true })
+              moveFocus(shareButton.current)
             }}
           />,
           host,
@@ -173,8 +173,7 @@ function ShareCard({ asset, open, onSendLocation, onShareLive, onClose }: CardPr
 
   useEffect(() => {
     if (!open) return
-    // preventScroll: see BottomBar.tsx.
-    close.current?.focus({ preventScroll: true })
+    moveFocus(close.current)
     // In the capture phase, and stopped there, so Escape closes this card and not the details
     // card under it too.
     const onKey = (event: KeyboardEvent) => {
@@ -190,7 +189,7 @@ function ShareCard({ asset, open, onSendLocation, onShareLive, onClose }: CardPr
     <>
       <Backdrop shown={open} z="z-50" onClick={onClose} />
       <section role="dialog" aria-modal="true" aria-label="Share" inert={!open} className={pageCardClass(open)}>
-        <div className={`flex h-full flex-col overflow-clip rounded-t-[2.5rem] shadow-2xl ${CARD_BG}`}>
+        <div className={`flex h-full flex-col overflow-clip rounded-t-[40px] shadow-2xl ${CARD_BG}`}>
           <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-5">
             <h2 className="truncate text-[calc(0.7rem+22px)] font-bold">Share</h2>
             <CloseButton ref={close} onClick={onClose} />

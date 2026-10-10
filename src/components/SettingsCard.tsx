@@ -11,7 +11,7 @@ import { AddAssetForm } from './AddAssetForm'
 import { Appearance } from './Appearance'
 import { AssetEditor } from './AssetEditor'
 import { AssetsList } from './AssetsList'
-import { Backdrop, CARD_BG, CloseButton, pageCardClass, ROWS } from './cards'
+import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass, ROWS } from './cards'
 import { AppearanceIcon, BackIcon, ListIcon, LiveIcon, PersonIcon } from './icons'
 import { LiveLinksList } from './LiveLinksList'
 import { MapCredits } from './MapCredits'
@@ -106,11 +106,9 @@ export function SettingsCard({
     if (pageOpen) lastPage.current = page
     const was = before.current
     before.current = { open, pageOpen, page }
-    // Without preventScroll the browser scrolls the map screen to bring the button into view
-    // while a card is still sliding, and the whole screen jumps.
-    if (pageOpen) pageHeader.current?.focus({ preventScroll: true })
-    else if (open) settingsClose.current?.focus({ preventScroll: true })
-    else if (was.open) returnFocus.current?.focus({ preventScroll: true })
+    if (pageOpen) moveFocus(pageHeader.current)
+    else if (open) moveFocus(settingsClose.current)
+    else if (was.open) moveFocus(returnFocus.current)
   }, [open, pageOpen, page, returnFocus])
 
   useEffect(() => {
@@ -148,9 +146,9 @@ export function SettingsCard({
         inert={!open || pageOpen}
         className={`absolute inset-x-0 bottom-0 z-40 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out ${open ? '' : 'translate-y-full'}`}
       >
-        {/* Just tall enough for the main list and the map credits under it (in rem, so it grows with Dynamic Type), or less on short screens. */}
+        {/* As tall as the main list and the map credits under it, at any text size; it scrolls on short screens. */}
         <div
-          className={`relative h-[min(29.5rem,calc(100dvh-env(safe-area-inset-top)-96px))] overflow-y-auto rounded-[2.5rem] pt-5 shadow-2xl ${CARD_BG}`}
+          className={`relative max-h-[calc(100dvh-env(safe-area-inset-top)-96px)] overflow-y-auto rounded-[40px] pt-5 shadow-2xl ${CARD_BG}`}
         >
           <CloseButton ref={settingsClose} className="absolute right-4 top-4 z-10" onClick={onClose} />
           <MainView user={user} assetCount={assets.length} attribution={attribution} onShow={onShow} />
@@ -160,9 +158,10 @@ export function SettingsCard({
       {/* The page card, over the Settings card, from just below the status bar to the bottom. */}
       <Backdrop shown={pageOpen} z="z-50" onClick={onClosePage} />
       <section role="dialog" aria-modal="true" aria-label={title} inert={!pageOpen} className={pageCardClass(pageOpen)}>
-        <div className={`flex h-full flex-col overflow-clip rounded-t-[2.5rem] shadow-2xl ${CARD_BG}`}>
+        <div className={`flex h-full flex-col overflow-clip rounded-t-[40px] shadow-2xl ${CARD_BG}`}>
           {insideAssets(page) ? (
-            <div className="relative flex h-15 shrink-0 items-center justify-between px-4 pt-4">
+            // One size whatever the text size, like iOS's navigation bars.
+            <div className="relative flex h-15 shrink-0 items-center justify-between px-4 pt-4 text-[length:17px]">
               <button
                 ref={pageHeader}
                 type="button"
@@ -172,7 +171,7 @@ export function SettingsCard({
                 <BackIcon />
                 Assets
               </button>
-              <h2 className="absolute inset-x-28 truncate text-center text-[1.0625rem] font-semibold">{title}</h2>
+              <h2 className="absolute inset-x-28 truncate text-center font-semibold">{title}</h2>
               <CloseButton onClick={onClosePage} />
             </div>
           ) : (
@@ -205,8 +204,8 @@ function MainView({ user, assetCount, attribution, onShow }: MainProps) {
     <>
       <div className="flex flex-col items-center px-4 text-center">
         <UserInitial name={user.name} className="size-24 text-4xl" />
-        <h2 className="mt-3 text-2xl font-bold">{user.name}</h2>
-        {user.email && user.email !== user.name && <p className="opacity-60">{user.email}</p>}
+        <h2 className="mt-3 max-w-full text-2xl font-bold break-words">{user.name}</h2>
+        {user.email && user.email !== user.name && <p className="max-w-full break-words opacity-60">{user.email}</p>}
       </div>
       <List strong inset className="mb-4! mt-6!" colors={ROWS}>
         <ListItem

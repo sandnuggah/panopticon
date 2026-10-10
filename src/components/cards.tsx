@@ -20,13 +20,22 @@ export function Backdrop({ shown, z, onClick }: { shown: boolean; z: string; onC
   )
 }
 
+/**
+ * Moves focus as a card opens or closes. preventScroll: without it the browser scrolls the map
+ * screen to bring the element into view while a card is still sliding, and the whole screen jumps.
+ * focusVisible: false: a tap moved it, so no focus ring; Safari otherwise draws one around ✕.
+ */
+export function moveFocus(element: HTMLElement | null | undefined) {
+  element?.focus({ preventScroll: true, focusVisible: false } as FocusOptions)
+}
+
 /** The round ✕ in a card's corner. */
 export function CloseButton({ ref, className = '', onClick }: { ref?: Ref<HTMLButtonElement>; className?: string; onClick: () => void }) {
   return (
     <button
       ref={ref}
       type="button"
-      className={`fixed-size grid size-11 shrink-0 place-items-center rounded-full bg-black/5 active:opacity-60 dark:bg-white/10 ${className}`}
+      className={`grid size-11 shrink-0 place-items-center rounded-full bg-black/5 active:opacity-60 dark:bg-white/10 ${className}`}
       aria-label="Close"
       onClick={onClick}
     >

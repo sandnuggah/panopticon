@@ -6,10 +6,11 @@ export function BatteryGauge({ percent }: { percent: number }) {
   const bars = batteryBars(percent)
   const label = `Battery ${Math.round(percent)}%`
   return (
-    // Drawn on a pixel grid at the size it's shown (16.5 × 9 CSS px), so the 1px outline and the
-    // bars land on whole pixels instead of blurring between them.
+    // Drawn on a pixel grid at the size it's shown at a 16px root (16.5 × 9 CSS px), so on a
+    // desktop the 1px outline and the bars land on whole pixels instead of blurring between them.
+    // In rem, so it grows with Dynamic Type like the text beside it.
     <svg
-      className={`h-[9px] w-[16.5px] shrink-0 ${percent <= 20 ? 'text-orange-500' : 'opacity-60'}`}
+      className={`h-[0.5625rem] w-[1.03125rem] shrink-0 ${percent <= 20 ? 'text-orange-500' : 'opacity-60'}`}
       viewBox="0 0 16.5 9"
       role="img"
       aria-label={label}
