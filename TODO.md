@@ -3,23 +3,13 @@
 Kept by Claude at Adam's request. Newest items at the bottom of each section; done items are ticked
 and cleared out now and then.
 
-## UI update
-
-- [x] Research UI libraries (pros and cons)
-- [x] Choose a UI library — Konsta UI (iOS look), spiked on branch `konsta-spike`
-- [x] Decide: auto iOS/Material, phone layout everywhere, drop the pet theme
-- [x] Re-implement the UI with it (branch `konsta-spike`)
-- [x] Map's bottom area: a bar with the Settings button, opening the Settings card (like Apple Maps' profile card). Tried and dropped: a tab bar
-- [x] Settings and asset management moved into the Settings card; the /settings and /assets pages are gone
-- [x] Asset pictures in the bottom bar: tap to centre, tap again for a details card
-- [x] Appearance: map style, trail length, paw prints, snap to paths
-- [x] Map controls: position button in the bar, zoom and Live as pills like the bar, credits in the Settings card
-- [x] Share opens a second-level card, like Settings' pages
-- [x] Merged to `main` and released as `:40` (2026-10-10)
-
 ## Trail on the map
 
-- [x] Tuned on the weekend trip of 3–4 October: rides follow their fixes, rides hold together in traffic and when the tracker reports seconds apart, silences are never underground, overnight isn't joined into a walk
+- [ ] Snap train and metro rides to the tracks. Today they're drawn through their GPS fixes (30 s apart, so curves are cut) and straight through tunnels and silences. Valhalla can't do rail; [OpenRailRouting](https://github.com/geofabrik/OpenRailRouting) (Geofabrik, GraphHopper-based, self-hosted, OSM rail incl. metro tunnels) can match fixes to tracks and route tunnel and silent legs between their ends. Trafiklab GTFS ruled out (needs a key, no track shapes found). Steps:
+  1. Experiment: OpenRailRouting with a Stockholm + Sörmland extract; match Saturday 3 October's train and metro hop; before/after screenshots; measure RAM and build time
+  2. If good: match ride legs with fixes, route underground and silent legs; only use a result that fits the fixes (as Snap to paths does); behind Snap to paths or a new "Snap rides to tracks" switch
+  3. README: compose setup for the server, like Valhalla's
+  - Risks: a prototype (pin a version); badly mapped rail in places; parallel tracks (commuter train and metro through central Stockholm) can get the wrong one
 
 ## Later / maybe
 
