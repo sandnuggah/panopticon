@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // Let Vite bundle the worker and hand maplibre the resulting same-origin URL.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { isStale, type Asset } from '../../lib/asset'
+import type { Place } from '../../lib/places'
 import type { Trails } from '../../lib/trail'
 import type { LatLon } from '../../lib/segments'
 import { useMyPosition, type MyPosition } from '../../lib/useMyPosition'
@@ -15,7 +16,9 @@ import { addMyPositionLayer, createMyPositionDot, setAccuracyCircle } from './my
 import { circle } from './geometry'
 import { createMarkerElement, updateMarkerElement } from './markers'
 import { addTrailLayers, recolourTrails, setTrails, showPawPrints } from './trailLayers'
+import { addPlaceLayers, recolourPlaces, setPlaces } from './placeLayers'
 import { MapButtons } from './MapButtons'
+import { PlacePicker, type PickerProps } from './PlacePicker'
 
 setWorkerUrl(workerUrl)
 
@@ -26,6 +29,9 @@ const FOLLOW_MS = 1000
 const CENTRED_PX = 12
 /** About how much of the map's bottom edge the bottom bar covers, in pixels; it doesn't follow Dynamic Type. */
 const BOTTOM_BAR = 68
+
+/** Live link pages show no places; one empty list, so it never counts as a change. */
+const NO_PLACES: Place[] = []
 
 /** Zoom when showing just your position. */
 const MY_POSITION_ZOOM = 16
@@ -53,6 +59,10 @@ type Props = {
    * Settings card on the map screen, in the panel on live link pages. The map shows none itself.
    */
   onAttribution: (attributions: string[]) => void
+  /** The user's places (Settings → Places), drawn under the trail. None on live link pages. */
+  places?: Place[]
+  /** While a place is being added or changed (PlaceEditor): the circle to place, and which place it is. */
+  picker?: (PickerProps & { placeId?: number }) | null
 }
 
 /** Browser-only: load with React.lazy inside <ClientOnly>. */
@@ -70,6 +80,8 @@ export default function AssetMap({
   showMe,
   onShowMeChange,
   onAttribution,
+  places = NO_PLACES,
+  picker = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -147,8 +159,9 @@ export default function AssetMap({
       // Added below, at the top.
       attributionControl: false,
     })
-    // Every style load, the first and after switching: the trails and your position go on top.
+    // Every style load, the first and after switching: places, then the trails and your position on top.
     map.on('style.load', () => {
+      addPlaceLayers(map)
       addTrailLayers(map)
       addMyPositionLayer(map)
       setStyleLoaded(true)
@@ -217,6 +230,13 @@ export default function AssetMap({
     setTrails(map, trails, snappedWalks)
   }, [trails, snappedWalks, styleLoaded])
 
+  const editedPlaceId = picker?.placeId
+  useEffect(() => {
+    const map = mapRef.current
+    if (!styleLoaded || !map) return
+    setPlaces(map, places, editedPlaceId)
+  }, [places, editedPlaceId, styleLoaded])
+
   // Walks as a line or as paw prints (Appearance → Paw prints). Again after each style load, which
   // re-adds both layers.
   useEffect(() => {
@@ -231,6 +251,7 @@ export default function AssetMap({
     const map = mapRef.current
     if (!styleLoaded || !map) return
     recolourTrails(map)
+    recolourPlaces(map)
   }, [prefersDark, styleLoaded])
 
   // Keep one marker per located asset.
@@ -350,6 +371,7 @@ export default function AssetMap({
     <>
       <div ref={containerRef} className="map" />
       <MapButtons map={mapRef} placement={buttons} showMe={showMe} onToggleMe={() => onShowMeChange(!showMe)} />
+      {picker && styleLoaded && <PlacePicker map={mapRef} {...picker} />}
       {note && (
         <p className="my-position-note" role="status">
           {note}

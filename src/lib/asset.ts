@@ -28,6 +28,8 @@ export type Asset = {
   battery?: AssetBattery
   /** Picture uploaded for the device in Traccar, served through this app (see images.server.ts). */
   imageUrl?: string
+  /** The places (lib/places.ts) its latest position is inside. */
+  placeIds: number[]
 }
 
 /** First letter of the name, shown when there's no picture. */

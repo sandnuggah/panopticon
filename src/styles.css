@@ -15,6 +15,7 @@
 /* Colours for the map, which Konsta's components don't style. AssetMap reads --trail. */
 :root {
   --trail: #2f8f5b;
+  --place: #5856d6;
   --marker: #2f8f5b;
   --marker-text: #ffffff;
   --online: #34c759;
@@ -145,6 +146,7 @@ html.dark:has(.k-material) {
 
 .dark {
   --trail: #5cc98d;
+  --place: #7d7aff;
   --marker: #5cc98d;
   --marker-text: #06200f;
   --online: #30d158;
@@ -265,6 +267,69 @@ html.dark:has(.k-material) {
   font-size: 14px;
   text-align: center;
   transform: translateX(-50%);
+}
+
+/* Places (map/placeLayers.ts): the name at the top edge of the area. */
+.place-label {
+  padding: 0 6px 2px;
+  color: var(--place);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-shadow:
+    0 0 2px var(--surface),
+    0 0 4px var(--surface);
+  pointer-events: none;
+}
+
+/* The circle being placed (map/PlacePicker.tsx), in the middle of the map above the editor card. */
+.place-picker {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--place);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--place) 14%, transparent);
+  pointer-events: none;
+}
+
+.place-picker-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--place);
+}
+
+/* "Betty left Home" (PlaceBanner.tsx): under the Live pill, across the top of the map. */
+.place-banner-area {
+  position: absolute;
+  top: calc(64px + env(safe-area-inset-top));
+  inset-inline: 12px;
+  z-index: 15;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.place-banner {
+  max-width: 36rem;
+  padding: 10px 16px;
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18);
+  text-align: start;
+  pointer-events: auto;
+  animation: place-banner-in 0.3s ease-out;
+}
+
+@keyframes place-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
 }
 
 /* Map markers: maplibre DOM markers (see map/markers.ts). In px, like the map's own labels: the

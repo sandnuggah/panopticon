@@ -15,6 +15,19 @@ export function ListIcon() {
   )
 }
 
+/** A map pin: places. */
+export function PinIcon() {
+  return (
+    <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 21.5s-6.5-6.2-6.5-11.5a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11.5-6.5 11.5ZM12 12.4a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8Z"
+        fill="currentColor"
+        fillRule="evenodd"
+      />
+    </svg>
+  )
+}
+
 /** A circle, half filled: light and dark, as in iOS's appearance settings. */
 export function AppearanceIcon() {
   return (

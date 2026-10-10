@@ -26,6 +26,7 @@ function report(time: string, valid: boolean, extra: Record<string, unknown> = {
     accuracy: 0,
     cellId: null,
     cellNetwork: null,
+    geofenceIds: [],
     attributes: {
       io1: '240',
       io2: '01',

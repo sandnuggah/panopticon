@@ -65,7 +65,7 @@ export type Activity = 'vehicle' | 'underground'
 export type Stay = { since: number; began: boolean }
 
 /** A circle drawn on the map for one or more stays (see mergeOverlappingStays). */
-export type Place = { center: LatLon; radius: number; to: number }
+export type StayCircle = { center: LatLon; radius: number; to: number }
 
 /**
  * Stays whose circles overlap, whenever they were (back at the same place later, home on two
@@ -73,7 +73,7 @@ export type Place = { center: LatLon; radius: number; to: number }
  * each visit, so "Here since" comes from the current one. `to` is the latest visit's end, so a
  * place fades by when it was last there.
  */
-export function mergeOverlappingStays(stays: Place[]): Place[] {
+export function mergeOverlappingStays(stays: StayCircle[]): StayCircle[] {
   const places = stays.map(({ center, radius, to }) => ({ center, radius, to }))
   for (let merged = true; merged;) {
     merged = false
@@ -91,7 +91,7 @@ export function mergeOverlappingStays(stays: Place[]): Place[] {
 }
 
 /** The smallest circle around two circles. Close enough for circles of a few hundred metres. */
-function enclosing(a: Place, b: Place): Omit<Place, 'to'> {
+function enclosing(a: StayCircle, b: StayCircle): Omit<StayCircle, 'to'> {
   const d = distance(a.center, b.center)
   if (d + b.radius <= a.radius) return a
   if (d + a.radius <= b.radius) return b

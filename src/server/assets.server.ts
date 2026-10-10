@@ -50,6 +50,7 @@ export function toAsset(device: TraccarDevice, position: TraccarPosition | undef
     location: position ? toLocation(position) : null,
     battery: position ? readBattery(position.attributes) : undefined,
     imageUrl: imageUrl(device),
+    placeIds: position?.geofenceIds ?? [],
   }
 }
 
@@ -79,6 +80,7 @@ export function toPositionUpdate(position: TraccarPosition): LiveUpdate {
     location: toLocation(position),
     battery: readBattery(position.attributes),
     valid: position.valid,
+    placeIds: position.geofenceIds,
   }
   const cell = readCell(position)
   if (cell !== undefined) update.cell = cell

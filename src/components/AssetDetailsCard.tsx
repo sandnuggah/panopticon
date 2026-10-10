@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { contactIsNewerThanFix, isStale, statusLabel, type Asset } from '../lib/asset'
+import type { Place } from '../lib/places'
 import type { Activity, Stay } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { BatteryGauge } from './BatteryGauge'
 import { CARD_BG, CloseButton, moveFocus } from './cards'
+import { PlaceVisits } from './PlaceVisits'
 import { RelativeTime } from './RelativeTime'
 import { Share } from './Share'
 
@@ -17,6 +19,8 @@ type Props = {
   stay: Stay | undefined
   /** Its street address, when known. */
   address: string | undefined
+  /** The user's places: shown instead of the address while it's at one, with its arrivals and departures. */
+  places: Place[]
   /** False while a card over this one is open (Settings), so Escape closes that one instead. */
   onTop: boolean
   onClose: () => void
@@ -27,7 +31,7 @@ type Props = {
  * tapping its picture in the bottom bar a second time. No backdrop: the map stays in view and can
  * be moved. Absolute inside the map screen, like the Settings card (see BottomBar.tsx).
  */
-export function AssetDetailsCard({ asset, activity, stay, address, onTop, onClose }: Props) {
+export function AssetDetailsCard({ asset, activity, stay, address, places, onTop, onClose }: Props) {
   const open = asset !== undefined
   const closeButton = useRef<HTMLButtonElement>(null)
   // While the card slides away it keeps showing what it showed.
@@ -66,7 +70,7 @@ export function AssetDetailsCard({ asset, activity, stay, address, onTop, onClos
     >
       <div className={`relative max-h-[60dvh] overflow-y-auto rounded-[40px] px-5 pb-5 pt-5 shadow-2xl ${CARD_BG}`}>
         <CloseButton ref={closeButton} className="absolute right-4 top-4" onClick={onClose} />
-        {shown && <Details {...shown} open={open} />}
+        {shown && <Details {...shown} places={places} open={open} />}
       </div>
     </section>
   )
@@ -77,16 +81,21 @@ function Details({
   activity,
   stay,
   address,
+  places,
   open,
 }: {
   asset: Asset
   activity?: Activity
   stay?: Stay
   address?: string
+  places: Place[]
   open: boolean
 }) {
   const now = useNow(30_000)
   const percent = asset.battery?.percent
+  // Where it is, as Find My says it: "Home" rather than the street address.
+  const at = places.find((place) => asset.placeIds.includes(place.id))
+  const hasPlaces = places.some((place) => place.assetIds.includes(asset.id))
   return (
     <>
       <div className="flex items-center gap-3 pr-12">
@@ -108,7 +117,11 @@ function Details({
       </div>
       <div className="space-y-0.5 py-4">
         {activity && <p className="font-semibold text-primary">{activityLabel(activity)}</p>}
-        {address && <p className="text-[1.0625rem] font-semibold">{address}</p>}
+        {at ? (
+          <p className="text-[1.0625rem] font-semibold">{at.name}</p>
+        ) : (
+          address && <p className="text-[1.0625rem] font-semibold">{address}</p>
+        )}
         <p className="opacity-60">
           <Summary asset={asset} stay={activity ? undefined : stay} />
         </p>
@@ -121,6 +134,7 @@ function Details({
         {percent === undefined && asset.battery?.volts !== undefined && <p className="opacity-60">Battery {asset.battery.volts} V</p>}
       </div>
       <Share asset={asset} address={address} active={open} />
+      {hasPlaces && <PlaceVisits assetId={asset.id} places={places} placeIds={asset.placeIds} />}
     </>
   )
 }

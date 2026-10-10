@@ -35,7 +35,7 @@ export async function loadManagedAssets(token: string): Promise<{ access: AssetA
   const [devices, user, server] = await Promise.all([getDevices(token), getUserAccess(token), getServerInfo()])
   let access: AssetAccess = { canEdit: true, canAdd: true }
   if (!user.administrator) {
-    // Mirrors Traccar's PermissionsService.checkEdit for devices.
+    // Mirrors Traccar's PermissionsService.checkEdit for devices, which also covers linking places to them.
     const canEdit = !server.readonly && !user.readonly && !server.deviceReadonly && !user.deviceReadonly
     const underLimit = user.deviceLimit < 0 || devices.length < user.deviceLimit
     access = { canEdit, canAdd: canEdit && underLimit }
@@ -109,7 +109,7 @@ function toManagedAsset(device: TraccarDevice): ManagedAsset {
  * Runs a change and reports Traccar's refusals as results the page can explain. A rejected token is
  * rethrown so withToken signs the user out as usual.
  */
-async function attempt<T extends object>(token: string, call: () => Promise<EditResult<T>>): Promise<EditResult<T>> {
+export async function attempt<T extends object>(token: string, call: () => Promise<EditResult<T>>): Promise<EditResult<T>> {
   try {
     return await call()
   } catch (error) {
@@ -123,7 +123,7 @@ async function attempt<T extends object>(token: string, call: () => Promise<Edit
 /** Traccar answers refusals with HTTP 400 and the exception's message in the body. */
 function editError(error: TraccarError): EditError {
   if (error.status === 404) return 'not-found'
-  if (/access denied|restricted|SecurityException/i.test(error.message)) return 'not-allowed'
+  if (/access denied|restricted|readonly|SecurityException/i.test(error.message)) return 'not-allowed'
   // The database's unique index on uniqueId: "Duplicate entry" (MySQL), "Unique index … violation" (H2).
   if (/duplicate|unique/i.test(error.message)) return 'tracker-id-taken'
   if (/image/i.test(error.message)) return 'invalid-image'

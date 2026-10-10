@@ -128,7 +128,7 @@ async function loadShared(data: LiveLinkData, link: string): Promise<Asset | nul
     device,
     positions.find((position) => position.deviceId === data.assetId),
   )
-  return { ...asset, battery: undefined, imageUrl: sharedImageUrl(device, link) }
+  return { ...asset, battery: undefined, imageUrl: sharedImageUrl(device, link), placeIds: [] }
 }
 
 /** Only this asset's updates, with the same fields left out as on the page. */
@@ -142,7 +142,8 @@ function toSharedUpdates(devices: TraccarDevice[], positions: TraccarPosition[],
   for (const position of positions) {
     if (position.deviceId !== assetId) continue
     const update = toPositionUpdate(position)
-    if (update.kind === 'position') updates.push({ kind: 'position', id: update.id, location: update.location, valid: update.valid })
+    if (update.kind === 'position')
+      updates.push({ kind: 'position', id: update.id, location: update.location, valid: update.valid, placeIds: [] })
   }
   return updates
 }

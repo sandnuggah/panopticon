@@ -11,6 +11,12 @@ and cleared out now and then.
   3. README: compose setup for the server, like Valhalla's
   - Risks: a prototype (pin a version); badly mapped rail in places; parallel tracks (commuter train and metro through central Stockholm) can get the wrong one
 
+## Places (geofencing)
+
+- [x] Steps 1 and 2: places as Traccar geofences: Settings → Places, an editor on the map (circle picker, size 50 m–2 km, which assets), places drawn on the map, "Home" instead of the address in the details card, arrivals and departures from Traccar's events, a banner when one happens while the app is open. Mock Traccar has geofences and events. Released as `:45` (2026-10-10)
+- [ ] Step 3: alerts while the app is closed. First choice: Traccar's own notifications (e.g. Telegram: one bot key in traccar.xml), with a "Notify me when Betty leaves" switch per place that creates the Traccar notification. Check whether this Traccar version can limit a notification to one geofence. Later maybe: panopticon's own Web Push (needs storage for subscriptions and Traccar's event forwarding)
+- [ ] Watch for false "left Home" at the edge of a place (ST-904L fixes wander 15–25 m); the position filters below would help
+
 ## Code
 
 - [x] Clean-up after the UI rebuild: Prettier config and one formatting pass; Snap to paths and component renames; live link files named after live links; bottom bar split from the Settings card, icons in one file; the map in its own folder with the trail drawing split out; `useCardHistory` (fixed an extra history entry after the back gesture); live link pages with the same map buttons and credits, maplibre's controls removed; credits parser with tests; focus back to the asset's picture when its details card closes. Released as `:43` (2026-10-10)

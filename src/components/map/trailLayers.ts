@@ -1,6 +1,6 @@
 import type { GeoJSONSource, MapLibreMap } from 'maplibre-gl'
 import { walkKey } from '../../lib/matching'
-import { classifyTrail, mergeOverlappingStays, type LatLon, type Place } from '../../lib/segments'
+import { classifyTrail, mergeOverlappingStays, type LatLon, type StayCircle } from '../../lib/segments'
 import type { TrailPoint, Trails } from '../../lib/trail'
 import { circle } from './geometry'
 
@@ -158,7 +158,7 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
       },
     })
     // Stays are drawn after the loop: overlapping ones as one circle.
-    const stays: Place[] = []
+    const stays: StayCircle[] = []
     for (const piece of classifyTrail(points)) {
       if (piece.kind === 'move') {
         const walk = alongPaths(piece.points, snappedWalks[walkKey(piece.points)])

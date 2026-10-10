@@ -5,7 +5,8 @@
 //
 // Sign in as pet@example.com / secret, or viewer@example.com / secret (can't change assets).
 // Assets: Betty (photo, at one spot for two hours after a walk), Sixten (walking a loop, live) and
-// Bamse (offline, no position). Only the endpoints panopticon uses, roughly as Traccar answers them.
+// Bamse (offline, no position). Places: Daycare (Betty's spot) and Park (on Sixten's loop, so he
+// keeps arriving and leaving). Only the endpoints panopticon uses, roughly as Traccar answers them.
 
 import crypto from 'node:crypto'
 import http from 'node:http'
@@ -60,13 +61,62 @@ const devices = [
 ]
 let nextDeviceId = 100
 
+// --- Geofences (places): checked against every position, like Traccar's GeofenceUtil ---
+
+const geofences = [
+  { id: 1, name: 'Daycare', description: null, area: 'CIRCLE (59.3577 18.0912, 120)', calendarId: 0, attributes: {} },
+  { id: 2, name: 'Park', description: null, area: 'CIRCLE (59.3155 18.0745, 70)', calendarId: 0, attributes: {} },
+]
+let nextGeofenceId = 3
+/** Device-geofence links, as "deviceId:geofenceId". */
+const links = new Set(['30:1', '10:2'])
+const events = []
+let nextEventId = 1
+/** Each device's geofences at its latest position, to notice arriving and leaving. */
+const insideBefore = new Map()
+
+function contains(area, lat, lon) {
+  const circle = /^CIRCLE \((\S+) (\S+), (\S+)\)$/.exec(area)
+  if (circle) {
+    const [cLat, cLon, radius] = circle.slice(1).map(Number)
+    const dy = (lat - cLat) * 111_320
+    const dx = (lon - cLon) * 111_320 * Math.cos((cLat * Math.PI) / 180)
+    return Math.hypot(dx, dy) <= radius
+  }
+  const polygon = /^POLYGON \(\((.*)\)\)$/.exec(area)
+  if (!polygon) return false
+  const ring = polygon[1].split(',').map((pair) => pair.trim().split(/\s+/).map(Number))
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [aLat, aLon] = ring[i]
+    const [bLat, bLon] = ring[j]
+    if (aLon > lon !== bLon > lon && lat < ((bLat - aLat) * (lon - aLon)) / (bLon - aLon) + aLat) inside = !inside
+  }
+  return inside
+}
+
+/** The device's geofences a position is inside; recording arrivals and departures as events. */
+function geofencesAt(deviceId, time, lat, lon, positionId) {
+  const ids = geofences
+    .filter((geofence) => links.has(`${deviceId}:${geofence.id}`) && contains(geofence.area, lat, lon))
+    .map((geofence) => geofence.id)
+  const before = insideBefore.get(deviceId) ?? []
+  const event = (type, geofenceId) =>
+    events.push({ id: nextEventId++, type, eventTime: iso(time), deviceId, positionId, geofenceId, maintenanceId: 0, attributes: {} })
+  for (const id of before) if (!ids.includes(id)) event('geofenceExit', id)
+  for (const id of ids) if (!before.includes(id)) event('geofenceEnter', id)
+  insideBefore.set(deviceId, ids)
+  return ids
+}
+
 // --- Positions ---
 
 let nextPositionId = 1
 /** An ST-904L report: h02, with its unnamed extra values (see tracker.server.ts). */
 function report(deviceId, time, lat, lon, valid = true) {
+  const id = nextPositionId++
   return {
-    id: nextPositionId++,
+    id,
     deviceId,
     protocol: 'h02',
     valid,
@@ -76,6 +126,7 @@ function report(deviceId, time, lat, lon, valid = true) {
     latitude: lat,
     longitude: lon,
     accuracy: 0,
+    geofenceIds: valid ? geofencesAt(deviceId, time, lat, lon, id) : (insideBefore.get(deviceId) ?? []),
     attributes: {
       io1: '240',
       io2: '01',
@@ -327,6 +378,65 @@ const server = http.createServer(async (req, res) => {
       (history.get(deviceId) ?? []).filter((position) => {
         const time = Date.parse(position.fixTime)
         return time >= from && time <= to
+      }),
+    )
+  }
+
+  if (key === 'GET /api/geofences') {
+    const deviceId = Number(url.searchParams.get('deviceId'))
+    return json(res, 200, deviceId ? geofences.filter((geofence) => links.has(`${deviceId}:${geofence.id}`)) : geofences)
+  }
+  if (key === 'POST /api/geofences') {
+    if (user.readonly) return json(res, 400, {})
+    const body = JSON.parse((await readBody(req)).toString())
+    const geofence = {
+      id: nextGeofenceId++,
+      name: body.name,
+      description: null,
+      area: body.area,
+      calendarId: 0,
+      attributes: body.attributes ?? {},
+    }
+    geofences.push(geofence)
+    return json(res, 200, geofence)
+  }
+  const geofenceMatch = /^\/api\/geofences\/(\d+)$/.exec(url.pathname)
+  if (geofenceMatch) {
+    const geofence = geofences.find((candidate) => candidate.id === Number(geofenceMatch[1]))
+    if (!geofence) return json(res, 404, {})
+    if (req.method === 'GET') return json(res, 200, geofence)
+    if (user.readonly) return json(res, 400, {})
+    if (req.method === 'PUT') {
+      Object.assign(geofence, JSON.parse((await readBody(req)).toString()))
+      return json(res, 200, geofence)
+    }
+    if (req.method === 'DELETE') {
+      geofences.splice(geofences.indexOf(geofence), 1)
+      for (const link of links) if (link.endsWith(`:${geofence.id}`)) links.delete(link)
+      res.writeHead(204)
+      return res.end()
+    }
+  }
+  if (url.pathname === '/api/permissions' && (req.method === 'POST' || req.method === 'DELETE')) {
+    // Linking a device needs edit rights to it, as in Traccar.
+    if (user.deviceReadonly) return json(res, 400, { message: 'Account is device readonly' })
+    const { deviceId, geofenceId } = JSON.parse((await readBody(req)).toString())
+    if (req.method === 'POST') links.add(`${deviceId}:${geofenceId}`)
+    else links.delete(`${deviceId}:${geofenceId}`)
+    res.writeHead(204)
+    return res.end()
+  }
+  if (key === 'GET /api/reports/events') {
+    const deviceIds = url.searchParams.getAll('deviceId').map(Number)
+    const types = url.searchParams.getAll('type')
+    const from = Date.parse(url.searchParams.get('from') ?? '')
+    const to = Date.parse(url.searchParams.get('to') ?? '')
+    return json(
+      res,
+      200,
+      events.filter((event) => {
+        const time = Date.parse(event.eventTime)
+        return deviceIds.includes(event.deviceId) && (types.length === 0 || types.includes(event.type)) && time >= from && time <= to
       }),
     )
   }

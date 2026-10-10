@@ -4,6 +4,7 @@ import { getUser } from '../server/auth.functions'
 import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { applyUpdates, type LiveUpdate } from './live'
+import type { PlaceVisit } from './places'
 import { currentActivity, currentStay, type Activity, type Stay } from './segments'
 import { HISTORY_MIN_MINUTES, extendTrails, pruneTrails, trailMinutes, trailStart, type TrailLength, type Trails } from './trail'
 import { useNow } from './useNow'
@@ -19,8 +20,9 @@ const MAX_RETRY_MS = 60_000
  * `trail` is null until the setting is known, so no history is fetched for a default.
  * History always covers at least HISTORY_MIN_MINUTES, even with trails off, to tell what each asset
  * is doing right now; only the trail's own length of it is returned for drawing.
+ * `onVisits` hears of arrivals and departures as live positions show them.
  */
-export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null) {
+export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null, onVisits?: (visits: PlaceVisit[]) => void) {
   const historyMinutes = Math.max(trailMinutes(trail ?? 0), HISTORY_MIN_MINUTES)
   const router = useRouter()
   const [assets, setAssets] = useState(initialAssets)
@@ -31,10 +33,12 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null)
   const [historyVersion, setHistoryVersion] = useState(0)
   const historyMinutesRef = useRef(historyMinutes)
   const now = useNow(15_000)
+  const onVisitsRef = useRef(onVisits)
 
   useEffect(() => {
     historyMinutesRef.current = historyMinutes
-  }, [historyMinutes])
+    onVisitsRef.current = onVisits
+  })
 
   useEffect(() => {
     assetsRef.current = initialAssets
@@ -78,6 +82,7 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null)
       setAssets(result.assets)
       // A tracker was added in Traccar; reload the full list.
       if (result.unknown) void router.invalidate()
+      if (result.visits.length > 0) onVisitsRef.current?.(result.visits)
       const since = Date.now() - historyMinutesRef.current * 60 * 1000
       setTrails((current) => extendTrails(current, updates, since))
     }

@@ -100,6 +100,7 @@ Consequences of pointing `web.url` at this app:
     lastUpdate: string | null   // last contact from the tracker
     location: { lat: number; lon: number; accuracy?: number; fixTime: string } | null  // null until the first fix
     battery?: { percent?: number; volts?: number }
+    placeIds: number[]          // the places its latest position is inside (see Places)
   }
   ```
   Devices disabled in Traccar are left out.
@@ -107,7 +108,7 @@ Consequences of pointing `web.url` at this app:
   - Why SSE: it's plain HTTP (the Start server needs no WebSocket support), `EventSource` reconnects on its own, and the token stays on the server.
   - The stream sends a comment line every 25 s so proxies don't close it, and `retry: 5000` for reconnects. It also sends `X-Accel-Buffering: no` so nginx-style proxies don't buffer it.
   - When the browser disconnects, the upstream socket is closed too.
-- **Applying updates** (`applyUpdates`): device updates change name, status and last contact. Position updates never move an asset backwards in time, and a position without battery keeps the last known value. An update for an unknown asset (added in Traccar) reloads the list; a disabled one is removed.
+- **Applying updates** (`applyUpdates`): device updates change name, status and last contact. Position updates never move an asset backwards in time, and a position without battery keeps the last known value. A position whose places differ from the asset's last ones means arrivals and departures (see [Places](#places)), which the hook reports to the page. An update for an unknown asset (added in Traccar) reloads the list; a disabled one is removed.
 - **When things go wrong:**
   - The stream ends (Traccar closed the socket): the browser reconnects after 5 s, then reloads the list and trail history to fill the gap.
   - The stream is refused: `/live` can't tell from the socket why, so it checks the token with a REST call. If the token is dead it clears the session and returns 401, and the page goes to `/login`. Otherwise it returns 502; the page keeps what it has, shows "Offline, retrying" and retries with backoff (5 s doubling to 60 s).
@@ -187,6 +188,20 @@ The selected asset's card shows its street address, e.g. "Storviltsgatan 5, Stoc
 - **When there's none:** no address line. If geocoding is off or failing, the server logs it once and the line stays hidden; failures aren't cached, so it appears once geocoding works.
 - The request is a POST, so coordinates stay out of URLs and proxy logs.
 
+## Places
+
+Places such as Home or Daycare, each for some of the assets, are Traccar geofences linked to devices (`places.server.ts`, `lib/places.ts`). Traccar does the work: it checks every position against the device's linked geofences and puts the ones it's inside in the position's `geofenceIds`, and it records `geofenceEnter` and `geofenceExit` events. Panopticon stores nothing.
+
+- **Areas:** Traccar keeps them as WKT, latitude first: `CIRCLE (lat lon, radius)` in metres (not standard WKT) or `POLYGON ((lat lon, ...))`. Panopticon draws circles; polygons drawn in Traccar's own UI are shown and can be renamed and given to assets, but their shape is changed in Traccar. Other shapes aren't shown. Parsing and writing them has tests (`places.test.ts`).
+- **Loading:** the map route's loader gets the user's geofences, then each device's (`GET /api/geofences?deviceId=`; Traccar lists a device's geofences but not a geofence's devices), to know which assets each place is for. Without places (an error) the map still loads.
+- **On the map** (`map/placeLayers.ts`): a soft area with a dashed outline in `--place` (indigo, unlike the green trail), under the trail, and the name at the top edge, where it doesn't cover an asset that's home. Names are DOM labels like the markers', since the map's own text needs fonts a style may not have, and hide while the place is under 24 px across.
+- **Editing** (`PlaceEditor.tsx`, `map/PlacePicker.tsx`): Places → a place, or **Add place**, opens a card at the bottom of the map screen with the name, the size and a switch per asset, and **Save** in its header. The circle stays in the middle of the map above the card and the map moves under it, as in Find My. It's a DOM circle over the map, sized from the zoom, so it stays round and smooth during gestures; the map's padding keeps the centre above the card. Sizes go from 50 m to 2 km (`PLACE_RADII`): GPS fixes wander 15–25 m, so smaller circles would see the asset come and go while it sits still. A new place starts where the map is, at 100 m, for every asset. Saving creates or updates the geofence (`PUT` with the full record, as for devices), then links and unlinks devices (`POST`/`DELETE /api/permissions`) to match the switches. Removing deletes the geofence; Traccar drops its links and keeps its events.
+- **Who may change them:** the same rule as changing assets (`loadManagedAssets`), since linking a device needs edit rights to it. Others see the list without Add place or editing. Traccar enforces it either way; a refusal shows as "isn't allowed".
+- **Where an asset is:** the details card says **Home** instead of the street address while the asset's latest position is inside a place.
+- **Arrivals and departures, live:** each live position carries its places, so a change from the asset's last ones is an arrival or a departure (`visitsBetween`). The map screen shows it as a banner at the top, "Betty left Home · 14:02", for 8 s, read out by screen readers; tapping it shows the asset. Only while the app is open: it isn't a notification. Traccar's socket only sends `events` to users with a "web" notification for them, so panopticon doesn't rely on them.
+- **Arrivals and departures, history:** the details card lists the latest five from the last week, from Traccar's events report (`GET /api/reports/events?type=geofenceEnter&type=geofenceExit`, asked for as JSON), which Traccar records whether or not anyone is notified. It's fetched again when the asset's places change.
+- **Not yet:** alerts when the app is closed. Traccar can send them itself (Telegram, its Manager app, email; `notificator.types` in traccar.xml), or panopticon could send Web Push, which needs storage it doesn't have. See TODO.md.
+
 ## Sharing
 
 **Send location** sends where the asset is once, through the system share sheet (`navigator.share`), as a sentence and a map link (`src/lib/share.ts`):
@@ -197,7 +212,7 @@ The selected asset's card shows its street address, e.g. "Storviltsgatan 5, Stoc
 **Live location links** (`/s/<link>`) show one asset, followed live on a map, to anyone with the link and without signing in, for 1, 8 or 24 hours (`liveLinks.server.ts`, `s.$link.tsx`).
 - **Why not Traccar's own sharing** (`POST /api/share/device`): it makes one temporary user per sharer and device and reuses it, and that user keeps the expiry of the first share. Once the first link expires, every later one for that device fails with "User has expired", and a normal user can't fix it.
 - **Making one:** the server checks the user can see the asset, asks Traccar for a new token for the same user expiring with the link (`POST /api/session/token`; Traccar caps it at the session's own expiry, and so does panopticon), and seals `{asset id, token, expiry}` with AES-256-GCM under a key derived from `SESSION_SECRET` by HKDF (`liveLinkSeal.server.ts`). That's the link: about 250 characters with a real Traccar token. Nothing is stored, so the read-only container stays stateless.
-- **Opening one:** the server unseals it, checks the expiry, and reads only that asset with the link's token. The viewer gets the asset's name, picture, status, position and address; never its battery, trail, tracker ID, or anything about the sharer or their other assets. Its live stream (`/s/<link>/live`) relays Traccar's socket filtered to that asset, and its picture comes from `/s/<link>/image`.
+- **Opening one:** the server unseals it, checks the expiry, and reads only that asset with the link's token. The viewer gets the asset's name, picture, status, position and address; never its battery, trail, places, tracker ID, or anything about the sharer or their other assets. Its live stream (`/s/<link>/live`) relays Traccar's socket filtered to that asset, and its picture comes from `/s/<link>/image`.
 - **Ending:** at the expiry, Traccar refuses the token and the stream sends an `ended` event; the page then says the link has expired. **Stop** revokes the token (`POST /api/session/token/revoke`, with the link's own token so it can only revoke itself). Traccar keeps an already-open socket going after that, so each stream checks every minute that the token still works and ends if not: a stopped link goes blank within a minute even on a page that's open. Signing out of panopticon doesn't end links; they have their own tokens.
 - **Stop needs the link:** panopticon keeps no list, so the links made in a browser are kept in its localStorage (`liveLinks.ts`, with the asset's name) and listed in the Settings card's **Live links**, each with Stop. Other browsers don't see them.
 - **No "share" in class names or ids:** content blockers' social filter lists hide elements such as `.share-menu` and `.share-icon` (to remove share widgets from sites). On an iPhone with one, the menu got `display: none` and only its backdrop showed. The menu uses `location-*` and the link page `link-*` instead.
@@ -252,18 +267,19 @@ The look is [Konsta UI](https://konstaui.com): native-looking iOS and Material c
 - **Pages:** `/login`, and `/`, the map, whose Settings card holds the settings and [managing assets](#managing-assets). `/s/<link>` is a [live location link](#sharing), the only page that doesn't need signing in. The selected asset and the Settings card's view are search params (`/?asset=12&settings=asset-30`), so they survive a reload.
 - **Map screen:** the map fills the screen, with a bar floating along the bottom like Apple Maps' search bar (`BottomBar.tsx`, the cards in `SettingsCard.tsx`): the your-position button at its left end, each asset's picture (scrolling sideways when there are many; stale ones grey), and the Settings button (the signed-in user's initial) at its right. The map's zoom buttons sit above the bar, and fitting the map to assets leaves room for it (`clearOfBottom` in map/AssetMap.tsx).
   - **Asset pictures:** the first tap selects the asset and centres the map on it (and follows it, as selecting on the map does). Tapping the selected asset's picture again re-centres it and opens its **details card** (`AssetDetailsCard.tsx`) from the bottom, like Apple Maps' place card: its picture, name, status and battery, then what it's doing, the address, when it was seen, and **Share**. The card has no backdrop, so the map can still be moved; ✕, Escape or the back gesture closes it, and focus goes back to what opened it, the asset's picture (`?details=true`, with a history entry of its own when opened here, as the Settings card has). Selecting another asset on the map replaces it.
-  - **Settings card:** the button opens a card from the bottom, like Apple Maps' profile card: the user's initial, name and email, then **Assets** (with the count), **Appearance**, **Live links** (the count made in this browser) and **Account**. Under the list, small, the map data's credits (see [Map tiles](#map-tiles)). It's 472 px tall, just fitting both, or less on short screens. The button and the card are called Settings; the card's view is the `settings` search param.
-  - **Page card:** Assets, Appearance, Live links and Account each open a second card from the bottom, over the Settings card, like Apple Maps' Places: from just below the status bar to the bottom of the screen, with a large title and ✕ back to the Settings card. Appearance has **Map style** (see [Map tiles](#map-tiles)) and **Trail** as checkmark lists, then **Walks**: **Paw prints** and **Snap to paths** as switches, the second greyed out without a map-matching server (`Appearance.tsx`), Live links the list with Stop (`LiveLinksList.tsx`), Account the signed-in name and email with **Sign out**, and Assets the asset list (see [Managing assets](#managing-assets)). Add asset and an asset's own page open inside the Assets card, sliding in sideways (`.card-view-forward`/`-back`, none with reduced motion), with "‹ Assets" back. The map stays behind the cards, so a new trail length or a renamed asset shows at once.
-  - **Views in the address:** `?settings=main` (the Settings card), and `appearance`, `live-links`, `account`, `assets`, `add-asset` or `asset-<id>` for the page card over it (`parseSettingsView` in SettingsCard.tsx). Opening the Settings card adds a history entry, and opening a page card from it another, so the back gesture closes them one at a time; moving within the page card replaces its entry. ✕, Escape or tapping outside closes the top card. When a card was opened here, closing it goes back in history past its entries; when the page loaded with it open, closing just changes the param. `useCardHistory` in index.tsx keeps the list of cards opened here, for the details card too, and drops a card when it goes from open to closed some other way (the back gesture).
+  - **Settings card:** the button opens a card from the bottom, like Apple Maps' profile card: the user's initial, name and email, then **Assets** (with the count), **Appearance**, **Places** (the count), **Live links** (the count made in this browser) and **Account**. Under the list, small, the map data's credits (see [Map tiles](#map-tiles)). It's as tall as both, at any text size, and scrolls on short screens. The button and the card are called Settings; the card's view is the `settings` search param.
+  - **Page card:** Assets, Appearance, Places, Live links and Account each open a second card from the bottom, over the Settings card, like Apple Maps' Places: from just below the status bar to the bottom of the screen, with a large title and ✕ back to the Settings card. Appearance has **Map style** (see [Map tiles](#map-tiles)) and **Trail** as checkmark lists, then **Walks**: **Paw prints** and **Snap to paths** as switches, the second greyed out without a map-matching server (`Appearance.tsx`), Places the list of places with **Add place** (`PlacesList.tsx`; a place opens in the editor on the map, see [Places](#places)), Live links the list with Stop (`LiveLinksList.tsx`), Account the signed-in name and email with **Sign out**, and Assets the asset list (see [Managing assets](#managing-assets)). Add asset and an asset's own page open inside the Assets card, sliding in sideways (`.card-view-forward`/`-back`, none with reduced motion), with "‹ Assets" back. The map stays behind the cards, so a new trail length or a renamed asset shows at once.
+  - **Views in the address:** `?settings=main` (the Settings card), and `appearance`, `places`, `live-links`, `account`, `assets`, `add-asset` or `asset-<id>` for the page card over it (`parseSettingsView` in SettingsCard.tsx). `&place=<id>` or `&place=new` opens the place editor over the Places page; the cards hide while it's open, and closing it goes back to the list. Opening the Settings card adds a history entry, and opening a page card from it another, so the back gesture closes them one at a time; moving within the page card replaces its entry. ✕, Escape or tapping outside closes the top card. When a card was opened here, closing it goes back in history past its entries; when the page loaded with it open, closing just changes the param. `useCardHistory` in index.tsx keeps the list of cards opened here, for the details card too, and drops a card when it goes from open to closed some other way (the back gesture).
   - Focus moves to the top card's ✕ (or "‹ Assets") as it opens, and back to the Settings button when everything closes, with `preventScroll`: without it the browser scrolls the map screen to bring the button into view while the card is still moving, and the whole screen jumps. For the same reason the map screen is `overflow: clip`, not `hidden`: a hidden box can still be scrolled, and focusing a control in a card that's off-screen shifted it up by 250 px in testing. Cards underneath and closed cards are `inert`.
   - Not Konsta's `Sheet`: it's `position: fixed`, which stops 59 pt short of the screen's bottom in the iOS home-screen app (see Home screen below). The bar, the card and its backdrop are absolute inside the map screen.
   - The email is kept in the session cookie from sign-in; sessions from before it was kept show the name only.
 - **Details card content** (`AssetDetailsCard.tsx`): the asset's picture, name, online/offline status and battery percentage, then:
   - while riding, **In a vehicle** or **Moving underground**, in the accent colour;
-  - the street address (see [Addresses](#addresses));
+  - the place it's at, such as **Home**, or else the street address (see [Addresses](#addresses));
   - "Seen 4 minutes ago", from `fixTime` using `Intl.RelativeTimeFormat`, re-rendered every 30 s, with "Here since 07:12" while it's staying put (`currentStay` in segments.ts: the trail's last piece is a stay and reports are recent; when the stay goes back to the start of the loaded history, "since before");
   - "Last contact …" when there's no location, or contact is more than 5 minutes newer than the fix;
-  - **Share** (and **Sharing live**), see below.
+  - **Share** (and **Sharing live**), see below;
+  - **Arrivals and departures**, when it has places: the latest five of the last week, such as "Left Home · 14:02" (see [Places](#places)).
   - **Battery:** a gauge with 0–4 bars (empty below 5%, then one bar per started quarter), orange at 20% or below. The exact percentage is its label, for screen readers and as the hover tooltip. Readings near empty jump by several points as the voltage recovers, and bars hide most of that. Trackers that report volts only get a text line instead.
   - The Live indicator sits in the map's top-left corner, and the map's buttons (`map/MapButtons.tsx`) on the right: + and − just above the bottom bar's right end on the map screen, or your position, + and − under the status bar on live link pages, which have a panel instead of the bar. Both are pills like the bar: the same colours (Konsta's surface for iOS or Material, light or dark), shadow and line icons, 12 px from the screen's edges. maplibre's own controls aren't used.
 - **Share:** a button in the details card. It opens the **Share card**, a second-level card like Settings' pages (full height, large title, ✕; drawn into the map screen with a portal, so it covers the screen rather than the details card): **Send location**, and **Share live location** for 1, 8 or 24 hours. Escape closes just it (a capture-phase listener that stops there), and closing the details card closes it too. While a live link made in this browser is active, a **Sharing live** button sits beside Share and opens the Settings card's Live links (`/?settings=live-links`), where links are stopped. See [Sharing](#sharing).
@@ -383,37 +399,46 @@ src/
     liveLinks.functions.ts            createLink / stopLink (signed in), getSharedView / getSharedAddress (public)
     liveLinkSeal.server.ts            sealing links (AES-GCM, key from SESSION_SECRET) + tests
     sso.server.ts                     /auth/sso, callback, Traccar email-link redirects
+    places.server.ts                  places as Traccar geofences: load with their assets, save, remove, visits
+    places.functions.ts               getPlaces, savePlaceChange, deletePlace, getPlaceVisits
   components/
     map/
       AssetMap.tsx                    the maplibre map (browser only, lazy): following, selection, your position
       trailLayers.ts                  the trail's layers: lines, rides, stay circles, paw prints
+      placeLayers.ts                  places on the map: areas, outlines, name labels
+      PlacePicker.tsx                 the circle being placed, in the middle of the map above the editor
       markers.ts                      the assets' markers
       MapButtons.tsx                  + and − (and your position on live link pages), as a pill like the bar
       myPosition.ts                   your position on the map: dot, accuracy circle, button icon
       geometry.ts                     a circle of metres as a ring of coordinates
     BatteryGauge.tsx                  battery as 0–4 bars
     BottomBar.tsx                     the map's bottom bar: your position, asset pictures, Settings
-    SettingsCard.tsx                  the Settings card and its page cards (assets, appearance, live links, account)
+    SettingsCard.tsx                  the Settings card and its page cards (assets, appearance, places, live links, account)
     UserInitial.tsx                   the signed-in user's initial
     MapCredits.tsx                    the map data's credits, in small print
     icons.tsx                         the small line icons
-    AssetDetailsCard.tsx                     the selected asset's details card
+    AssetDetailsCard.tsx              the selected asset's details card
     cards.tsx                         what the map screen's cards share: colours, ✕, backdrop
     AssetsList.tsx                    the assets to manage
     AddAssetForm.tsx                  add an asset
     AssetEditor.tsx                   an asset's photo, name, tracker details, remove
     Appearance.tsx                    map style, trail length, paw prints, snap to paths
     LiveLinksList.tsx                 this browser's live links, with Stop
+    PlacesList.tsx                    the user's places, with Add place
+    PlaceEditor.tsx                   a place's name, size and assets, in a card over the map
+    PlaceVisits.tsx                   an asset's latest arrivals and departures
+    PlaceBanner.tsx                   "Betty left Home", at the top of the map
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
     TrackerSection.tsx                the Tracker section of an asset's page
-    Share.tsx                     Share: send location, make and send live links
+    Share.tsx                         Share: send location, make and send live links
     RelativeTime.tsx
   lib/
     asset.ts                          Asset view model + isStale (shared with the browser)
     useNow.ts                         ticking clock for relative times
     live.ts                           LiveUpdate type + applyUpdates (shared with the server)
     trail.ts                          trail types, extend/prune
+    places.ts                         Place type, Traccar's WKT areas, arrivals and departures + tests
     segments.ts                       walking / stay / vehicle / underground, and what's happening now
     segments.test.ts                  node --test
     matching.ts                       which walks to snap for Snap to paths

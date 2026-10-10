@@ -1,8 +1,8 @@
 # panopticon
 
 A phone-friendly web app for a self-hosted [Traccar](https://www.traccar.org) server: a live map of a
-few tracked assets (pets, bikes, bags…) with last-seen times, battery, and a trail of recent
-movement. Sign in with your Traccar password or through Traccar's single sign-on.
+few tracked assets (pets, bikes, bags…) with last-seen times, battery, a trail of recent
+movement, and places like Home that show when an asset arrived and left. Sign in with your Traccar password or through Traccar's single sign-on.
 
 The browser only talks to panopticon; only panopticon's server talks to Traccar. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for how it works and why.
@@ -19,7 +19,7 @@ npm run dev            # http://localhost:3000
 
 `npm run typecheck` checks types; `npm run build && npm start` runs the production build locally.
 
-No Traccar to hand? `node dev/mock-traccar.mjs` runs a stand-in with three made-up assets on port 8082. Put
+No Traccar to hand? `node dev/mock-traccar.mjs` runs a stand-in with three made-up assets and two places on port 8082. Put
 `TRACCAR_URL=http://127.0.0.1:8082` in `.env.development.local` and sign in as `pet@example.com` / `secret`.
 
 ## Configure

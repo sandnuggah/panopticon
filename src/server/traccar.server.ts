@@ -46,6 +46,24 @@ export type TraccarPosition = {
   /** The serving cell tower's country and network codes, when Traccar decoded them. */
   cellNetwork: { mcc: number; mnc: number } | null
   attributes: Record<string, unknown>
+  /** The geofences linked to the device that this position is inside. */
+  geofenceIds: number[]
+}
+
+export type TraccarGeofence = {
+  id: number
+  name: string
+  /** WKT, latitude first (see lib/places.ts). */
+  area: string
+}
+
+/** An event Traccar recorded, such as a device entering a geofence. */
+export type TraccarEvent = {
+  type: string
+  eventTime: string
+  deviceId: number
+  /** 0 when the event isn't about a geofence. */
+  geofenceId: number
 }
 
 export class TraccarError extends Error {
@@ -293,7 +311,48 @@ export async function getPositionHistory(token: string, deviceId: number, from: 
   return parseList(await getJson(`/api/positions?${query}`, token), parsePosition)
 }
 
-/** Opens Traccar's live WebSocket. It sends `{devices, positions, events}` messages as things change. */
+/** The user's geofences, or with `deviceId` only those linked to that device. */
+export async function getGeofences(token: string, deviceId?: number): Promise<TraccarGeofence[]> {
+  const query = deviceId === undefined ? '' : `?deviceId=${deviceId}`
+  return parseList(await getJson(`/api/geofences${query}`, token), parseGeofence)
+}
+
+/** Adds a geofence. Traccar gives the creating user access to it. */
+export async function createGeofence(token: string, name: string, area: string): Promise<TraccarGeofence> {
+  const response = await request('/api/geofences', { method: 'POST', token, json: { name, area, attributes: {} } })
+  await ensureOk(response, 'POST /api/geofences')
+  return parseGeofence(await response.json())
+}
+
+/** Renames a geofence and, unless `area` is null, changes its area, keeping the rest of its record (see updateDevice). */
+export async function updateGeofence(token: string, id: number, name: string, area: string | null): Promise<TraccarGeofence> {
+  const geofence = await getJson(`/api/geofences/${id}`, token)
+  if (!isObject(geofence) || geofence.id !== id) throw unexpected('geofence is not an object')
+  geofence.name = name
+  if (area !== null) geofence.area = area
+  const response = await request(`/api/geofences/${id}`, { method: 'PUT', token, json: geofence })
+  await ensureOk(response, `PUT /api/geofences/${id}`)
+  return parseGeofence(await response.json())
+}
+
+export async function deleteGeofence(token: string, id: number): Promise<void> {
+  const response = await request(`/api/geofences/${id}`, { method: 'DELETE', token })
+  await ensureOk(response, `DELETE /api/geofences/${id}`)
+}
+
+/** Links a geofence to a device, so Traccar checks the device's positions against it, or unlinks it. */
+export async function linkGeofence(token: string, deviceId: number, geofenceId: number, linked: boolean): Promise<void> {
+  const response = await request('/api/permissions', { method: linked ? 'POST' : 'DELETE', token, json: { deviceId, geofenceId } })
+  await ensureOk(response, `${linked ? 'POST' : 'DELETE'} /api/permissions`)
+}
+
+/** Events of these types for one device between two times. Traccar records them whether or not anyone is notified. */
+export async function getEvents(token: string, deviceId: number, types: string[], from: Date, to: Date): Promise<TraccarEvent[]> {
+  const query = new URLSearchParams({ deviceId: String(deviceId), from: from.toISOString(), to: to.toISOString() })
+  for (const type of types) query.append('type', type)
+  return parseList(await getJson(`/api/reports/events?${query}`, token), parseEvent)
+}
+
 /**
  * The address at a point from Traccar's reverse geocoder (`geocoder.*` in traccar.xml), or null when
  * it has none there. Fails like any other call when geocoding is off ("Reverse geocoding is not enabled").
@@ -308,6 +367,7 @@ export async function reverseGeocode(token: string, lat: number, lon: number): P
   return typeof address === 'string' && address !== '' ? address : null
 }
 
+/** Opens Traccar's live WebSocket. It sends `{devices, positions, events}` messages as things change. */
 export function openSocket(token: string): WebSocket {
   const url = env().traccarUrl.replace(/^http/, 'ws') + `/api/socket?token=${encodeURIComponent(token)}`
   return new WebSocket(url)
@@ -324,7 +384,8 @@ export function parseSocketMessage(text: string): { devices: TraccarDevice[]; po
 }
 
 async function getJson(path: string, token: string): Promise<unknown> {
-  const response = await request(path, { token })
+  // Reports answer with a spreadsheet unless JSON is asked for.
+  const response = await request(path, { token, headers: { Accept: 'application/json' } })
   await ensureOk(response, `GET ${path}`)
   return response.json()
 }
@@ -429,6 +490,26 @@ function parsePosition(value: unknown): TraccarPosition {
     cellId: readCellId(value.network),
     cellNetwork: readCellNetwork(value.network),
     attributes,
+    geofenceIds: Array.isArray(value.geofenceIds) ? value.geofenceIds.filter((id): id is number => Number.isInteger(id)) : [],
+  }
+}
+
+function parseGeofence(value: unknown): TraccarGeofence {
+  if (!isObject(value)) throw unexpected('geofence is not an object')
+  return {
+    id: number(value, 'id', 'geofence'),
+    name: optionalString(value, 'name', 'geofence') ?? '',
+    area: optionalString(value, 'area', 'geofence') ?? '',
+  }
+}
+
+function parseEvent(value: unknown): TraccarEvent {
+  if (!isObject(value)) throw unexpected('event is not an object')
+  return {
+    type: string(value, 'type', 'event'),
+    eventTime: string(value, 'eventTime', 'event'),
+    deviceId: number(value, 'deviceId', 'event'),
+    geofenceId: typeof value.geofenceId === 'number' ? value.geofenceId : 0,
   }
 }
 

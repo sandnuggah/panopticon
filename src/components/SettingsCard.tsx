@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { BlockFooter, List, ListButton, ListItem } from 'konsta/react'
 import type { Asset } from '../lib/asset'
+import type { Place } from '../lib/places'
 import { useLiveLinks } from '../lib/liveLinks'
 import type { MapStyle } from '../lib/mapStyles'
 import { useNow } from '../lib/useNow'
@@ -12,20 +13,21 @@ import { Appearance } from './Appearance'
 import { AssetEditor } from './AssetEditor'
 import { AssetsList } from './AssetsList'
 import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass, ROWS } from './cards'
-import { AppearanceIcon, BackIcon, ListIcon, LiveIcon, PersonIcon } from './icons'
+import { AppearanceIcon, BackIcon, ListIcon, LiveIcon, PersonIcon, PinIcon } from './icons'
 import { LiveLinksList } from './LiveLinksList'
 import { MapCredits } from './MapCredits'
+import { PlacesList } from './PlacesList'
 import { UserInitial } from './UserInitial'
 
 /**
  * What's open: the Settings card alone (`main`), or the page card over it. Assets opens the list of
  * assets, which opens Add asset or an asset's own page (`asset-12`) inside the same card.
  */
-export type SettingsView = 'main' | 'appearance' | 'live-links' | 'account' | 'assets' | 'add-asset' | `asset-${number}`
+export type SettingsView = 'main' | 'appearance' | 'places' | 'live-links' | 'account' | 'assets' | 'add-asset' | `asset-${number}`
 
 /** The view a `settings` search param names, or undefined when it names none. */
 export function parseSettingsView(value: unknown): SettingsView | undefined {
-  const named: unknown[] = ['main', 'appearance', 'live-links', 'account', 'assets', 'add-asset']
+  const named: unknown[] = ['main', 'appearance', 'places', 'live-links', 'account', 'assets', 'add-asset']
   if (named.includes(value)) return value as SettingsView
   if (typeof value === 'string' && /^asset-[1-9]\d{0,9}$/.test(value)) return value as SettingsView
   return undefined
@@ -44,6 +46,10 @@ type Props = {
   user: SessionUser
   /** The assets on the map, for the Assets count and an asset page's title. */
   assets: Asset[]
+  /** The user's places (Settings → Places). */
+  places: Place[]
+  /** Opens a place, or a new one, in the editor on the map (PlaceEditor). */
+  onOpenPlace: (id: number | 'new') => void
   /** The map styles to choose between, and the server's default (see mapStyles.ts). */
   mapStyles: { styles: MapStyle[]; defaultStyle: string }
   /** Whether the server has map matching, so Snap to paths can be turned on. */
@@ -64,10 +70,10 @@ type Props = {
 
 /**
  * The Settings card, opened by the Settings button in the bottom bar (BottomBar.tsx), from the
- * bottom like Apple Maps' profile card: who's signed in, and Assets, Appearance, Live links and
- * Account. Each of those opens a second card from the bottom that covers the screen, like Apple
+ * bottom like Apple Maps' profile card: who's signed in, and Assets, Appearance, Places, Live links
+ * and Account. Each of those opens a second card from the bottom that covers the screen, like Apple
  * Maps' Places, with a large title and ✕ back to the Settings card. Add asset and an asset's own
- * page open inside the Assets card.
+ * page open inside the Assets card; a place opens in the editor on the map (PlaceEditor).
  *
  * Not Konsta's Sheet: that's position: fixed, and fixed elements stop 59 pt short of the screen's
  * bottom in the iOS home-screen app (see styles.css). These are absolute inside the map screen.
@@ -75,6 +81,8 @@ type Props = {
 export function SettingsCard({
   user,
   assets,
+  places,
+  onOpenPlace,
   mapStyles,
   canSnapToPaths,
   attribution,
@@ -126,15 +134,17 @@ export function SettingsCard({
   const title =
     page === 'appearance'
       ? 'Appearance'
-      : page === 'live-links'
-        ? 'Live links'
-        : page === 'account'
-          ? 'Account'
-          : page === 'assets'
-            ? 'Assets'
-            : page === 'add-asset'
-              ? 'Add asset'
-              : (assets.find((asset) => asset.id === assetId)?.name ?? 'Asset')
+      : page === 'places'
+        ? 'Places'
+        : page === 'live-links'
+          ? 'Live links'
+          : page === 'account'
+            ? 'Account'
+            : page === 'assets'
+              ? 'Assets'
+              : page === 'add-asset'
+                ? 'Add asset'
+                : (assets.find((asset) => asset.id === assetId)?.name ?? 'Asset')
 
   return (
     <>
@@ -151,7 +161,7 @@ export function SettingsCard({
           className={`relative max-h-[calc(100dvh-env(safe-area-inset-top)-96px)] overflow-y-auto rounded-[40px] pt-5 shadow-2xl ${CARD_BG}`}
         >
           <CloseButton ref={settingsClose} className="absolute right-4 top-4 z-10" onClick={onClose} />
-          <MainView user={user} assetCount={assets.length} attribution={attribution} onShow={onShow} />
+          <MainView user={user} assetCount={assets.length} placeCount={places.length} attribution={attribution} onShow={onShow} />
         </div>
       </section>
 
@@ -182,6 +192,7 @@ export function SettingsCard({
           )}
           <div key={page} className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-[env(safe-area-inset-bottom)] ${slide}`}>
             {page === 'appearance' && <Appearance listColors={ROWS} {...mapStyles} canSnapToPaths={canSnapToPaths} />}
+            {page === 'places' && <PlacesList places={places} assets={assets} listColors={ROWS} onOpen={onOpenPlace} />}
             {page === 'live-links' && <LiveLinksList listColors={ROWS} />}
             {page === 'account' && <AccountView user={user} />}
             {page === 'assets' && <AssetsList listColors={ROWS} onOpen={(id) => onShow(`asset-${id}`)} onAdd={() => onShow('add-asset')} />}
@@ -194,9 +205,9 @@ export function SettingsCard({
   )
 }
 
-type MainProps = Pick<Props, 'user' | 'attribution' | 'onShow'> & { assetCount: number }
+type MainProps = Pick<Props, 'user' | 'attribution' | 'onShow'> & { assetCount: number; placeCount: number }
 
-function MainView({ user, assetCount, attribution, onShow }: MainProps) {
+function MainView({ user, assetCount, placeCount, attribution, onShow }: MainProps) {
   const now = useNow(30_000)
   const [links] = useLiveLinks(now)
 
@@ -220,6 +231,13 @@ function MainView({ user, assetCount, attribution, onShow }: MainProps) {
           title="Appearance"
           media={<RowIcon className="bg-[#007aff]" icon={<AppearanceIcon />} />}
           onClick={() => onShow('appearance')}
+        />
+        <ListItem
+          link
+          title="Places"
+          media={<RowIcon className="bg-[#ff9500]" icon={<PinIcon />} />}
+          after={placeCount ? String(placeCount) : 'None'}
+          onClick={() => onShow('places')}
         />
         <ListItem
           link
