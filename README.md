@@ -140,15 +140,20 @@ push service checks the address.
    ```
    TRACCAR_EVENTS_SECRET=<the secret>
    ```
-3. Add three lines to Traccar's `traccar.xml`, with panopticon's address as Traccar reaches it
+3. Add four lines to Traccar's `traccar.xml`, with panopticon's address as Traccar reaches it
    (in Docker, the service name), then restart Traccar:
    ```xml
+   <entry key='event.status.enable'>true</entry>
    <entry key='event.forward.enable'>true</entry>
    <entry key='event.forward.url'>http://panopticon:3000/hooks/traccar-events</entry>
    <entry key='event.forward.header'>Authorization: Bearer <the secret></entry>
    ```
 4. On the phone (from the Home Screen) or in a desktop browser: Settings → Alerts → **Turn on alerts on
    this device**, and choose which. **Send a test alert** checks the device's side.
+
+`event.status.enable` makes Traccar record when a tracker goes offline (it doesn't by default since
+version 6.14), for the offline alert. A tracker that just goes quiet, without hanging up, counts as
+offline after Traccar's `status.timeout`, 10 minutes by default.
 
 Traccar forwards every event, not just these; panopticon ignores the rest. Alerts stay on for a
 device until they're turned off there, also after signing out. Changing `SESSION_SECRET` turns
