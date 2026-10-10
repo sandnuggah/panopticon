@@ -35,9 +35,18 @@ export function AssetDetailsCard({ asset, activity, stay, address, onTop, onClos
   if (asset) last.current = { asset, activity, stay, address }
   const shown = last.current
 
+  // Focus moves to ✕ as the card opens, and back to what had it (the asset's picture in the bottom
+  // bar) as it closes, so it never stays on a button in the hidden card. preventScroll: see
+  // SettingsCard.tsx.
+  const opener = useRef<HTMLElement | null>(null)
   useEffect(() => {
-    // preventScroll: see BottomBar.tsx.
-    if (open) closeButton.current?.focus({ preventScroll: true })
+    if (open) {
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      closeButton.current?.focus({ preventScroll: true })
+    } else if (opener.current) {
+      if (opener.current.isConnected) opener.current.focus({ preventScroll: true })
+      opener.current = null
+    }
   }, [open])
 
   useEffect(() => {
