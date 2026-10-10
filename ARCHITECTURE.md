@@ -127,13 +127,15 @@ A trail behind each asset showing where it went in the last N minutes, drawn by 
 
 ### What the asset was doing (`src/lib/segments.ts`)
 
-The trail is split using only the tracker's own reports: speed between fixes, gaps without a fix, and cell changes. It needs no map data, so it works in any city or country. The thresholds were tuned on a real ST-904L trip by metro across Stockholm (Skanstull → Slussen → Östermalmstorg → Karlaplan → Ropsten), and checked against five hours at daycare with GPS gaps and up to 100 m of jitter, which stayed "walking".
+The trail is split using only the tracker's own reports: speed between fixes, gaps without a fix, and cell changes. It needs no map data, so it works in any city or country. The thresholds were tuned on a real ST-904L trip by metro across Stockholm (Skanstull → Slussen → Östermalmstorg → Karlaplan → Ropsten), and checked against five hours at daycare with GPS gaps and up to 100 m of jitter, which stayed "walking". A weekend in October added car rides in the country and in town, a train at up to 178 km/h into Stockholm ending in the tunnel under the city, a metro hop, and the tracker's long silences while asleep.
 
 | Piece | Rule |
 |---|---|
 | **Vehicle** | Averaging over 20 km/h between two fixes, over at least 150 m. A dog doesn't do that on foot for 30 s; GPS jitter doesn't cover 150 m. |
-| **Underground** | A vehicle hop with reports without a fix in between, or a GPS gap that ends at least 300 m away at over 10 km/h. |
-| **Station stop** | A pause of at most 2 minutes and 100 m between two rides belongs to the ride. Longer stops (changing lines) don't. |
+| **Underground** | A vehicle hop with reports without a fix in between, or a GPS gap that ends at least 300 m away at over 10 km/h, both only while the tracker kept reporting. |
+| **Station stop, traffic** | A pause of at most 2 minutes between two rides belongs to the ride when it's within 100 m (a station) or averages at least 10 km/h (slower driving in traffic, or the extra report the tracker sends a few seconds after a regular one, which is a hop under 150 m even at 178 km/h). Longer stops (changing lines) don't. |
+| **Ride ends** | Hops of at least 10 km/h and 30 m next to a ride belong to it: setting off and arriving, a driveway. The 30 m leaves out the jitter of reports a second apart. |
+| **Silence** | No report at all for over 10 minutes (the tracker sleeps when still) is never evidence of being underground. If the next fix is within 40 m it's the same place (a stay); farther and at least 20 km/h, a ride; farther and slower, nothing is drawn between them. |
 | **Stay** | At least 2 minutes within 40 m of where it started. Drawn as a circle around 90% of its fixes, at least 10 m. Pottering about one place makes many small stays, so two stays become one **place** when their circles are at most 25 m apart and the move between them never went more than 50 m outside them. This repeats until nothing joins, and a move that never left a neighbouring stay's circle joins it too. A morning at daycare is then one circle instead of four overlapping ones with lines between them, while a walk around the block and back stays a walk. |
 | **Move** | Everything else: walking. |
 
@@ -160,7 +162,7 @@ Optional: with `MAP_MATCHING_URL` set, the Appearance page offers **Snap to path
 
 - **Walking:** a 4 px line in `--trail`, in pieces of 3 hops so it can fade with age (opacity 0.2 at the oldest fix, 0.9 at the newest).
 - **Paw prints** (Appearance → Paw prints, per browser): walking as a dog's tracks instead of the line, a left and a right print 44 px apart along the walk, turned the way it went (a symbol layer with `symbol-placement: line` and an image drawn on a canvas in `--trail`, so there's no image file). Its own source holds each walk as one piece: in 3-hop pieces most would be too short for a print.
-- **Rides:** straight from the last fix before to the first fix after, since where exactly it went isn't known. Dashed for a vehicle, dotted for underground.
+- **Rides:** through their fixes, in legs: dashed with GPS, dotted without (underground), and straight across stretches without fixes, since where exactly it went there isn't known. A ride is called a vehicle or underground ride by what it was for most of its time, so a train that ends in a tunnel is a vehicle ride with a dotted end, and a metro ride with stations in the open is underground.
 - **Stays:** a soft filled circle with a thin outline.
 - All of it is one GeoJSON source with a `kind` property and a layer per kind, plus the paw prints' source.
 - **Length:** set in the Settings card's Appearance → Trail: Off, 1 hour (default), 6, 12 or 24 hours, or **Today**, everything since local midnight. It loads a day of history and draws from midnight, so just after midnight it shows almost nothing.

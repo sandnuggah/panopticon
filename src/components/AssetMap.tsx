@@ -626,7 +626,8 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
           },
         })
       } else {
-        trail.push(line(piece.kind, [piece.from, piece.to], piece.to.time))
+        // Through the fixes on the way; legs without GPS are straight lines, dotted.
+        for (const leg of piece.legs) trail.push(line(leg.kind, leg.points, leg.points.at(-1)!.time))
       }
     }
   }

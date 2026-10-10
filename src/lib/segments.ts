@@ -3,8 +3,9 @@ import type { TrailPoint } from './trail'
 // Splits a trail into what the asset was doing: moving on foot, staying in one place, riding a
 // vehicle, or travelling underground. It uses only the tracker's own reports (speed between GPS
 // fixes, gaps without a fix, and cell tower changes), so it works anywhere without map data.
-// Thresholds were tuned on a real SinoTrack ST-904L trip by metro across Stockholm; see
-// ARCHITECTURE.md. This module has no runtime imports, so Node can run its tests directly.
+// Thresholds were tuned on real SinoTrack ST-904L trips: by metro across Stockholm, and a weekend
+// with car rides in the country and a train into the city; see ARCHITECTURE.md. This module has
+// no runtime imports, so Node can run its tests directly.
 
 /** Averaging this fast between two fixes, it can't be a dog on foot. */
 const VEHICLE_KMH = 20
@@ -16,6 +17,18 @@ const GAP_MIN_KMH = 10
 /** A pause between two rides this short and this still is the vehicle stopping (a station). */
 const STOP_MAX_MS = 2 * 60 * 1000
 const STOP_MAX_METERS = 100
+/**
+ * ...or, just as short, this fast on average: slower driving in traffic, or two reports seconds
+ * apart. A ride also takes in hops this fast at its ends (setting off, arriving), when they cover at
+ * least `RIDE_EDGE_MIN_METERS`, so the jitter of reports a second apart doesn't count.
+ */
+const RIDE_KEEP_KMH = 10
+const RIDE_EDGE_MIN_METERS = 30
+/**
+ * No report at all for this long: the tracker was asleep (it sleeps when still) or out of reach.
+ * That says nothing about GPS, so it's never evidence of being underground.
+ */
+const SILENT_MS = 10 * 60 * 1000
 /** A stay: at least this long within this distance of where it started. */
 const STAY_MIN_MS = 2 * 60 * 1000
 const STAY_MAX_METERS = 40
@@ -37,8 +50,14 @@ export type TrailPiece =
   | { kind: 'move'; points: TrailPoint[] }
   /** In one place for a while: where, and roughly how big an area. */
   | { kind: 'stay'; center: LatLon; radius: number; from: number; to: number }
-  /** Riding: from the last fix before to the first fix after. */
-  | { kind: 'vehicle' | 'underground'; from: TrailPoint; to: TrailPoint }
+  /**
+   * Riding: from the last fix before to the first fix after, through the fixes on the way. Each
+   * leg is with GPS or without (underground, drawn straight). The ride is what it was for most of
+   * its time: a metro ride with stations in the open is underground, a train ending in a tunnel isn't.
+   */
+  | { kind: 'vehicle' | 'underground'; from: TrailPoint; to: TrailPoint; legs: RideLeg[] }
+
+export type RideLeg = { kind: 'vehicle' | 'underground'; points: TrailPoint[] }
 
 export type Activity = 'vehicle' | 'underground'
 
@@ -54,7 +73,8 @@ export function distance(a: LatLon, b: LatLon): number {
   return 2 * 6_371_000 * Math.asin(Math.sqrt(h))
 }
 
-type HopKind = 'walk' | 'vehicle' | 'underground'
+/** `gap`: the tracker was silent and turned up somewhere else, too slowly to say how. Not drawn. */
+type HopKind = 'walk' | 'vehicle' | 'underground' | 'gap'
 
 /** One step between two consecutive GPS fixes, with the reports without a fix in between. */
 type Hop = { from: TrailPoint; to: TrailPoint; kind: HopKind }
@@ -69,7 +89,9 @@ export function classifyTrail(points: TrailPoint[]): TrailPiece[] {
   const pieces: TrailPiece[] = []
   for (const stretch of toStretches(hops)) {
     if (stretch.kind === 'walk') pieces.push(...splitWalk(stretch.points))
-    else pieces.push({ kind: stretch.kind, from: stretch.points[0]!, to: stretch.points.at(-1)! })
+    else if (stretch.kind !== 'gap') {
+      pieces.push({ kind: stretch.kind, from: stretch.points[0]!, to: stretch.points.at(-1)!, legs: stretch.legs })
+    }
   }
   return pieces
 }
@@ -123,7 +145,12 @@ function toHops(points: TrailPoint[]): Hop[] {
   const hops: Hop[] = []
   let from: TrailPoint | undefined
   let gap: TrailPoint[] = []
+  // The longest wait between two reports of any kind since `from`.
+  let previous: TrailPoint | undefined
+  let silence = 0
   for (const point of points) {
+    if (from && previous) silence = Math.max(silence, point.time - previous.time)
+    previous = point
     if (!point.valid) {
       if (from) gap.push(point)
       continue
@@ -132,49 +159,77 @@ function toHops(points: TrailPoint[]): Hop[] {
       const meters = distance(from, point)
       const kmh = (meters / ((point.time - from.time) / 1000)) * 3.6
       let kind: HopKind = 'walk'
-      if (kmh >= VEHICLE_KMH && meters >= VEHICLE_MIN_METERS) kind = gap.length > 0 ? 'underground' : 'vehicle'
+      if (silence > SILENT_MS) {
+        // Silent: still in the same place (walking, so a stay), a ride if it got there fast, or unknown.
+        if (meters > STAY_MAX_METERS) kind = kmh >= VEHICLE_KMH ? 'vehicle' : 'gap'
+      } else if (kmh >= VEHICLE_KMH && meters >= VEHICLE_MIN_METERS) kind = gap.length > 0 ? 'underground' : 'vehicle'
       else if (gap.length > 0 && meters >= GAP_MIN_METERS && kmh >= GAP_MIN_KMH) kind = 'underground'
       hops.push({ from, to: point, kind })
     }
-    if (!from || point.time > from.time) from = point
+    if (!from || point.time > from.time) {
+      from = point
+      silence = 0
+    }
     gap = []
   }
   return hops
 }
 
-type Stretch = { kind: HopKind; points: TrailPoint[] }
+type Stretch = { kind: HopKind; points: TrailPoint[]; legs: RideLeg[] }
 
 /**
- * Neighbouring hops of the same family join: walking with walking, and vehicle with underground
- * into one ride (underground if any part was). A short, still pause between two rides joins the ride.
+ * Neighbouring hops of the same family join: walking with walking, vehicle with underground into
+ * one ride, and gaps with gaps. A short pause between two rides joins the ride when it's still (a
+ * station) or still fast (traffic, or two reports seconds apart), and so do fast hops at its ends.
  */
 function toStretches(hops: Hop[]): Stretch[] {
-  const riding = hops.map((hop) => hop.kind !== 'walk')
+  const riding = hops.map((hop) => hop.kind === 'vehicle' || hop.kind === 'underground')
   let i = 0
   while (i < hops.length) {
-    if (riding[i]) {
+    if (hops[i]!.kind !== 'walk') {
       i++
       continue
     }
     let j = i
-    while (j < hops.length && !riding[j]) j++
-    const between = i > 0 && j < hops.length
-    const pause = { ms: hops[j - 1]!.to.time - hops[i]!.from.time, meters: distance(hops[i]!.from, hops[j - 1]!.to) }
-    if (between && pause.ms <= STOP_MAX_MS && pause.meters <= STOP_MAX_METERS) riding.fill(true, i, j)
+    while (j < hops.length && hops[j]!.kind === 'walk') j++
+    if (i > 0 && riding[i - 1] && j < hops.length && riding[j]) {
+      const ms = hops[j - 1]!.to.time - hops[i]!.from.time
+      const meters = distance(hops[i]!.from, hops[j - 1]!.to)
+      const kmh = (meters / (ms / 1000)) * 3.6
+      if (ms <= STOP_MAX_MS && (meters <= STOP_MAX_METERS || kmh >= RIDE_KEEP_KMH)) riding.fill(true, i, j)
+    }
     i = j
   }
+  const keepsRiding = (hop: Hop) => {
+    const meters = distance(hop.from, hop.to)
+    return hop.kind === 'walk' && meters >= RIDE_EDGE_MIN_METERS && (meters / ((hop.to.time - hop.from.time) / 1000)) * 3.6 >= RIDE_KEEP_KMH
+  }
+  for (let k = 1; k < hops.length; k++) if (riding[k - 1] && !riding[k] && keepsRiding(hops[k]!)) riding[k] = true
+  for (let k = hops.length - 2; k >= 0; k--) if (riding[k + 1] && !riding[k] && keepsRiding(hops[k]!)) riding[k] = true
 
-  const stretches: Stretch[] = []
+  const family = (index: number) => (riding[index] ? 'ride' : hops[index]!.kind)
+  const stretches: (Stretch & { family: string })[] = []
   hops.forEach((hop, index) => {
-    const kind: HopKind = riding[index] ? (hop.kind === 'walk' ? 'vehicle' : hop.kind) : 'walk'
     const last = stretches.at(-1)
-    if (last && (last.kind === 'walk') === (kind === 'walk')) {
+    const legKind = hop.kind === 'underground' ? 'underground' : 'vehicle'
+    if (last && last.family === family(index)) {
       last.points.push(hop.to)
-      if (kind === 'underground') last.kind = 'underground'
     } else {
-      stretches.push({ kind, points: [hop.from, hop.to] })
+      const kind: HopKind = riding[index] ? 'vehicle' : hop.kind
+      stretches.push({ family: family(index), kind, points: [hop.from, hop.to], legs: [] })
     }
+    if (!riding[index]) return
+    const stretch = stretches.at(-1)!
+    const leg = stretch.legs.at(-1)
+    if (leg?.kind === legKind) leg.points.push(hop.to)
+    else stretch.legs.push({ kind: legKind, points: [hop.from, hop.to] })
   })
+  for (const stretch of stretches) {
+    if (stretch.family !== 'ride') continue
+    const time = (kind: RideLeg['kind']) =>
+      stretch.legs.filter((leg) => leg.kind === kind).reduce((sum, leg) => sum + leg.points.at(-1)!.time - leg.points[0]!.time, 0)
+    stretch.kind = time('underground') > time('vehicle') ? 'underground' : 'vehicle'
+  }
   return stretches
 }
 

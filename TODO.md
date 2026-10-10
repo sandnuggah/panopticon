@@ -19,7 +19,7 @@ and cleared out now and then.
 
 ## Trail on the map
 
-- [ ] _(waiting for details)_
+- [x] Tuned on the weekend trip of 3–4 October: rides follow their fixes, rides hold together in traffic and when the tracker reports seconds apart, silences are never underground, overnight isn't joined into a walk
 
 ## Later / maybe
 

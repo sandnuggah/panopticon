@@ -79,6 +79,29 @@ class Trip {
     return this
   }
 
+  /**
+   * The tracker silent (asleep, or out of reach), turning up `meters` north: it wakes without a fix
+   * for a minute, as the real one does, then reports a fix.
+   */
+  silent(minutes: number, meters: number) {
+    this.time += minutes * 60_000 - 60_000
+    this.report(false)
+    this.time += 30_000
+    this.report(false)
+    this.time += 30_000
+    this.y += meters
+    this.report(true)
+    return this
+  }
+
+  /** An extra report `seconds` after the last one, `meters` further north, as the tracker sometimes sends. */
+  extra(seconds: number, meters: number) {
+    this.time += seconds * 1000
+    this.y += meters
+    this.report(true)
+    return this
+  }
+
   /** Indoors: no fix for a while, switching between antennas on the same mast. */
   indoors(minutes: number) {
     for (let i = 0; i < minutes * 2; i++) {
@@ -148,10 +171,63 @@ describe('classifyTrail', () => {
     assert.ok(pieces.every((piece) => piece.kind === 'stay' || piece.kind === 'move'), kinds(pieces).join())
   })
 
+  test('a ride with GPS goes through its fixes', () => {
+    const ride = classifyTrail(new Trip().walk(5).ride(3000, 180).walk(5).points).find((piece) => piece.kind === 'vehicle')
+    assert.ok(ride?.kind === 'vehicle')
+    assert.deepEqual(
+      ride.legs.map((leg) => [leg.kind, leg.points.length]),
+      [['vehicle', 7]],
+    )
+  })
+
+  test('a report seconds after another does not break a ride', () => {
+    const pieces = classifyTrail(new Trip().walk(5).ride(2000, 60).extra(3, 140).ride(2000, 60).walk(5).points)
+    assert.deepEqual(kinds(pieces), ['move', 'vehicle', 'move'])
+  })
+
+  test('slower driving between fast stretches is still the ride (traffic)', () => {
+    const pieces = classifyTrail(new Trip().walk(5).ride(800, 60).walk(1, 15).ride(800, 60).walk(5).points)
+    assert.deepEqual(kinds(pieces), ['move', 'vehicle', 'move'])
+  })
+
+  test('a ride takes in the slower driving as it sets off and arrives', () => {
+    const trip = new Trip().walk(5)
+    const setsOff = trip.points.at(-1)!.time
+    trip.walk(1, 14).ride(1000, 60).walk(1, 14)
+    const arrives = trip.points.at(-1)!.time
+    const ride = classifyTrail(trip.walk(5).points).find((piece) => piece.kind === 'vehicle')
+    assert.ok(ride?.kind === 'vehicle')
+    assert.equal(ride.from.time, setsOff)
+    assert.equal(ride.to.time, arrives)
+  })
+
+  test('a silent tracker that turns up far away fast is a ride, not underground', () => {
+    const pieces = classifyTrail(new Trip().walk(5).silent(20, 30_000).walk(5).points)
+    assert.deepEqual(kinds(pieces), ['move', 'vehicle', 'move'])
+  })
+
+  test('a silent night in one place is a stay', () => {
+    assert.deepEqual(kinds(classifyTrail(new Trip().stay(5).silent(600, 20).stay(5).points)), ['stay'])
+  })
+
+  test('turning up nearby after a long silence draws nothing in between', () => {
+    assert.deepEqual(kinds(classifyTrail(new Trip().stay(5).silent(600, 500).stay(5).points)), ['stay', 'stay'])
+  })
+
+  test('a train that ends in a tunnel is a vehicle ride, with the tunnel underground', () => {
+    const pieces = classifyTrail(new Trip().walk(5).ride(8000, 300).underground(1000, 2).walk(5).points)
+    const ride = pieces.find((piece) => piece.kind !== 'move' && piece.kind !== 'stay')
+    assert.ok(ride && ride.kind === 'vehicle')
+    assert.deepEqual(
+      ride.legs.map((leg) => leg.kind),
+      ['vehicle', 'underground'],
+    )
+  })
+
   test('reports without a fix are never drawn as positions', () => {
     for (const piece of classifyTrail(new Trip().walk(5).underground(1800, 6).walk(5).points)) {
       if (piece.kind === 'move') assert.ok(piece.points.every((point) => point.valid))
-      if (piece.kind === 'underground') assert.ok(piece.from.valid && piece.to.valid)
+      if (piece.kind === 'underground') assert.ok(piece.legs.every((leg) => leg.points.every((point) => point.valid)))
     }
   })
 })
