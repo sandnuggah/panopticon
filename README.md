@@ -122,9 +122,9 @@ To refresh the map data every few months, delete `./valhalla/valhalla_tiles.tar`
 
 ## Alerts (optional)
 
-Settings → Alerts sends notifications to a phone when an asset leaves or arrives at one of its
+Settings → Alerts sends notifications to a phone or computer when an asset leaves or arrives at one of its
 places, or its tracker goes offline, also while Panopticon is closed. Traccar tells panopticon about
-each event (event forwarding), and panopticon sends the notification with Web Push. Each phone
+each event (event forwarding), and panopticon sends the notification with Web Push. Each device
 chooses its own alerts, and they're kept with the assets in Traccar, so panopticon still stores
 nothing. On iPhone and iPad they work in the Home Screen app (iOS 16.4 or later).
 
@@ -147,12 +147,12 @@ push service checks the address.
    <entry key='event.forward.url'>http://panopticon:3000/hooks/traccar-events</entry>
    <entry key='event.forward.header'>Authorization: Bearer <the secret></entry>
    ```
-4. On the phone: open Panopticon from the Home Screen, then Settings → Alerts → **Turn on alerts on
-   this phone**, and choose which. **Send a test alert** checks the phone's side.
+4. On the phone (from the Home Screen) or in a desktop browser: Settings → Alerts → **Turn on alerts on
+   this device**, and choose which. **Send a test alert** checks the device's side.
 
 Traccar forwards every event, not just these; panopticon ignores the rest. Alerts stay on for a
-phone until they're turned off there, also after signing out. Changing `SESSION_SECRET` turns
-everyone's alerts off: turn them on again on each phone.
+device until they're turned off there, also after signing out. Changing `SESSION_SECRET` turns
+everyone's alerts off: turn them on again on each device.
 
 ## Street addresses (optional)
 

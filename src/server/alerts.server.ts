@@ -94,7 +94,7 @@ export function savePhoneAlerts(token: string, phone: PhoneAlerts): Promise<Edit
 export function sendTestAlert(target: PushTarget, origin: string) {
   return sendPush(
     target,
-    pushMessage('Alerts are on', "This is how Panopticon's alerts look on this phone.", `${origin}/`, 'test'),
+    pushMessage('Alerts are on', "This is how Panopticon's alerts look on this device.", `${origin}/`, 'test'),
     origin,
     env().sessionSecret,
   )

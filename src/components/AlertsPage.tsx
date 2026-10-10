@@ -10,7 +10,7 @@ import type { PushTarget } from '../server/webPush.server'
 type Status = { kind: 'idle' } | { kind: 'busy' } | { kind: 'done'; message: string } | { kind: 'error'; message: string }
 
 /**
- * Settings → Alerts: notifications on this phone when an asset leaves or arrives at one of its
+ * Settings → Alerts: notifications on this device when an asset leaves or arrives at one of its
  * places, or its tracker goes offline, also while Panopticon is closed. Each phone chooses its own
  * (see alerts.server.ts). Turning them on asks for permission, which browsers only do after a tap.
  */
@@ -99,7 +99,7 @@ export function AlertsPage({ listColors }: { listColors?: { strongBgIos: string 
           : {
               kind: 'error',
               message:
-                result === 'gone' ? 'This phone no longer accepts alerts. Turn them off and on again.' : "Couldn't send it. Try again.",
+                result === 'gone' ? 'This device no longer accepts alerts. Turn them off and on again.' : "Couldn't send it. Try again.",
             },
       )
     } catch {
@@ -134,17 +134,17 @@ export function AlertsPage({ listColors }: { listColors?: { strongBgIos: string 
           there.
         </Note>
       )}
-      {push.kind === 'denied' && <Note>Notifications are off for Panopticon. Turn them on in the phone's or browser's settings.</Note>}
+      {push.kind === 'denied' && <Note>Notifications are off for Panopticon. Turn them on in the device's or browser's settings.</Note>}
       {push.kind === 'off' && (
         <>
           <List strong inset colors={listColors}>
             <ListButton onClick={() => void onTurnOn()} className={busy || !setup.canEdit ? 'pointer-events-none opacity-50' : ''}>
-              Turn on alerts on this phone
+              Turn on alerts on this device
             </ListButton>
           </List>
           <BlockFooter>
             Get a notification when an asset leaves or arrives at one of its places, or its tracker goes offline, also while Panopticon is
-            closed. You choose which on each phone.
+            closed. You choose which on each device.
           </BlockFooter>
         </>
       )}
@@ -194,7 +194,7 @@ export function AlertsPage({ listColors }: { listColors?: { strongBgIos: string 
               onClick={() => void onTurnOff()}
               className={busy || !setup.canEdit ? 'pointer-events-none opacity-50' : ''}
             >
-              Turn off alerts on this phone
+              Turn off alerts on this device
             </ListButton>
           </List>
           <BlockFooter>
