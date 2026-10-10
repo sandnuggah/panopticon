@@ -19,6 +19,9 @@ export const Route = createFileRoute('/welcome')({
   component: WelcomePage,
 })
 
+/** The source and the setup guide, for running your own. */
+const REPOSITORY = 'https://github.com/sandnuggah/panopticon'
+
 const FEATURES: Feature[] = [
   {
     title: 'A live map',
@@ -73,6 +76,12 @@ function WelcomePage() {
           <Button large rounded href={signedIn ? '/' : '/login'}>
             {signedIn ? 'Open the map' : 'Sign in'}
           </Button>
+          <p className="pt-3 text-center text-[0.9375rem] opacity-80">
+            or{' '}
+            <a href={REPOSITORY} className="font-medium text-primary active:opacity-50" target="_blank" rel="noopener">
+              deploy it yourself
+            </a>
+          </p>
         </Block>
 
         <BlockTitle className="mt-6! mb-4! px-8! text-[0.9375rem]! font-medium! opacity-60">What it does</BlockTitle>
