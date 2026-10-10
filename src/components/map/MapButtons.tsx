@@ -48,7 +48,7 @@ export function MapButtons({ map, placement, showMe, onToggleMe }: Props) {
   }
   return (
     <div className="fixed-size pointer-events-none absolute inset-x-0 bottom-[calc(max(12px,env(safe-area-inset-bottom))+76px)] z-[5] px-3">
-      <div className="mx-auto flex max-w-xl justify-end">{pill}</div>
+      <div className="mx-auto flex max-w-xl justify-end lg:max-w-none">{pill}</div>
     </div>
   )
 }

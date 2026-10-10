@@ -45,7 +45,7 @@ export function BottomBar({
     'shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2'
   return (
     <div className="bottom-bar fixed-size absolute inset-x-0 bottom-0 z-10 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-      <div className="mx-auto flex max-w-xl items-center justify-between gap-2">
+      <div className="mx-auto flex max-w-xl items-center justify-between gap-2 lg:max-w-none">
         <div className={`flex h-16 min-w-0 items-center rounded-full px-2 ${surface}`}>
           <button
             type="button"
