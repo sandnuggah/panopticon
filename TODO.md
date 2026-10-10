@@ -14,7 +14,7 @@ and cleared out now and then.
 ## Places and alerts
 
 - [x] Steps 1 and 2: places as Traccar geofences: Settings → Places, an editor on the map (circle picker, size 50 m–2 km, which assets), places drawn on the map, "Home" instead of the address in the details card, arrivals and departures from Traccar's events, a banner when one happens while the app is open. Mock Traccar has geofences and events. Released as `:45` (2026-10-10)
-- [ ] Try places on the real Traccar (`:47`): a Home for Betty, then check her arrivals and departures list (it needs reports allowed for the user) and the banner when she leaves
+- [ ] Try places on the real Traccar (`:48`): a Home for Betty, then check her arrivals and departures list (it needs reports allowed for the user) and the banner when she leaves
 - [x] Step 3: alerts with Web Push: Settings → Alerts per phone (leaves/arrives at each place, tracker offline), Traccar's event forwarding to `/hooks/traccar-events`, choices sealed on the devices, VAPID key from SESSION_SECRET. Tested against the mock and Apple's push service with a made-up subscription; not yet on a real iPhone. Released as `:46` (2026-10-10)
 - [ ] Try alerts on the real iPhone: copy the updated `deploy/compose.yaml` to the server (it now passes TRACCAR_EVENTS_SECRET; fixed after `:46`, pushed to GitHub), set TRACCAR_EVENTS_SECRET in `.env` and the three traccar.xml lines (README → Alerts), turn on in the Home Screen app, Send a test alert, then a real "Betty leaves Home". Needs panopticon on https at its real domain (Apple refuses other VAPID subjects)
 - [ ] Research alerts on Android: Chrome's push goes through fcm.googleapis.com (allowed), but check Firefox and Samsung Internet's push services, whether the service worker shows the Declarative Web Push message there, whether the installed app is needed, and test on a real Android phone (or an emulator with Google Play services)
@@ -24,7 +24,7 @@ and cleared out now and then.
 
 - [x] Clean-up after the UI rebuild: Prettier config and one formatting pass; Snap to paths and component renames; live link files named after live links; bottom bar split from the Settings card, icons in one file; the map in its own folder with the trail drawing split out; `useCardHistory` (fixed an extra history entry after the back gesture); live link pages with the same map buttons and credits, maplibre's controls removed; credits parser with tests; focus back to the asset's picture when its details card closes. Released as `:43` (2026-10-10)
 - [x] Dynamic Type, checked in the iOS Simulator (iOS 18.5 and 27, default to the largest size): fixed spacing so only text grows, switches, icons and the asset page's navigation bar one size, wrapping tracker rows and long words, no focus ring on ✕, fixed card corners, Settings card as tall as its content, page colour behind Safari 26+'s bars. Released as `:44` (2026-10-10)
-- [x] Bottom bar in two groups: your position and the assets in a bar as wide as they need, Settings as its own round button; 64 px tall with 48 px pictures; zoom buttons as wide as Settings and lined up with it. Released as `:47` (2026-10-10)
+- [x] Bottom bar in two groups: your position and the assets in a bar as wide as they need, Settings as its own round button; 64 px tall with 48 px pictures; zoom buttons as wide as Settings and lined up with it. Released as `:47`; the assets scroll sideways with a fade at the edges when they don't fit, your position staying put, in `:48` (2026-10-10)
 
 ## Look and feel
 
