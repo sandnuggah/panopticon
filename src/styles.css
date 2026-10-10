@@ -231,7 +231,7 @@
   transform: translateX(-50%);
 }
 
-/* Map markers: maplibre DOM markers (see AssetMap's createMarkerElement). */
+/* Map markers: maplibre DOM markers (see map/markers.ts). */
 .marker {
   display: grid;
   justify-items: center;

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ClientOnly, createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { AssetDetailsCard } from '../components/AssetDetailsCard'
 import { LiveIndicator } from '../components/LiveIndicator'
@@ -53,11 +53,11 @@ function Home() {
   const { asset: selectedId, details, settings: cardView } = Route.useSearch()
   const { user } = Route.useRouteContext()
   const navigate = Route.useNavigate()
-  const router = useRouter()
-  // The history entries the details card, the Settings card and its page card added when opened
-  // here, so closing goes back past them and the back gesture closes them one at a time. A page
-  // loaded with a card open has none: closing it just drops the param.
-  const pushed = useRef({ details: false, card: false, page: false })
+  const cards = useCardHistory({
+    details: details === true,
+    settings: cardView !== undefined,
+    page: cardView !== undefined && cardView !== 'main',
+  })
   const [focusToken, setFocusToken] = useState(0)
   // Your own position on the map, turned on and off from the bottom bar.
   const [showMe, setShowMe] = useState(false)
@@ -73,13 +73,13 @@ function Home() {
 
   function select(id: number) {
     // Selecting replaces the search params, details card included.
-    pushed.current.details = false
+    cards.forget('details')
     setFocusToken((token) => token + 1)
     void navigate({ search: { asset: id }, replace: true })
   }
 
   function deselect() {
-    pushed.current.details = false
+    cards.forget('details')
     if (selectedId !== undefined) void navigate({ search: {}, replace: true })
   }
 
@@ -87,48 +87,21 @@ function Home() {
   function tapAsset(id: number) {
     if (id !== selectedId) return select(id)
     setFocusToken((token) => token + 1)
-    if (details) return
-    pushed.current.details = true
-    void navigate({ search: (prev) => ({ ...prev, details: true }) })
+    if (!details) cards.open('details', (prev) => ({ ...prev, details: true }))
   }
 
-  function closeDetails() {
-    if (pushed.current.details) {
-      pushed.current.details = false
-      router.history.back()
-    } else {
-      void navigate({ search: ({ details: _, ...rest }) => rest, replace: true })
-    }
-  }
-
-  function openSettings() {
-    pushed.current = { ...pushed.current, card: true, page: false }
-    void navigate({ search: (prev) => ({ ...prev, settings: 'main' }) })
-  }
+  const closeDetails = () => cards.close('details', ({ details: _, ...rest }) => rest)
+  const openSettings = () => cards.open('settings', (prev) => ({ ...prev, settings: 'main' }))
 
   function showSettings(view: SettingsView) {
     // From the Settings card into a page card: a history entry of its own, so the back gesture
     // returns to the Settings card. Within the page card, the entry is replaced.
-    const opensPage = cardView === 'main' && view !== 'main'
-    if (opensPage) pushed.current.page = true
-    void navigate({ search: (prev) => ({ ...prev, settings: view }), replace: !opensPage })
+    if (cardView === 'main' && view !== 'main') cards.open('page', (prev) => ({ ...prev, settings: view }))
+    else cards.replace((prev) => ({ ...prev, settings: view }))
   }
 
-  function closePage() {
-    if (pushed.current.page) {
-      pushed.current.page = false
-      router.history.back()
-    } else {
-      void navigate({ search: (prev) => ({ ...prev, settings: 'main' }), replace: true })
-    }
-  }
-
-  function closeSettings() {
-    const entries = (pushed.current.card ? 1 : 0) + (pushed.current.page && cardView !== 'main' ? 1 : 0)
-    pushed.current = { ...pushed.current, card: false, page: false }
-    if (entries > 0) router.history.go(-entries)
-    else void navigate({ search: ({ settings: _, ...rest }) => rest, replace: true })
-  }
+  const closePage = () => cards.close('page', (prev) => ({ ...prev, settings: 'main' }))
+  const closeSettings = () => cards.close('settings', ({ settings: _, ...rest }) => rest)
 
   const mapPlaceholder = <div className="map map-placeholder" />
 
@@ -190,4 +163,50 @@ function Home() {
       />
     </main>
   )
+}
+
+type Card = 'details' | 'settings' | 'page'
+
+/**
+ * The cards over the map (the details card, the Settings card and its page card) live in the search
+ * params. Opening one here adds a history entry, so the back gesture closes the top card. Closing
+ * one goes back past its entry and those of cards opened over it; a card the page loaded with has
+ * no entry of its own, so closing it just changes the params. `isOpen` keeps the list honest when
+ * the back gesture closes a card.
+ */
+function useCardHistory(isOpen: Record<Card, boolean>) {
+  const navigate = Route.useNavigate()
+  const router = useRouter()
+  // The cards opened here, oldest first.
+  const pushed = useRef<Card[]>([])
+  // A card that was open and now isn't was closed some other way (the back gesture). Only that
+  // change counts: a card just opened isn't open yet until the navigation lands.
+  const wasOpen = useRef(isOpen)
+  useEffect(() => {
+    pushed.current = pushed.current.filter((card) => !wasOpen.current[card] || isOpen[card])
+    wasOpen.current = isOpen
+  })
+
+  const replace = (search: (prev: Search) => Search) => void navigate({ search, replace: true })
+  return {
+    /** Opens a card, with a history entry of its own. */
+    open(card: Card, search: (prev: Search) => Search) {
+      pushed.current = [...pushed.current.filter((other) => other !== card), card]
+      void navigate({ search })
+    },
+    /** Changes the params without a new entry, as when moving within a card. */
+    replace,
+    /** Closes a card, and any opened over it. */
+    close(card: Card, search: (prev: Search) => Search) {
+      const index = pushed.current.indexOf(card)
+      if (index === -1) return replace(search)
+      const entries = pushed.current.length - index
+      pushed.current = pushed.current.slice(0, index)
+      router.history.go(-entries)
+    },
+    /** Forgets a card's entry, when its params were replaced along with everything else. */
+    forget(card: Card) {
+      pushed.current = pushed.current.filter((other) => other !== card)
+    },
+  }
 }
