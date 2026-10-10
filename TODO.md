@@ -33,6 +33,7 @@ and cleared out now and then.
 - [ ] Retake the front page's screenshots when the UI changes (iOS Simulator, mock Traccar with MAP_MATCHING_URL for Snap to paths; status bar shows 9:41 while the arrivals list shows evening times)
 - [ ] Maybe: on wide screens, open the Settings and details cards from the side (like a sidebar in Apple Maps on the Mac) instead of as 576 px sheets in the middle of the bottom edge
 - [x] A new app icon: a folded paper map with a red paper-cutout pin on the app's green (front page style, RAL colours); source in dev/icon-full.svg. Released as `:59` (2026-10-11)
+- [ ] Re-add Panopticon to the iPhone's Home Screen to get the new icon (iOS keeps the old one)
 - [x] "Update available · Reload" at the top right of the map when a newer release is running: each build has an ID, the live stream sends the server's, a page from an older build shows the notice after its stream reconnects. Released as `:49` (2026-10-10); first visible when `:50` is deployed
 
 ## Later / maybe
