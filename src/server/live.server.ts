@@ -1,14 +1,7 @@
 import type { LiveUpdate } from '../lib/live'
 import { toDeviceUpdate, toPositionUpdate } from './assets.server'
 import { clearSession, getSessionToken } from './session.server'
-import {
-  getDevices,
-  openSocket,
-  parseSocketMessage,
-  tokenWasRejected,
-  type TraccarDevice,
-  type TraccarPosition,
-} from './traccar.server'
+import { getDevices, openSocket, parseSocketMessage, tokenWasRejected, type TraccarDevice, type TraccarPosition } from './traccar.server'
 
 // GET /live: relays Traccar's WebSocket to the browser as Server-Sent Events. The browser never
 // talks to Traccar and never sees the token. One upstream socket per open tab.
@@ -27,10 +20,7 @@ export async function liveResponse(request: Request): Promise<Response> {
 
   const socket = await connectUpstream(token)
   if (!socket) return failureResponse(token)
-  return relay(request, socket, ({ devices, positions }) => [
-    ...devices.map(toDeviceUpdate),
-    ...positions.map(toPositionUpdate),
-  ])
+  return relay(request, socket, ({ devices, positions }) => [...devices.map(toDeviceUpdate), ...positions.map(toPositionUpdate)])
 }
 
 type SocketMessage = { devices: TraccarDevice[]; positions: TraccarPosition[] }

@@ -7,7 +7,10 @@ const liberty = 'https://tiles.openfreemap.org/styles/liberty'
 describe('mapStylesFor', () => {
   test('OpenFreeMap offers its styles, the configured one as default', () => {
     const { styles, defaultStyle } = mapStylesFor(liberty)
-    assert.deepEqual(styles.map((style) => style.id), ['standard', 'light', 'bright', 'dark', 'dark-blue'])
+    assert.deepEqual(
+      styles.map((style) => style.id),
+      ['standard', 'light', 'bright', 'dark', 'dark-blue'],
+    )
     assert.equal(defaultStyle, 'standard')
     assert.equal(mapStylesFor('https://tiles.openfreemap.org/styles/positron').defaultStyle, 'light')
   })

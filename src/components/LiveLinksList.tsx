@@ -51,8 +51,7 @@ export function LiveLinksList({ listColors }: { listColors?: { strongBgIos: stri
         </p>
       )}
       <BlockFooter>
-        Links made with Share in this browser. Stopping one ends it at once; a page that's already open goes blank within a
-        minute.
+        Links made with Share in this browser. Stopping one ends it at once; a page that's already open goes blank within a minute.
       </BlockFooter>
     </>
   )

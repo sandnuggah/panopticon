@@ -103,9 +103,7 @@ export async function sharedLiveResponse(request: Request, link: string): Promis
   const socket = await connectUpstream(data.token)
   if (!socket) {
     // The socket gives no reason; a stopped link ends quietly, anything else is worth retrying.
-    return (await stillShared())
-      ? new Response('Live updates are unavailable', { status: 502 })
-      : new Response(null, { status: 204 })
+    return (await stillShared()) ? new Response('Live updates are unavailable', { status: 502 }) : new Response(null, { status: 204 })
   }
   return relay(request, socket, ({ devices, positions }) => toSharedUpdates(devices, positions, data.assetId, link), {
     endAt: data.expiresAt,
@@ -126,17 +124,15 @@ function openLink(link: string): Opened {
 async function loadShared(data: ShareLinkData, link: string): Promise<Asset | null> {
   const [device, positions] = await Promise.all([getDevice(data.token, data.assetId), getLatestPositions(data.token)])
   if (!device || device.disabled) return null
-  const asset = toAsset(device, positions.find((position) => position.deviceId === data.assetId))
+  const asset = toAsset(
+    device,
+    positions.find((position) => position.deviceId === data.assetId),
+  )
   return { ...asset, battery: undefined, imageUrl: sharedImageUrl(device, link) }
 }
 
 /** Only this asset's updates, with the same fields left out as on the page. */
-function toSharedUpdates(
-  devices: TraccarDevice[],
-  positions: TraccarPosition[],
-  assetId: number,
-  link: string,
-): LiveUpdate[] {
+function toSharedUpdates(devices: TraccarDevice[], positions: TraccarPosition[], assetId: number, link: string): LiveUpdate[] {
   const updates: LiveUpdate[] = []
   for (const device of devices) {
     if (device.id !== assetId) continue

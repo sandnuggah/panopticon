@@ -59,16 +59,10 @@ export class TraccarError extends Error {
 }
 
 export type PasswordSessionResult =
-  | { kind: 'ok'; user: TraccarUser; sessionCookie: string }
-  | { kind: 'code-required' }
-  | { kind: 'invalid' }
+  { kind: 'ok'; user: TraccarUser; sessionCookie: string } | { kind: 'code-required' } | { kind: 'invalid' }
 
 /** Password sign-in. Returns the Traccar session cookie to exchange for a token. */
-export async function createPasswordSession(
-  email: string,
-  password: string,
-  code?: string,
-): Promise<PasswordSessionResult> {
+export async function createPasswordSession(email: string, password: string, code?: string): Promise<PasswordSessionResult> {
   const body = new URLSearchParams({ email, password })
   if (code) body.set('code', code)
   const response = await request('/api/session', { method: 'POST', body })
@@ -252,12 +246,7 @@ export async function deleteDevice(token: string, id: number): Promise<void> {
  * Stores an image in Traccar's media folder for the device, as device.<ext>. Returns that filename;
  * it still has to be saved in the device's `deviceImage` attribute to be used.
  */
-export async function uploadDeviceImage(
-  token: string,
-  id: number,
-  bytes: Uint8Array<ArrayBuffer>,
-  contentType: string,
-): Promise<string> {
+export async function uploadDeviceImage(token: string, id: number, bytes: Uint8Array<ArrayBuffer>, contentType: string): Promise<string> {
   const response = await request(`/api/devices/${id}/image`, {
     method: 'POST',
     token,
@@ -295,12 +284,7 @@ export async function getLatestPositions(token: string): Promise<TraccarPosition
 }
 
 /** Positions of one device between two times, oldest first. Fails for users with reports disabled. */
-export async function getPositionHistory(
-  token: string,
-  deviceId: number,
-  from: Date,
-  to: Date,
-): Promise<TraccarPosition[]> {
+export async function getPositionHistory(token: string, deviceId: number, from: Date, to: Date): Promise<TraccarPosition[]> {
   const query = new URLSearchParams({
     deviceId: String(deviceId),
     from: from.toISOString(),

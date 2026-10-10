@@ -57,8 +57,8 @@ export function AddAssetForm({ listColors, onAdded }: Props) {
         />
       </List>
       <BlockFooter>
-        The ID the tracker reports to Traccar, usually its IMEI. It's often on a label on the tracker, or in its manual. The
-        tracker also needs to be set up to send its position to your Traccar server.
+        The ID the tracker reports to Traccar, usually its IMEI. It's often on a label on the tracker, or in its manual. The tracker also
+        needs to be set up to send its position to your Traccar server.
       </BlockFooter>
       {error && (
         <p className="px-8 text-sm text-red-500" role="alert">

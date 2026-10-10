@@ -98,9 +98,7 @@ function Rows({ details }: { details: Details }) {
             .join(' · ')}
         </Row>
       )}
-      {details.reportEverySeconds !== undefined && (
-        <Row label="Reports">About every {interval(details.reportEverySeconds)}</Row>
-      )}
+      {details.reportEverySeconds !== undefined && <Row label="Reports">About every {interval(details.reportEverySeconds)}</Row>}
       {position && (
         <Row label="Last fix">
           <CopyText text={`${position.lat.toFixed(5)}, ${position.lon.toFixed(5)}`} />

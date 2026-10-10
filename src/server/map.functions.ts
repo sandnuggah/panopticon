@@ -40,9 +40,12 @@ function parseWalks(input: unknown): MatchablePoint[][] {
     return walk.map((point: unknown) => {
       const { lat, lon, time } = (point ?? {}) as Record<string, unknown>
       const ok =
-        typeof lat === 'number' && Math.abs(lat) <= 90 &&
-        typeof lon === 'number' && Math.abs(lon) <= 180 &&
-        typeof time === 'number' && Number.isFinite(time)
+        typeof lat === 'number' &&
+        Math.abs(lat) <= 90 &&
+        typeof lon === 'number' &&
+        Math.abs(lon) <= 180 &&
+        typeof time === 'number' &&
+        Number.isFinite(time)
       if (!ok) throw new Error('Invalid request')
       return { lat, lon, time }
     })

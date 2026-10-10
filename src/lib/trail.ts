@@ -53,9 +53,7 @@ export function nearestTrail(value: unknown): TrailLength | undefined {
   if (value === 'today' || value === 0) return value
   if (typeof value !== 'number' || !(value > 0)) return undefined
   const lengths = TRAIL_OPTIONS.filter((option): option is number => typeof option === 'number' && option > 0)
-  return lengths.reduce((best, option) =>
-    Math.abs(Math.log(option / value)) < Math.abs(Math.log(best / value)) ? option : best,
-  )
+  return lengths.reduce((best, option) => (Math.abs(Math.log(option / value)) < Math.abs(Math.log(best / value)) ? option : best))
 }
 /**
  * History always covers at least this much, to tell what an asset is doing right now and how long

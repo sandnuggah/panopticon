@@ -197,13 +197,25 @@ function ShareCard({ asset, open, onSendLocation, onShareLive, onClose }: CardPr
           <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
             {asset.location && (
               <List strong inset colors={ROWS}>
-                <ListItem link chevron={false} title="Send location" subtitle={`Where ${asset.name} is now, once`} onClick={onSendLocation} />
+                <ListItem
+                  link
+                  chevron={false}
+                  title="Send location"
+                  subtitle={`Where ${asset.name} is now, once`}
+                  onClick={onSendLocation}
+                />
               </List>
             )}
             <BlockTitle>Share live location</BlockTitle>
             <List strong inset colors={ROWS}>
               {LIVE_LINK_HOURS.map((hours) => (
-                <ListItem key={hours} link chevron={false} title={`For ${hours === 1 ? '1 hour' : `${hours} hours`}`} onClick={() => onShareLive(hours)} />
+                <ListItem
+                  key={hours}
+                  link
+                  chevron={false}
+                  title={`For ${hours === 1 ? '1 hour' : `${hours} hours`}`}
+                  onClick={() => onShareLive(hours)}
+                />
               ))}
             </List>
             <BlockFooter>
@@ -221,7 +233,13 @@ function ShareIcon() {
   return (
     <svg className="mr-1.5 size-4" viewBox="0 0 16 16" aria-hidden="true">
       <path d="M8 10V1.75M5 4.5l3-3 3 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5.5 6.75H4.25a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1H10.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path
+        d="M5.5 6.75H4.25a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1H10.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   )
 }

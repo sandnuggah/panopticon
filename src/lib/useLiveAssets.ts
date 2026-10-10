@@ -5,15 +5,7 @@ import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { applyUpdates, type LiveUpdate } from './live'
 import { currentActivity, currentStay, type Activity, type Stay } from './segments'
-import {
-  HISTORY_MIN_MINUTES,
-  extendTrails,
-  pruneTrails,
-  trailMinutes,
-  trailStart,
-  type TrailLength,
-  type Trails,
-} from './trail'
+import { HISTORY_MIN_MINUTES, extendTrails, pruneTrails, trailMinutes, trailStart, type TrailLength, type Trails } from './trail'
 import { useNow } from './useNow'
 
 export type LiveStatus = 'connecting' | 'live' | 'offline'

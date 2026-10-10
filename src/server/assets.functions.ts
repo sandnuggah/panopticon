@@ -26,6 +26,10 @@ export const getTrackerDetails = createServerFn({ method: 'GET' })
         getPositionHistory(token, assetId, new Date(to.getTime() - TRACKER_HISTORY_MS), to),
       ])
       if (!device) throw new Error('No such asset')
-      return toTrackerDetails(device, latest.find((position) => position.deviceId === assetId), history)
+      return toTrackerDetails(
+        device,
+        latest.find((position) => position.deviceId === assetId),
+        history,
+      )
     }),
   )

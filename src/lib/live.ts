@@ -51,9 +51,7 @@ export function applyUpdates(assets: Asset[], updates: LiveUpdate[]): { assets: 
       // A position without battery keeps the last known value.
       replacement = { ...current, location: update.location, battery: update.battery ?? current.battery }
     }
-    next = replacement
-      ? next.map((asset, i) => (i === index ? replacement : asset))
-      : next.filter((_, i) => i !== index)
+    next = replacement ? next.map((asset, i) => (i === index ? replacement : asset)) : next.filter((_, i) => i !== index)
   }
   if (next !== assets) next = [...next].sort((a, b) => a.name.localeCompare(b.name))
   return { assets: next, unknown }

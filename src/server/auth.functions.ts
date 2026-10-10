@@ -2,9 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getSessionUser, signIn, signOut } from './session.server'
 import { createPasswordSession, getServerInfo, TraccarError } from './traccar.server'
 
-export type LoginResult =
-  | { ok: true }
-  | { ok: false; error: 'invalid' | 'code-required' | 'unavailable' }
+export type LoginResult = { ok: true } | { ok: false; error: 'invalid' | 'code-required' | 'unavailable' }
 
 export const getUser = createServerFn({ method: 'GET' }).handler(() => getSessionUser())
 

@@ -62,9 +62,7 @@ export function AssetsList({ listColors, onOpen, onAdd }: Props) {
           <ListButton onClick={onAdd}>Add asset</ListButton>
         </List>
       )}
-      {!access.canEdit && (
-        <BlockFooter>Your Traccar account can't change assets. An administrator can allow it in Traccar.</BlockFooter>
-      )}
+      {!access.canEdit && <BlockFooter>Your Traccar account can't change assets. An administrator can allow it in Traccar.</BlockFooter>}
     </>
   )
 }

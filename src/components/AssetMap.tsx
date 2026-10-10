@@ -1,13 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import {
-  AttributionControl,
-  type GeoJSONSource,
-  LngLatBounds,
-  MapLibreMap,
-  Marker,
-  NavigationControl,
-  setWorkerUrl,
-} from 'maplibre-gl'
+import { AttributionControl, type GeoJSONSource, LngLatBounds, MapLibreMap, Marker, NavigationControl, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 // maplibre looks for its worker next to its own file, which breaks once bundled.
 // Let Vite bundle the worker and hand maplibre the resulting same-origin URL.

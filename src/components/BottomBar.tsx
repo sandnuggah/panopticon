@@ -76,7 +76,22 @@ type Props = {
  * Not Konsta's Sheet: that's position: fixed, and fixed elements stop 59 pt short of the screen's
  * bottom in the iOS home-screen app (see styles.css). These are absolute inside the map screen.
  */
-export function BottomBar({ user, assets, selectedId, onAssetTap, attribution, mapStyles, followRoads, showMe, onToggleMe, view, onOpen, onShow, onClosePage, onClose }: Props) {
+export function BottomBar({
+  user,
+  assets,
+  selectedId,
+  onAssetTap,
+  attribution,
+  mapStyles,
+  followRoads,
+  showMe,
+  onToggleMe,
+  view,
+  onOpen,
+  onShow,
+  onClosePage,
+  onClose,
+}: Props) {
   const now = useNow(30_000)
   const open = view !== undefined
   const pageOpen = open && view !== 'main'
@@ -187,7 +202,9 @@ export function BottomBar({ user, assets, selectedId, onAssetTap, attribution, m
         className={`absolute inset-x-0 bottom-0 z-40 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out ${open ? '' : 'translate-y-full'}`}
       >
         {/* Just tall enough for the main list and the map credits under it, or less on short screens. */}
-        <div className={`relative h-[min(472px,calc(100dvh-env(safe-area-inset-top)-96px))] overflow-y-auto rounded-[2.5rem] pt-5 shadow-2xl ${CARD_BG}`}>
+        <div
+          className={`relative h-[min(472px,calc(100dvh-env(safe-area-inset-top)-96px))] overflow-y-auto rounded-[2.5rem] pt-5 shadow-2xl ${CARD_BG}`}
+        >
           <CloseButton ref={settingsClose} className="absolute right-4 top-4 z-10" onClick={onClose} />
           <MainView user={user} assetCount={assets.length} attribution={attribution} onShow={onShow} />
         </div>
@@ -195,13 +212,7 @@ export function BottomBar({ user, assets, selectedId, onAssetTap, attribution, m
 
       {/* The page card, over the Settings card, from just below the status bar to the bottom. */}
       <Backdrop shown={pageOpen} z="z-50" onClick={onClosePage} />
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        inert={!pageOpen}
-        className={pageCardClass(pageOpen)}
-      >
+      <section role="dialog" aria-modal="true" aria-label={title} inert={!pageOpen} className={pageCardClass(pageOpen)}>
         <div className={`flex h-full flex-col overflow-clip rounded-t-[2.5rem] shadow-2xl ${CARD_BG}`}>
           {insideAssets(page) ? (
             <div className="relative flex h-15 shrink-0 items-center justify-between px-4 pt-4">
@@ -212,7 +223,14 @@ export function BottomBar({ user, assets, selectedId, onAssetTap, attribution, m
                 onClick={() => onShow('assets')}
               >
                 <svg className="size-5" viewBox="0 0 20 20" aria-hidden="true">
-                  <path d="M12.5 4 6.5 10l6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d="M12.5 4 6.5 10l6 6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
                 Assets
               </button>
@@ -229,9 +247,7 @@ export function BottomBar({ user, assets, selectedId, onAssetTap, attribution, m
             {page === 'appearance' && <AppearanceSettings listColors={ROWS} {...mapStyles} followRoads={followRoads} />}
             {page === 'live-links' && <LiveLinksList listColors={ROWS} />}
             {page === 'account' && <AccountView user={user} />}
-            {page === 'assets' && (
-              <AssetsList listColors={ROWS} onOpen={(id) => onShow(`asset-${id}`)} onAdd={() => onShow('add-asset')} />
-            )}
+            {page === 'assets' && <AssetsList listColors={ROWS} onOpen={(id) => onShow(`asset-${id}`)} onAdd={() => onShow('add-asset')} />}
             {page === 'add-asset' && <AddAssetForm listColors={ROWS} onAdded={(id) => onShow(`asset-${id}`)} />}
             {assetId !== undefined && <AssetEditor id={assetId} listColors={ROWS} onRemoved={() => onShow('assets')} />}
           </div>

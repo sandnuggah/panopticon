@@ -73,7 +73,19 @@ export function AssetCard({ asset, activity, stay, address, onTop, onClose }: Pr
   )
 }
 
-function Details({ asset, activity, stay, address, open }: { asset: Asset; activity?: Activity; stay?: Stay; address?: string; open: boolean }) {
+function Details({
+  asset,
+  activity,
+  stay,
+  address,
+  open,
+}: {
+  asset: Asset
+  activity?: Activity
+  stay?: Stay
+  address?: string
+  open: boolean
+}) {
   const now = useNow(30_000)
   const percent = asset.battery?.percent
   return (

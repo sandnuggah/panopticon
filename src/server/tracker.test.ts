@@ -26,7 +26,18 @@ function report(time: string, valid: boolean, extra: Record<string, unknown> = {
     accuracy: 0,
     cellId: null,
     cellNetwork: null,
-    attributes: { io1: '240', io2: '01', io3: '1234', io4: '25637899', io5: '19', io6: '22', io7: '37', io8: '62', batteryLevel: 62, ...extra },
+    attributes: {
+      io1: '240',
+      io2: '01',
+      io3: '1234',
+      io4: '25637899',
+      io5: '19',
+      io6: '22',
+      io7: '37',
+      io8: '62',
+      batteryLevel: 62,
+      ...extra,
+    },
   }
 }
 

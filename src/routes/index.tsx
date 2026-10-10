@@ -63,10 +63,7 @@ function Home() {
   // The map data's credits, shown in the Settings card instead of on the map.
   const [attribution, setAttribution] = useState<string[]>([])
   const [settings, , settingsLoaded] = useSettings()
-  const { assets, trails, activities, stays, status } = useLiveAssets(
-    loaderData.assets,
-    settingsLoaded ? settings.trail : null,
-  )
+  const { assets, trails, activities, stays, status } = useLiveAssets(loaderData.assets, settingsLoaded ? settings.trail : null)
   const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.followRoads && settings.followRoads)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)

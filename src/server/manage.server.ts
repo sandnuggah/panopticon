@@ -44,10 +44,7 @@ export async function loadManagedAssets(token: string): Promise<{ access: AssetA
   return { access, assets }
 }
 
-export async function loadManagedAsset(
-  token: string,
-  id: number,
-): Promise<{ access: AssetAccess; asset: ManagedAsset } | null> {
+export async function loadManagedAsset(token: string, id: number): Promise<{ access: AssetAccess; asset: ManagedAsset } | null> {
   const { access, assets } = await loadManagedAssets(token)
   const asset = assets.find((candidate) => candidate.id === id)
   return asset ? { access, asset } : null

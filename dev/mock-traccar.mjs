@@ -27,9 +27,36 @@ const iso = (time) => new Date(time).toISOString()
 const start = Date.now()
 
 const devices = [
-  { id: 30, name: 'Betty', uniqueId: '9171000030', status: 'online', lastUpdate: iso(start), disabled: false, model: 'ST-904L', attributes: { deviceImage: 'device.png' } },
-  { id: 10, name: 'Sixten', uniqueId: '9171000010', status: 'online', lastUpdate: iso(start), disabled: false, model: 'ST-904L', attributes: {} },
-  { id: 20, name: 'Bamse', uniqueId: '9171000020', status: 'offline', lastUpdate: iso(start - 3 * 3600_000), disabled: false, model: null, attributes: {} },
+  {
+    id: 30,
+    name: 'Betty',
+    uniqueId: '9171000030',
+    status: 'online',
+    lastUpdate: iso(start),
+    disabled: false,
+    model: 'ST-904L',
+    attributes: { deviceImage: 'device.png' },
+  },
+  {
+    id: 10,
+    name: 'Sixten',
+    uniqueId: '9171000010',
+    status: 'online',
+    lastUpdate: iso(start),
+    disabled: false,
+    model: 'ST-904L',
+    attributes: {},
+  },
+  {
+    id: 20,
+    name: 'Bamse',
+    uniqueId: '9171000020',
+    status: 'offline',
+    lastUpdate: iso(start - 3 * 3600_000),
+    disabled: false,
+    model: null,
+    attributes: {},
+  },
 ]
 let nextDeviceId = 100
 
@@ -50,8 +77,14 @@ function report(deviceId, time, lat, lon, valid = true) {
     longitude: lon,
     accuracy: 0,
     attributes: {
-      io1: '240', io2: '01', io3: '1234', io4: String(25637899 + (deviceId % 7)),
-      io5: valid ? String(9 + (nextPositionId % 9)) : '0', io6: String(16 + (nextPositionId % 12)), io7: '37', io8: '62',
+      io1: '240',
+      io2: '01',
+      io3: '1234',
+      io4: String(25637899 + (deviceId % 7)),
+      io5: valid ? String(9 + (nextPositionId % 9)) : '0',
+      io6: String(16 + (nextPositionId % 12)),
+      io7: '37',
+      io8: '62',
       batteryLevel: 62,
     },
   }
@@ -124,7 +157,12 @@ function makePng() {
   header.writeUInt32BE(W, 4)
   header[8] = 8
   header[9] = 6
-  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))])
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', header),
+    chunk('IDAT', zlib.deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
 }
 const PHOTO = makePng()
 
@@ -241,7 +279,16 @@ const server = http.createServer(async (req, res) => {
   if (key === 'POST /api/devices') {
     if (user.deviceReadonly) return json(res, 400, {})
     const body = JSON.parse((await readBody(req)).toString())
-    const device = { id: nextDeviceId++, name: body.name, uniqueId: body.uniqueId, status: 'unknown', lastUpdate: null, disabled: false, model: null, attributes: {} }
+    const device = {
+      id: nextDeviceId++,
+      name: body.name,
+      uniqueId: body.uniqueId,
+      status: 'unknown',
+      lastUpdate: null,
+      disabled: false,
+      model: null,
+      attributes: {},
+    }
     devices.push(device)
     history.set(device.id, [])
     return json(res, 200, device)
@@ -274,10 +321,14 @@ const server = http.createServer(async (req, res) => {
     if (!deviceId) return json(res, 200, latest())
     const from = Date.parse(url.searchParams.get('from') ?? '')
     const to = Date.parse(url.searchParams.get('to') ?? '')
-    return json(res, 200, (history.get(deviceId) ?? []).filter((position) => {
-      const time = Date.parse(position.fixTime)
-      return time >= from && time <= to
-    }))
+    return json(
+      res,
+      200,
+      (history.get(deviceId) ?? []).filter((position) => {
+        const time = Date.parse(position.fixTime)
+        return time >= from && time <= to
+      }),
+    )
   }
 
   if (key === 'GET /api/server/geocode') {
@@ -326,7 +377,10 @@ server.on('upgrade', (req, socket) => {
     socket.end('HTTP/1.1 401 Unauthorized\r\n\r\n')
     return
   }
-  const accept = crypto.createHash('sha1').update(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64')
+  const accept = crypto
+    .createHash('sha1')
+    .update(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+    .digest('base64')
   socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`)
   sockets.add(socket)
   socket.write(frame(JSON.stringify({ devices, positions: latest() })))

@@ -75,7 +75,7 @@ export type Place = { center: LatLon; radius: number; to: number }
  */
 export function mergeOverlappingStays(stays: Place[]): Place[] {
   const places = stays.map(({ center, radius, to }) => ({ center, radius, to }))
-  for (let merged = true; merged; ) {
+  for (let merged = true; merged;) {
     merged = false
     for (let i = 0; i < places.length && !merged; i++) {
       for (let j = i + 1; j < places.length && !merged; j++) {
@@ -308,7 +308,7 @@ function splitWalk(points: TrailPoint[]): TrailPiece[] {
  */
 function mergePlaces(parts: Part[]): Part[] {
   const merged = [...parts]
-  for (let joined = true; joined; ) {
+  for (let joined = true; joined;) {
     joined = false
     for (let k = 0; k + 2 < merged.length; k++) {
       const [a, between, b] = [merged[k]!, merged[k + 1]!, merged[k + 2]!]
@@ -321,9 +321,7 @@ function mergePlaces(parts: Part[]): Part[] {
   for (let k = 0; k < merged.length; k++) {
     const part = merged[k]!
     if (part.stay) continue
-    const neighbour = [merged[k - 1], merged[k + 1]].find(
-      (other) => other?.stay && withinStay(toStay(other.points), part.points, 0),
-    )
+    const neighbour = [merged[k - 1], merged[k + 1]].find((other) => other?.stay && withinStay(toStay(other.points), part.points, 0))
     if (!neighbour) continue
     const before = neighbour === merged[k - 1]
     neighbour.points = before ? [...neighbour.points, ...part.points.slice(1)] : [...part.points.slice(0, -1), ...neighbour.points]

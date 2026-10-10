@@ -137,7 +137,11 @@ describe('classifyTrail', () => {
 
   test('GPS jitter of 100 m in 30 s is not a ride', () => {
     const trip = new Trip().stay(5)
-    trip.points.push({ ...trip.points.at(-1)!, lat: trip.points.at(-1)!.lat + 100 / METERS_PER_DEGREE_LAT, time: trip.points.at(-1)!.time + 30_000 })
+    trip.points.push({
+      ...trip.points.at(-1)!,
+      lat: trip.points.at(-1)!.lat + 100 / METERS_PER_DEGREE_LAT,
+      time: trip.points.at(-1)!.time + 30_000,
+    })
     assert.ok(!kinds(classifyTrail(trip.points)).includes('vehicle'))
   })
 
@@ -168,7 +172,10 @@ describe('classifyTrail', () => {
 
   test('losing GPS indoors without going anywhere is not a ride', () => {
     const pieces = classifyTrail(new Trip().stay(5).indoors(10).stay(5).points)
-    assert.ok(pieces.every((piece) => piece.kind === 'stay' || piece.kind === 'move'), kinds(pieces).join())
+    assert.ok(
+      pieces.every((piece) => piece.kind === 'stay' || piece.kind === 'move'),
+      kinds(pieces).join(),
+    )
   })
 
   test('a ride with GPS goes through its fixes', () => {

@@ -19,11 +19,7 @@ const OPERATORS: Record<string, string> = { '240-01': 'Telia', '240-02': 'Tre', 
 /**
  * `latest` is the device's latest position, `history` its reports from the past hour (any order).
  */
-export function toTrackerDetails(
-  device: TraccarDevice,
-  latest: TraccarPosition | undefined,
-  history: TraccarPosition[],
-): TrackerDetails {
+export function toTrackerDetails(device: TraccarDevice, latest: TraccarPosition | undefined, history: TraccarPosition[]): TrackerDetails {
   const details: TrackerDetails = { status: device.status, lastContact: device.lastUpdate, gps: null }
   if (device.model) details.model = device.model
   if (!latest) return details
@@ -87,7 +83,10 @@ function h02Network(attributes: Record<string, unknown>): { mcc: number; mnc: nu
 /** The median time between consecutive reports, rounded: to 5 s under a minute, else to minutes. */
 function typicalGapSeconds(history: TraccarPosition[]): number | undefined {
   const times = history.map((position) => Date.parse(position.fixTime)).sort((a, b) => a - b)
-  const gaps = times.slice(1).map((time, index) => (time - times[index]!) / 1000).filter((gap) => gap > 0)
+  const gaps = times
+    .slice(1)
+    .map((time, index) => (time - times[index]!) / 1000)
+    .filter((gap) => gap > 0)
   if (gaps.length < 3) return undefined
   gaps.sort((a, b) => a - b)
   const median = gaps[Math.floor(gaps.length / 2)]!

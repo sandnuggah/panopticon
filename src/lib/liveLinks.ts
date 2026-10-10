@@ -33,8 +33,7 @@ function parse(raw: string | null): LiveLink[] {
     const value: unknown = JSON.parse(raw)
     if (!Array.isArray(value)) return none
     return value.filter(
-      (item): item is LiveLink =>
-        typeof item?.link === 'string' && Number.isInteger(item?.assetId) && Number.isFinite(item?.expiresAt),
+      (item): item is LiveLink => typeof item?.link === 'string' && Number.isInteger(item?.assetId) && Number.isFinite(item?.expiresAt),
     )
   } catch {
     return none

@@ -54,8 +54,7 @@ export function AppearanceSettings({ listColors, styles, defaultStyle, followRoa
         ))}
       </List>
       <BlockFooter>
-        How much recent movement the map draws behind each asset. Today is everything since midnight. Saved in this
-        browser only.
+        How much recent movement the map draws behind each asset. Today is everything since midnight. Saved in this browser only.
       </BlockFooter>
       <BlockTitle>Walks</BlockTitle>
       <List strong inset colors={listColors}>
