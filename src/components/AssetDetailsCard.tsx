@@ -5,7 +5,7 @@ import type { Activity, Stay } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { BatteryGauge } from './BatteryGauge'
-import { CARD_BG, CloseButton, moveFocus } from './cards'
+import { CARD_BG, CloseButton, moveFocus, SIDE_PANEL_MAX_HEIGHT, sidePanel, sidePanelClosed } from './cards'
 import { PlaceVisits } from './PlaceVisits'
 import { RelativeTime } from './RelativeTime'
 import { Share } from './Share'
@@ -66,9 +66,11 @@ export function AssetDetailsCard({ asset, activity, stay, address, places, onTop
       role="dialog"
       aria-label={shown?.asset.name ?? 'Asset'}
       inert={!open}
-      className={`absolute inset-x-0 bottom-0 z-20 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out ${open ? '' : 'translate-y-[calc(100%+16px)]'}`}
+      className={`absolute inset-x-0 bottom-0 z-20 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out ${sidePanel('left')} ${open ? '' : `translate-y-[calc(100%+16px)] ${sidePanelClosed('left')}`}`}
     >
-      <div className={`relative max-h-[60dvh] overflow-y-auto rounded-[40px] px-5 pb-5 pt-5 shadow-2xl ${CARD_BG}`}>
+      <div
+        className={`relative max-h-[60dvh] overflow-y-auto rounded-[40px] px-5 pb-5 pt-5 shadow-2xl ${SIDE_PANEL_MAX_HEIGHT} ${CARD_BG}`}
+      >
         <CloseButton ref={closeButton} className="absolute right-4 top-4" onClick={onClose} />
         {shown && <Details {...shown} places={places} open={open} />}
       </div>

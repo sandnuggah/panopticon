@@ -188,8 +188,8 @@ function ShareCard({ asset, open, onSendLocation, onShareLive, onClose }: CardPr
   return (
     <>
       <Backdrop shown={open} z="z-50" onClick={onClose} />
-      <section role="dialog" aria-modal="true" aria-label="Share" inert={!open} className={pageCardClass(open)}>
-        <div className={`flex h-full flex-col overflow-clip rounded-t-[40px] shadow-2xl ${CARD_BG}`}>
+      <section role="dialog" aria-modal="true" aria-label="Share" inert={!open} className={pageCardClass(open, 'left')}>
+        <div className={`flex h-full flex-col overflow-clip rounded-t-[40px] shadow-2xl lg:rounded-[40px] ${CARD_BG}`}>
           <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-5">
             <h2 className="truncate text-[calc(0.7rem+22px)] font-bold">Share</h2>
             <CloseButton ref={close} onClick={onClose} />

@@ -9,6 +9,7 @@ import { PlaceEditor } from '../components/PlaceEditor'
 import { parseSettingsView, SettingsCard, type SettingsView } from '../components/SettingsCard'
 import { visitSentence, type PlaceVisit } from '../lib/places'
 import type { LatLon } from '../lib/segments'
+import type { Inset } from '../components/map/PlacePicker'
 import { useSettings } from '../lib/settings'
 import { useAddress } from '../lib/useAddress'
 import { useLiveAssets } from '../lib/useLiveAssets'
@@ -111,11 +112,11 @@ function Home() {
   const editing = editedPlace !== undefined
   const placeKey = String(editedPlace)
   const place = editedPlace === 'new' ? null : places.find((candidate) => candidate.id === editedPlace)
-  const [pick, setPick] = useState<{ key: string; radius: number; center: LatLon | null; inset: number }>({
+  const [pick, setPick] = useState<{ key: string; radius: number; center: LatLon | null; inset: Inset }>({
     key: '',
     radius: 100,
     center: null,
-    inset: 0,
+    inset: { bottom: 0, right: 0 },
   })
   // Each place opened starts from its own circle (state reset during render: React's derived-state pattern).
   if (editing && place !== undefined && pick.key !== placeKey) {
@@ -123,7 +124,13 @@ function Home() {
   }
   const setRadius = useCallback((radius: number) => setPick((current) => ({ ...current, radius })), [])
   const setCenter = useCallback((center: LatLon) => setPick((current) => ({ ...current, center })), [])
-  const setInset = useCallback((inset: number) => setPick((current) => (current.inset === inset ? current : { ...current, inset })), [])
+  const setInset = useCallback(
+    (inset: Inset) =>
+      setPick((current) =>
+        current.inset.bottom === inset.bottom && current.inset.right === inset.right ? current : { ...current, inset },
+      ),
+    [],
+  )
 
   const openPlace = (id: number | 'new') => cards.open('place', (prev) => ({ settings: prev.settings, place: id }))
   const closePlace = () => cards.close('place', ({ place: _, ...rest }) => rest)
@@ -200,7 +207,7 @@ function Home() {
                       start: place?.area ?? null,
                       startKey: placeKey,
                       radius: place === null || place.area.kind === 'circle' ? pick.radius : null,
-                      bottomInset: pick.inset,
+                      inset: pick.inset,
                       onCenter: setCenter,
                     }
                   : null
@@ -258,7 +265,7 @@ function Home() {
           radius={pick.radius}
           onRadiusChange={setRadius}
           center={pick.center}
-          onHeight={setInset}
+          onInset={setInset}
           onClose={closePlace}
         />
       )}

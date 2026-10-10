@@ -12,7 +12,7 @@ import { AddAssetForm } from './AddAssetForm'
 import { Appearance } from './Appearance'
 import { AssetEditor } from './AssetEditor'
 import { AssetsList } from './AssetsList'
-import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass, ROWS } from './cards'
+import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass, ROWS, SIDE_PANEL_MAX_HEIGHT, sidePanel, sidePanelClosed } from './cards'
 import { AlertsPage } from './AlertsPage'
 import { AppearanceIcon, BackIcon, BellIcon, ListIcon, LiveIcon, PersonIcon, PinIcon } from './icons'
 import { LiveLinksList } from './LiveLinksList'
@@ -158,11 +158,11 @@ export function SettingsCard({
         aria-modal="true"
         aria-label="Settings"
         inert={!open || pageOpen}
-        className={`absolute inset-x-0 bottom-0 z-40 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out ${open ? '' : 'translate-y-full'}`}
+        className={`absolute inset-x-0 bottom-0 z-40 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out ${sidePanel('right')} ${open ? '' : `translate-y-full ${sidePanelClosed('right')}`}`}
       >
         {/* As tall as the main list and the map credits under it, at any text size; it scrolls on short screens. */}
         <div
-          className={`relative max-h-[calc(100dvh-env(safe-area-inset-top)-96px)] overflow-y-auto rounded-[40px] pt-5 shadow-2xl ${CARD_BG}`}
+          className={`relative max-h-[calc(100dvh-env(safe-area-inset-top)-96px)] overflow-y-auto rounded-[40px] pt-5 shadow-2xl ${SIDE_PANEL_MAX_HEIGHT} ${CARD_BG}`}
         >
           <CloseButton ref={settingsClose} className="absolute right-4 top-4 z-10" onClick={onClose} />
           <MainView user={user} assetCount={assets.length} placeCount={places.length} attribution={attribution} onShow={onShow} />
@@ -172,7 +172,7 @@ export function SettingsCard({
       {/* The page card, over the Settings card, from just below the status bar to the bottom. */}
       <Backdrop shown={pageOpen} z="z-50" onClick={onClosePage} />
       <section role="dialog" aria-modal="true" aria-label={title} inert={!pageOpen} className={pageCardClass(pageOpen)}>
-        <div className={`flex h-full flex-col overflow-clip rounded-t-[40px] shadow-2xl ${CARD_BG}`}>
+        <div className={`flex h-full flex-col overflow-clip rounded-t-[40px] shadow-2xl lg:rounded-[40px] ${CARD_BG}`}>
           {insideAssets(page) ? (
             // One size whatever the text size, like iOS's navigation bars.
             <div className="relative flex h-15 shrink-0 items-center justify-between px-4 pt-4 text-[length:17px]">

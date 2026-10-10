@@ -45,9 +45,39 @@ export function CloseButton({ ref, className = '', onClick }: { ref?: Ref<HTMLBu
 }
 
 /**
- * The full-height class of a second-level card: from just below the status bar to the bottom of the
- * screen, over the card it came from, sliding up from below while it opens.
+ * On a wide screen (lg, 1024 px and up) the cards are side panels instead of sheets from the bottom,
+ * like Apple Maps' sidebar on a Mac: 380 px wide, from below the Live pill and the update notice
+ * down to above the bottom bar, on the side of what opened them: an asset's cards on the left (its
+ * picture is at the bottom left), Settings' on the right (its button is at the bottom right).
  */
-export function pageCardClass(open: boolean): string {
-  return `absolute inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+8px)] z-60 mx-auto max-w-xl px-2 transition-transform duration-300 ease-out ${open ? '' : 'translate-y-[calc(100%+16px)]'}`
+export type Side = 'left' | 'right'
+
+/** Where a card goes on a wide screen; `fill`: down to above the bottom bar, else as tall as its content. */
+export function sidePanel(side: Side, fill = false): string {
+  return `lg:inset-x-auto lg:top-[calc(env(safe-area-inset-top)+60px)] lg:mx-0 lg:w-[380px] lg:max-w-none lg:px-0 lg:pb-0 ${
+    fill ? 'lg:bottom-[100px]' : 'lg:bottom-auto'
+  } ${side === 'left' ? 'lg:left-3 lg:right-auto' : 'lg:right-3 lg:left-auto'}`
+}
+
+/** A side panel's card slides in from its side instead of from below. */
+export function sidePanelClosed(side: Side): string {
+  return `lg:translate-y-0 ${side === 'left' ? 'lg:-translate-x-[calc(100%+24px)]' : 'lg:translate-x-[calc(100%+24px)]'}`
+}
+
+/** The tallest a content-height card gets in a side panel: down to above the bottom bar. */
+export const SIDE_PANEL_MAX_HEIGHT = 'lg:max-h-[calc(100dvh-env(safe-area-inset-top)-160px)]'
+
+/**
+ * For a right-hand panel that leaves the map usable (the place editor): down to above the zoom
+ * buttons, which sit above Settings at the bottom right.
+ */
+export const SIDE_PANEL_ABOVE_ZOOM = 'lg:max-h-[calc(100dvh-env(safe-area-inset-top)-284px)]'
+
+/**
+ * The full-height class of a second-level card: from just below the status bar to the bottom of the
+ * screen, over the card it came from, sliding up from below while it opens. On a wide screen, a
+ * full-height side panel over the card it came from.
+ */
+export function pageCardClass(open: boolean, side: Side = 'right'): string {
+  return `absolute inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+8px)] z-60 mx-auto max-w-xl px-2 transition-transform duration-300 ease-out ${sidePanel(side, true)} ${open ? '' : `translate-y-[calc(100%+16px)] ${sidePanelClosed(side)}`}`
 }

@@ -7,7 +7,8 @@ import type { LatLon } from '../lib/segments'
 import { getManagedAssets } from '../server/manage.functions'
 import { deletePlace, savePlaceChange } from '../server/places.functions'
 import type { EditResult } from '../server/manage.server'
-import { CARD_BG, CloseButton, moveFocus, ROWS } from './cards'
+import type { Inset } from './map/PlacePicker'
+import { CARD_BG, CloseButton, moveFocus, ROWS, SIDE_PANEL_ABOVE_ZOOM, sidePanel } from './cards'
 
 type Managed = Awaited<ReturnType<typeof getManagedAssets>>
 
@@ -19,8 +20,8 @@ type Props = {
   onRadiusChange: (radius: number) => void
   /** The middle of the visible map, where the circle is (see PlacePicker). */
   center: LatLon | null
-  /** How tall the card is, so the map can keep the circle in the part above it. */
-  onHeight: (pixels: number) => void
+  /** How much of the map the card covers, so the map can keep the circle in the rest (see PlacePicker). */
+  onInset: (inset: Inset) => void
   /** Back to the list of places, after saving, removing or cancelling. */
   onClose: () => void
 }
@@ -30,7 +31,7 @@ type Props = {
  * places the circle (PlacePicker): its name, size, and which assets it's for. Polygons drawn in
  * Traccar can be renamed and given to assets, but their shape is changed in Traccar.
  */
-export function PlaceEditor({ place, radius, onRadiusChange, center, onHeight, onClose }: Props) {
+export function PlaceEditor({ place, radius, onRadiusChange, center, onInset, onClose }: Props) {
   const router = useRouter()
   const card = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
@@ -67,16 +68,25 @@ export function PlaceEditor({ place, radius, onRadiusChange, center, onHeight, o
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // The card's height, for the map; it changes with an error message or the text size.
+  // What the card covers, for the map: the bottom on a phone (its height changes with an error
+  // message or the text size), the right side on a wide screen, where it's a side panel.
   useLayoutEffect(() => {
     const element = card.current
     if (!element) return
-    const report = () => onHeight(element.getBoundingClientRect().height + 8)
+    const report = () => {
+      const rect = element.getBoundingClientRect()
+      const side = window.matchMedia('(min-width: 1024px)').matches
+      onInset(side ? { bottom: 0, right: window.innerWidth - rect.left + 12 } : { bottom: rect.height + 8, right: 0 })
+    }
     report()
     const observer = new ResizeObserver(report)
     observer.observe(element)
-    return () => observer.disconnect()
-  }, [onHeight])
+    window.addEventListener('resize', report)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', report)
+    }
+  }, [onInset])
 
   async function run(call: () => Promise<EditResult>) {
     setStatus({ kind: 'busy' })
@@ -119,9 +129,12 @@ export function PlaceEditor({ place, radius, onRadiusChange, center, onHeight, o
     <section
       role="dialog"
       aria-label={place ? `Edit ${place.name}` : 'New place'}
-      className="absolute inset-x-0 bottom-0 z-30 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))]"
+      className={`absolute inset-x-0 bottom-0 z-30 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] ${sidePanel('right')}`}
     >
-      <div ref={card} className={`relative max-h-[50dvh] overflow-y-auto rounded-[40px] pt-4 pb-2 shadow-2xl ${CARD_BG}`}>
+      <div
+        ref={card}
+        className={`relative max-h-[50dvh] overflow-y-auto rounded-[40px] pt-4 pb-2 shadow-2xl ${SIDE_PANEL_ABOVE_ZOOM} ${CARD_BG}`}
+      >
         <div className="flex items-center gap-2 pl-5 pr-4">
           <h2 className="min-w-0 flex-1 text-xl font-bold break-words">{place ? place.name : 'New place'}</h2>
           {canEdit && (
