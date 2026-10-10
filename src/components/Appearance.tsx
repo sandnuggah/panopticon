@@ -2,6 +2,7 @@ import { BlockFooter, BlockTitle, List, ListItem, Toggle } from 'konsta/react'
 import { AUTO_STYLE, type MapStyle } from '../lib/mapStyles'
 import { useSettings } from '../lib/settings'
 import { TRAIL_OPTIONS, trailLabel } from '../lib/trail'
+import { CheckIcon } from './icons'
 
 type Props = {
   listColors?: { strongBgIos: string }
@@ -83,13 +84,5 @@ export function Appearance({ listColors, styles, defaultStyle, canSnapToPaths }:
         Saved in this browser only.
       </BlockFooter>
     </>
-  )
-}
-
-function CheckIcon() {
-  return (
-    <svg className="size-5 text-primary" viewBox="0 0 20 20" aria-label="Selected" role="img">
-      <path d="M4 10.5 8 14.5 16 5.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   )
 }

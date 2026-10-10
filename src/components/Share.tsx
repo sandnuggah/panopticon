@@ -9,6 +9,7 @@ import { shareOrCopy } from '../lib/shareSheet'
 import { useNow } from '../lib/useNow'
 import { createLink } from '../server/liveLinks.functions'
 import { Backdrop, CARD_BG, CloseButton, pageCardClass, ROWS } from './cards'
+import { ShareIcon } from './icons'
 
 type Props = {
   asset: Asset
@@ -225,21 +226,5 @@ function ShareCard({ asset, open, onSendLocation, onShareLive, onClose }: CardPr
         </div>
       </section>
     </>
-  )
-}
-
-/** A box with an arrow out of it, the usual share symbol. Decorative; the label says it. */
-function ShareIcon() {
-  return (
-    <svg className="mr-1.5 size-4" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 10V1.75M5 4.5l3-3 3 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path
-        d="M5.5 6.75H4.25a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1H10.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
   )
 }

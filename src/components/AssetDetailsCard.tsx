@@ -4,6 +4,7 @@ import type { Activity, Stay } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { BatteryGauge } from './BatteryGauge'
+import { CARD_BG, CloseButton } from './cards'
 import { RelativeTime } from './RelativeTime'
 import { Share } from './Share'
 
@@ -55,18 +56,8 @@ export function AssetDetailsCard({ asset, activity, stay, address, onTop, onClos
       inert={!open}
       className={`absolute inset-x-0 bottom-0 z-20 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))] transition-transform duration-300 ease-out ${open ? '' : 'translate-y-[calc(100%+16px)]'}`}
     >
-      <div className="relative max-h-[60dvh] overflow-y-auto rounded-[2.5rem] px-5 pb-5 pt-5 shadow-2xl ios:bg-ios-light-surface ios:dark:bg-[#1c1c1e] material:bg-md-light-surface-1 material:dark:bg-md-dark-surface-1">
-        <button
-          ref={closeButton}
-          type="button"
-          className="absolute right-4 top-4 grid size-11 place-items-center rounded-full bg-black/5 active:opacity-60 dark:bg-white/10"
-          aria-label="Close"
-          onClick={onClose}
-        >
-          <svg className="size-5" viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-          </svg>
-        </button>
+      <div className={`relative max-h-[60dvh] overflow-y-auto rounded-[2.5rem] px-5 pb-5 pt-5 shadow-2xl ${CARD_BG}`}>
+        <CloseButton ref={closeButton} className="absolute right-4 top-4" onClick={onClose} />
         {shown && <Details {...shown} open={open} />}
       </div>
     </section>

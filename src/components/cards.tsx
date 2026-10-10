@@ -1,6 +1,7 @@
 import type { Ref } from 'react'
+import { CloseIcon } from './icons'
 
-// The pieces the map screen's cards share (BottomBar.tsx, Share.tsx), so they look alike.
+// The pieces the map screen's cards share (SettingsCard, AssetDetailsCard, Share), so they look alike.
 
 /** A card's background: Konsta's grouped-list surface, a step darker than its rows in dark mode. */
 export const CARD_BG = 'ios:bg-ios-light-surface ios:dark:bg-[#1c1c1e] material:bg-md-light-surface-1 material:dark:bg-md-dark-surface-1'
@@ -29,9 +30,7 @@ export function CloseButton({ ref, className = '', onClick }: { ref?: Ref<HTMLBu
       aria-label="Close"
       onClick={onClick}
     >
-      <svg className="size-5" viewBox="0 0 20 20" aria-hidden="true">
-        <path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      </svg>
+      <CloseIcon />
     </button>
   )
 }

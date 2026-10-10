@@ -2,7 +2,8 @@ import { lazy, Suspense, useRef, useState } from 'react'
 import { ClientOnly, createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { AssetDetailsCard } from '../components/AssetDetailsCard'
 import { LiveIndicator } from '../components/LiveIndicator'
-import { parseSettingsView, BottomBar, type SettingsView } from '../components/BottomBar'
+import { BottomBar } from '../components/BottomBar'
+import { parseSettingsView, SettingsCard, type SettingsView } from '../components/SettingsCard'
 import { useSettings } from '../lib/settings'
 import { useAddress } from '../lib/useAddress'
 import { useLiveAssets } from '../lib/useLiveAssets'
@@ -60,6 +61,8 @@ function Home() {
   const [focusToken, setFocusToken] = useState(0)
   // Your own position on the map, turned on and off from the bottom bar.
   const [showMe, setShowMe] = useState(false)
+  // The bottom bar's Settings button, which gets focus back when the Settings card closes.
+  const settingsButton = useRef<HTMLButtonElement>(null)
   // The map data's credits, shown in the Settings card instead of on the map.
   const [attribution, setAttribution] = useState<string[]>([])
   const [settings, , settingsLoaded] = useSettings()
@@ -163,20 +166,27 @@ function Home() {
         onClose={closeDetails}
       />
       <BottomBar
-        user={user}
+        userName={user.name}
         assets={assets}
         selectedId={selectedId}
         onAssetTap={tapAsset}
-        attribution={attribution}
-        mapStyles={loaderData.mapOptions}
-        canSnapToPaths={loaderData.mapOptions.canSnapToPaths}
         showMe={showMe}
         onToggleMe={() => setShowMe((on) => !on)}
+        settingsOpen={cardView !== undefined}
+        onOpenSettings={openSettings}
+        settingsButton={settingsButton}
+      />
+      <SettingsCard
+        user={user}
+        assets={assets}
+        mapStyles={loaderData.mapOptions}
+        canSnapToPaths={loaderData.mapOptions.canSnapToPaths}
+        attribution={attribution}
         view={cardView}
-        onOpen={openSettings}
         onShow={showSettings}
         onClosePage={closePage}
         onClose={closeSettings}
+        returnFocus={settingsButton}
       />
     </main>
   )

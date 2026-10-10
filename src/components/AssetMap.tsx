@@ -14,6 +14,7 @@ import { resolveStyle, type MapStyle } from '../lib/mapStyles'
 import { useSettings } from '../lib/settings'
 import { MapButtonControl } from './mapControls'
 import { addMyPositionLayer, createMyPositionDot, MY_POSITION_ICON, setAccuracyCircle } from './myPosition'
+import { MinusIcon, PlusIcon } from './icons'
 
 setWorkerUrl(workerUrl)
 
@@ -429,15 +430,11 @@ function ZoomButtons({ map }: { map: { current: MapLibreMap | null } }) {
       <div className="mx-auto flex max-w-xl justify-end">
         <div className="pointer-events-auto flex flex-col items-center rounded-full shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2">
           <button type="button" className={button} aria-label="Zoom in" onClick={() => map.current?.zoomIn()}>
-            <svg className="size-5" viewBox="0 0 20 20" aria-hidden="true">
-              <path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-            </svg>
+            <PlusIcon />
           </button>
           <span className="h-px w-6 bg-black/10 dark:bg-white/15" aria-hidden="true" />
           <button type="button" className={button} aria-label="Zoom out" onClick={() => map.current?.zoomOut()}>
-            <svg className="size-5" viewBox="0 0 20 20" aria-hidden="true">
-              <path d="M4 10h12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-            </svg>
+            <MinusIcon />
           </button>
         </div>
       </div>
