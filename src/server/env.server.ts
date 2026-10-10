@@ -7,7 +7,7 @@ type Env = {
   mapStyleUrl: string
   /** Origins the map may load from (CSP): the style's own, plus MAP_EXTRA_ORIGINS. */
   mapOrigins: string[]
-  /** Valhalla for "Follow roads" (MAP_MATCHING_URL); without it, the setting isn't offered. */
+  /** Valhalla for Snap to paths (MAP_MATCHING_URL); without it, the switch is greyed out. */
   mapMatchingUrl: string | undefined
 }
 

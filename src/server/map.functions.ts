@@ -8,11 +8,11 @@ import { withToken } from './session.server'
 
 /**
  * The map styles to choose between, from MAP_STYLE_URL (not secret; it lives in env so it can point
- * at a self-hosted tile server), and whether "Follow roads" is available (MAP_MATCHING_URL is set).
+ * at a self-hosted tile server), and whether Snap to paths is available (MAP_MATCHING_URL is set).
  */
 export const getMapOptions = createServerFn({ method: 'GET' }).handler(() => ({
   ...mapStylesFor(env().mapStyleUrl),
-  followRoads: env().mapMatchingUrl !== undefined,
+  canSnapToPaths: env().mapMatchingUrl !== undefined,
 }))
 
 /** Snaps walks to streets and paths; null for each walk that can't be snapped closely enough. */

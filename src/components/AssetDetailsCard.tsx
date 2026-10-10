@@ -5,7 +5,7 @@ import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { BatteryGauge } from './BatteryGauge'
 import { RelativeTime } from './RelativeTime'
-import { ShareMenu } from './ShareMenu'
+import { Share } from './Share'
 
 type Props = {
   /** The asset to show, or undefined while the card is closed. */
@@ -26,7 +26,7 @@ type Props = {
  * tapping its picture in the bottom bar a second time. No backdrop: the map stays in view and can
  * be moved. Absolute inside the map screen, like the Settings card (see BottomBar.tsx).
  */
-export function AssetCard({ asset, activity, stay, address, onTop, onClose }: Props) {
+export function AssetDetailsCard({ asset, activity, stay, address, onTop, onClose }: Props) {
   const open = asset !== undefined
   const closeButton = useRef<HTMLButtonElement>(null)
   // While the card slides away it keeps showing what it showed.
@@ -121,7 +121,7 @@ function Details({
         {/* Trackers that report volts only: shown as text, since volts don't map to bars reliably. */}
         {percent === undefined && asset.battery?.volts !== undefined && <p className="opacity-60">Battery {asset.battery.volts} V</p>}
       </div>
-      <ShareMenu asset={asset} address={address} active={open} />
+      <Share asset={asset} address={address} active={open} />
     </>
   )
 }

@@ -13,7 +13,7 @@ import { AssetEditor } from './AssetEditor'
 import { AssetsList } from './AssetsList'
 import { Backdrop, CARD_BG, CloseButton, pageCardClass, ROWS } from './cards'
 import { LiveLinksList } from './LiveLinksList'
-import { AppearanceSettings } from './Appearance'
+import { Appearance } from './Appearance'
 
 /**
  * What's open: the Settings card alone (`main`), or the page card over it. Assets opens the list of
@@ -47,8 +47,8 @@ type Props = {
   onAssetTap: (id: number) => void
   /** The map styles to choose between, and the server's default (see mapStyles.ts). */
   mapStyles: { styles: MapStyle[]; defaultStyle: string }
-  /** Whether the server has map matching, so Follow roads can be offered. */
-  followRoads: boolean
+  /** Whether the server has map matching, so Snap to paths can be turned on. */
+  canSnapToPaths: boolean
   /** The map data's credits, HTML from the map style's sources (see AssetMap's onAttribution). */
   attribution: string[]
   /** Whether your own position shows on the map, and the bar's button that turns it on and off. */
@@ -83,7 +83,7 @@ export function BottomBar({
   onAssetTap,
   attribution,
   mapStyles,
-  followRoads,
+  canSnapToPaths,
   showMe,
   onToggleMe,
   view,
@@ -244,7 +244,7 @@ export function BottomBar({
             </div>
           )}
           <div key={page} className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-[env(safe-area-inset-bottom)] ${slide}`}>
-            {page === 'appearance' && <AppearanceSettings listColors={ROWS} {...mapStyles} followRoads={followRoads} />}
+            {page === 'appearance' && <Appearance listColors={ROWS} {...mapStyles} canSnapToPaths={canSnapToPaths} />}
             {page === 'live-links' && <LiveLinksList listColors={ROWS} />}
             {page === 'account' && <AccountView user={user} />}
             {page === 'assets' && <AssetsList listColors={ROWS} onOpen={(id) => onShow(`asset-${id}`)} onAdd={() => onShow('add-asset')} />}

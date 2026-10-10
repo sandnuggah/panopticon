@@ -1,6 +1,6 @@
 import { lazy, Suspense, useRef, useState } from 'react'
 import { ClientOnly, createFileRoute, redirect, useRouter } from '@tanstack/react-router'
-import { AssetCard } from '../components/AssetCard'
+import { AssetDetailsCard } from '../components/AssetDetailsCard'
 import { LiveIndicator } from '../components/LiveIndicator'
 import { parseSettingsView, BottomBar, type SettingsView } from '../components/BottomBar'
 import { useSettings } from '../lib/settings'
@@ -64,7 +64,7 @@ function Home() {
   const [attribution, setAttribution] = useState<string[]>([])
   const [settings, , settingsLoaded] = useSettings()
   const { assets, trails, activities, stays, status } = useLiveAssets(loaderData.assets, settingsLoaded ? settings.trail : null)
-  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.followRoads && settings.followRoads)
+  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
 
@@ -154,7 +154,7 @@ function Home() {
           </Suspense>
         </ClientOnly>
       </div>
-      <AssetCard
+      <AssetDetailsCard
         asset={details ? selected : undefined}
         activity={selectedId !== undefined ? activities[selectedId] : undefined}
         stay={selectedId !== undefined ? stays[selectedId] : undefined}
@@ -169,7 +169,7 @@ function Home() {
         onAssetTap={tapAsset}
         attribution={attribution}
         mapStyles={loaderData.mapOptions}
-        followRoads={loaderData.mapOptions.followRoads}
+        canSnapToPaths={loaderData.mapOptions.canSnapToPaths}
         showMe={showMe}
         onToggleMe={() => setShowMe((on) => !on)}
         view={cardView}

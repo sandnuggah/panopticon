@@ -17,7 +17,7 @@ services:
       SESSION_DAYS: ${SESSION_DAYS:-30}
       MAP_STYLE_URL: ${MAP_STYLE_URL:-}
       MAP_EXTRA_ORIGINS: ${MAP_EXTRA_ORIGINS:-}
-      # Valhalla for "Follow roads", e.g. http://valhalla:8002 (see README.md). Optional.
+      # Valhalla for Snap to paths, e.g. http://valhalla:8002 (see README.md). Optional.
       MAP_MATCHING_URL: ${MAP_MATCHING_URL:-}
     ports:
       # Only the reverse proxy on this host should reach it. If your proxy runs in Docker,

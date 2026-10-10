@@ -8,7 +8,7 @@ import type { Trails } from './trail'
 const DEBOUNCE_MS = 1_000
 
 /**
- * "Follow roads": the walks on these trails snapped to streets and paths, by walk key (see
+ * Snap to paths: the walks on these trails snapped to streets and paths, by walk key (see
  * matching.ts). Walks the server can't snap closely enough are simply missing, and drawn as recorded.
  */
 export function useSnappedWalks(trails: Trails, enabled: boolean): Record<string, LatLon[]> {

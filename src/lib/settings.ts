@@ -8,7 +8,7 @@ export type Settings = {
   /** How much movement to draw behind each asset. */
   trail: TrailLength
   /** Snap walks on the trail to streets and paths, when the server offers it. */
-  followRoads: boolean
+  snapToPaths: boolean
   /** Draw walks as paw prints instead of a line. */
   pawPrints: boolean
   /** The map style's id, or Auto (see mapStyles.ts); unset means the server's default. */
@@ -16,7 +16,7 @@ export type Settings = {
 }
 
 const STORAGE_KEY = 'panopticon.settings'
-const DEFAULTS: Settings = { trail: DEFAULT_TRAIL, followRoads: false, pawPrints: false }
+const DEFAULTS: Settings = { trail: DEFAULT_TRAIL, snapToPaths: false, pawPrints: false }
 
 const listeners = new Set<() => void>()
 let cachedRaw: string | null | undefined
@@ -40,9 +40,11 @@ function parse(raw: string | null): Settings {
   if (!raw) return DEFAULTS
   try {
     // `trailMinutes` is what the trail length was saved as before "today" existed.
-    const value = JSON.parse(raw) as Partial<Settings> & { trailMinutes?: unknown }
+    const value = JSON.parse(raw) as Partial<Settings> & { trailMinutes?: unknown; followRoads?: unknown }
     const trail = nearestTrail(value.trail ?? value.trailMinutes) ?? DEFAULTS.trail
-    const settings: Settings = { trail, followRoads: value.followRoads === true, pawPrints: value.pawPrints === true }
+    // `followRoads` is what Snap to paths was saved as before it was renamed.
+    const snapToPaths = typeof value.snapToPaths === 'boolean' ? value.snapToPaths : value.followRoads === true
+    const settings: Settings = { trail, snapToPaths, pawPrints: value.pawPrints === true }
     if (typeof value.mapStyle === 'string') settings.mapStyle = value.mapStyle
     return settings
   } catch {

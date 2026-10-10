@@ -8,16 +8,16 @@ type Props = {
   /** The map styles to choose between (see mapStyles.ts); one style means there's no choice. */
   styles: MapStyle[]
   defaultStyle: string
-  /** Whether the server has map matching (MAP_MATCHING_URL), so Follow roads can be offered. */
-  followRoads: boolean
+  /** Whether the server has map matching (MAP_MATCHING_URL), so Snap to paths can be turned on. */
+  canSnapToPaths: boolean
 }
 
 /**
  * How the map looks: its style, how much recent movement it draws behind each asset, and how walks
- * are drawn (as paw prints, and snapped to paths: "Follow roads" in the code). Checkmark lists and
+ * are drawn (as paw prints, and snapped to paths). Checkmark lists and
  * switches, like iOS Settings.
  */
-export function AppearanceSettings({ listColors, styles, defaultStyle, followRoads }: Props) {
+export function Appearance({ listColors, styles, defaultStyle, canSnapToPaths }: Props) {
   const [settings, updateSettings] = useSettings()
   const styleChoice = settings.mapStyle ?? defaultStyle
   return (
@@ -65,19 +65,19 @@ export function AppearanceSettings({ listColors, styles, defaultStyle, followRoa
         {/* Greyed out without a map-matching server (MAP_MATCHING_URL), which does the snapping. */}
         <ListItem
           title="Snap to paths"
-          className={followRoads ? undefined : 'opacity-50'}
+          className={canSnapToPaths ? undefined : 'opacity-50'}
           after={
             <Toggle
-              checked={followRoads && settings.followRoads}
-              disabled={!followRoads}
-              onChange={() => updateSettings({ followRoads: !settings.followRoads })}
+              checked={canSnapToPaths && settings.snapToPaths}
+              disabled={!canSnapToPaths}
+              onChange={() => updateSettings({ snapToPaths: !settings.snapToPaths })}
             />
           }
         />
       </List>
       <BlockFooter>
         Paw prints draws walks as a dog's tracks instead of a line.{' '}
-        {followRoads
+        {canSnapToPaths
           ? 'Snap to paths draws them along the streets and paths they most likely took, instead of straight lines between GPS fixes.'
           : "Snap to paths draws them along the streets and paths they most likely took, but needs a map-matching server, which this one doesn't have (MAP_MATCHING_URL)."}{' '}
         Saved in this browser only.

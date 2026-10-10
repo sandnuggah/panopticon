@@ -26,7 +26,7 @@ const NOTICE_MS = 3_000
  * into the map screen (a portal), so it covers the screen rather than the details card it's in. While a live link made in this browser is active, Sharing live beside it
  * opens Settings → Live links, where links are stopped.
  */
-export function ShareMenu({ asset, address, active }: Props) {
+export function Share({ asset, address, active }: Props) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   // A link Safari wouldn't share straight after it was made: the button sends it on the next tap.

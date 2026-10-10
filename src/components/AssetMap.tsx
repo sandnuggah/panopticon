@@ -41,7 +41,7 @@ const MY_POSITION_ZOOM = 16
 type Props = {
   assets: Asset[]
   trails: Trails
-  /** "Follow roads": walks snapped to streets and paths, by walk key; others are drawn as recorded. */
+  /** Snap to paths: walks snapped to streets and paths, by walk key; others are drawn as recorded. */
   snappedWalks: Record<string, LatLon[]>
   /** The map styles to choose between (see mapStyles.ts), and the default. */
   styles: MapStyle[]
@@ -600,7 +600,7 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
     const stays: Place[] = []
     for (const piece of classifyTrail(points)) {
       if (piece.kind === 'move') {
-        const walk = alongRoads(piece.points, snappedWalks[walkKey(piece.points)])
+        const walk = alongPaths(piece.points, snappedWalks[walkKey(piece.points)])
         for (let i = 0; i < walk.length - 1; i += HOPS_PER_PIECE) {
           const chunk = walk.slice(i, i + HOPS_PER_PIECE + 1)
           trail.push(line('move', chunk, chunk.at(-1)!.time))
@@ -628,10 +628,10 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
 }
 
 /**
- * A walk as drawn: the snapped line when "Follow roads" has one, else the fixes as recorded. The
+ * A walk as drawn: the snapped line when Snap to paths has one, else the fixes as recorded. The
  * snapped line has no times, so they're spread evenly between the walk's first and last fix, for fading.
  */
-function alongRoads(points: TrailPoint[], snapped: LatLon[] | undefined): (LatLon & { time: number })[] {
+function alongPaths(points: TrailPoint[], snapped: LatLon[] | undefined): (LatLon & { time: number })[] {
   if (!snapped || snapped.length < 2) return points
   const [from, to] = [points[0]!.time, points.at(-1)!.time]
   return snapped.map((point, index) => ({

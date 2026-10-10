@@ -147,9 +147,9 @@ The trail is split using only the tracker's own reports: speed between fixes, ga
 - **Limits:** a bus, a car and an above-ground train all read as "vehicle". A car in a road tunnel (Norra länken) reads as "underground", which is literally true. Telling subway from train or tram would need stop locations from OpenStreetMap for a configurable area; not built.
 - **Tests:** `npm test` runs `segments.test.ts` with Node's own test runner (Node 24 runs TypeScript directly). The data is a made-up trip in the same shape; real location data never goes in the repo.
 
-### Follow roads (map matching)
+### Snap to paths (map matching)
 
-Optional: with `MAP_MATCHING_URL` set, the Appearance page offers **Snap to paths** ("Follow roads" in the code; off by default, per browser; greyed out without the server). Walks are then drawn along the streets and paths they most likely took, instead of straight lines between GPS fixes. Rides and stays are unchanged.
+Optional: with `MAP_MATCHING_URL` set, the Appearance page offers **Snap to paths** (off by default, per browser; greyed out without the server). Walks are then drawn along the streets and paths they most likely took, instead of straight lines between GPS fixes. Rides and stays are unchanged.
 
 - **Engine:** [Valhalla](https://github.com/valhalla/valhalla), self-hosted next to Traccar (see README.md), built from an OpenStreetMap extract. `trace_route` with pedestrian costing, so footpaths and parks count. Only panopticon's server talks to it; trail points never go to a third party, and the browser and CSP are unchanged.
 - **Which walks** (`src/lib/matching.ts`, in the browser): `move` pieces from the classifier that end at least 75 m from where they started (wandering around a yard never qualifies), with standing-still jitter (points within 15 m of the previous) dropped, and at least 3 points left.
@@ -229,7 +229,7 @@ In the app:
 
 ## Tracker details
 
-Each asset's page under **Assets** (the Settings card) has a **Tracker** section, below Name, about the tracker itself (`TrackerDetails.tsx`), for anyone who can see the asset, including accounts that can't change it.
+Each asset's page under **Assets** (the Settings card) has a **Tracker** section, below Name, about the tracker itself (`TrackerSection.tsx`), for anyone who can see the asset, including accounts that can't change it.
 
 | Row | From |
 |---|---|
@@ -251,14 +251,14 @@ The look is [Konsta UI](https://konstaui.com): native-looking iOS and Material c
 
 - **Pages:** `/login`, and `/`, the map, whose Settings card holds the settings and [managing assets](#managing-assets). `/s/<link>` is a [live location link](#sharing), the only page that doesn't need signing in. The selected asset and the Settings card's view are search params (`/?asset=12&settings=asset-30`), so they survive a reload.
 - **Map screen:** the map fills the screen, with a bar floating along the bottom like Apple Maps' search bar (`BottomBar.tsx`): the your-position button at its left end, each asset's picture (scrolling sideways when there are many; stale ones grey), and the Settings button (the signed-in user's initial) at its right. The map's zoom buttons sit above the bar, and fitting the map to assets leaves room for it (`clearOfBottom` in AssetMap).
-  - **Asset pictures:** the first tap selects the asset and centres the map on it (and follows it, as selecting on the map does). Tapping the selected asset's picture again re-centres it and opens its **details card** (`AssetCard.tsx`) from the bottom, like Apple Maps' place card: its picture, name, status and battery, then what it's doing, the address, when it was seen, and **Share**. The card has no backdrop, so the map can still be moved; ✕, Escape or the back gesture closes it (`?details=true`, with a history entry of its own when opened here, as the Settings card has). Selecting another asset on the map replaces it.
+  - **Asset pictures:** the first tap selects the asset and centres the map on it (and follows it, as selecting on the map does). Tapping the selected asset's picture again re-centres it and opens its **details card** (`AssetDetailsCard.tsx`) from the bottom, like Apple Maps' place card: its picture, name, status and battery, then what it's doing, the address, when it was seen, and **Share**. The card has no backdrop, so the map can still be moved; ✕, Escape or the back gesture closes it (`?details=true`, with a history entry of its own when opened here, as the Settings card has). Selecting another asset on the map replaces it.
   - **Settings card:** the button opens a card from the bottom, like Apple Maps' profile card: the user's initial, name and email, then **Assets** (with the count), **Appearance**, **Live links** (the count made in this browser) and **Account**. Under the list, small, the map data's credits (see [Map tiles](#map-tiles)). It's 472 px tall, just fitting both, or less on short screens. The button and the card are called Settings; the card's view is the `settings` search param.
   - **Page card:** Assets, Appearance, Live links and Account each open a second card from the bottom, over the Settings card, like Apple Maps' Places: from just below the status bar to the bottom of the screen, with a large title and ✕ back to the Settings card. Appearance has **Map style** (see [Map tiles](#map-tiles)) and **Trail** as checkmark lists, then **Walks**: **Paw prints** and **Snap to paths** as switches, the second greyed out without a map-matching server (`Appearance.tsx`), Live links the list with Stop (`LiveLinksList.tsx`), Account the signed-in name and email with **Sign out**, and Assets the asset list (see [Managing assets](#managing-assets)). Add asset and an asset's own page open inside the Assets card, sliding in sideways (`.card-view-forward`/`-back`, none with reduced motion), with "‹ Assets" back. The map stays behind the cards, so a new trail length or a renamed asset shows at once.
   - **Views in the address:** `?settings=main` (the Settings card), and `appearance`, `live-links`, `account`, `assets`, `add-asset` or `asset-<id>` for the page card over it (`parseSettingsView`). Opening the Settings card adds a history entry, and opening a page card from it another, so the back gesture closes them one at a time; moving within the page card replaces its entry. ✕, Escape or tapping outside closes the top card. When a card was opened here, closing it goes back in history past its entries; when the page loaded with it open, closing just changes the param.
   - Focus moves to the top card's ✕ (or "‹ Assets") as it opens, and back to the Settings button when everything closes, with `preventScroll`: without it the browser scrolls the map screen to bring the button into view while the card is still moving, and the whole screen jumps. For the same reason the map screen is `overflow: clip`, not `hidden`: a hidden box can still be scrolled, and focusing a control in a card that's off-screen shifted it up by 250 px in testing. Cards underneath and closed cards are `inert`.
   - Not Konsta's `Sheet`: it's `position: fixed`, which stops 59 pt short of the screen's bottom in the iOS home-screen app (see Home screen below). The bar, the card and its backdrop are absolute inside the map screen.
   - The email is kept in the session cookie from sign-in; sessions from before it was kept show the name only.
-- **Details card content** (`AssetCard.tsx`): the asset's picture, name, online/offline status and battery percentage, then:
+- **Details card content** (`AssetDetailsCard.tsx`): the asset's picture, name, online/offline status and battery percentage, then:
   - while riding, **In a vehicle** or **Moving underground**, in the accent colour;
   - the street address (see [Addresses](#addresses));
   - "Seen 4 minutes ago", from `fixTime` using `Intl.RelativeTimeFormat`, re-rendered every 30 s, with "Here since 07:12" while it's staying put (`currentStay` in segments.ts: the trail's last piece is a stay and reports are recent; when the stay goes back to the start of the loaded history, "since before");
@@ -370,7 +370,7 @@ src/
     tracker.server.ts                 Traccar → tracker details (SinoTrack io fields) + tests
     manage.server.ts                  add / rename / remove assets and photos; edit access; error mapping
     manage.functions.ts               server functions for managing assets, with input checks
-    map.functions.ts                  getMapOptions (style URL, follow roads available), matchWalks, getAddress
+    map.functions.ts                  getMapOptions (style URL, whether Snap to paths is available), matchWalks, getAddress
     address.server.ts                 street addresses through Traccar's geocoder, cache
     matching.server.ts                Valhalla map matching, closeness check, cache
     images.server.ts                  /images/asset/<id>: device pictures from Traccar, cached
@@ -388,7 +388,7 @@ src/
     mapControls.ts                    a map button like maplibre's own (your position, on live link pages)
     BatteryGauge.tsx                  battery as 0–4 bars
     BottomBar.tsx                     the map's bottom bar and the Settings card (settings, assets)
-    AssetCard.tsx                     the selected asset's details card
+    AssetDetailsCard.tsx                     the selected asset's details card
     cards.tsx                         what the map screen's cards share: colours, ✕, backdrop
     AssetsList.tsx                    the assets to manage
     AddAssetForm.tsx                  add an asset
@@ -397,8 +397,8 @@ src/
     LiveLinksList.tsx                 this browser's live links, with Stop
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
-    TrackerDetails.tsx                the Tracker section of an asset's page
-    ShareMenu.tsx                     Share: send location, make and send live links
+    TrackerSection.tsx                the Tracker section of an asset's page
+    Share.tsx                     Share: send location, make and send live links
     RelativeTime.tsx
   lib/
     asset.ts                          Asset view model + isStale (shared with the browser)
@@ -407,7 +407,7 @@ src/
     trail.ts                          trail types, extend/prune
     segments.ts                       walking / stay / vehicle / underground, and what's happening now
     segments.test.ts                  node --test
-    matching.ts                       which walks to snap for "Follow roads"
+    matching.ts                       which walks to snap for Snap to paths
     useSnappedWalks.ts                asks the server to snap walks, caches the results
     mapStyles.ts                      the map styles to choose between, Auto + tests
     useMyPosition.ts                  your position from the browser (geolocation), while on
@@ -438,7 +438,7 @@ src/
 | `SESSION_DAYS` | no | Token and cookie lifetime, default `30` |
 | `MAP_STYLE_URL` | no | maplibre style, default OpenFreeMap `liberty` |
 | `MAP_EXTRA_ORIGINS` | no | Comma-separated extra origins the map style loads from (CSP) |
-| `MAP_MATCHING_URL` | no | Valhalla for "Follow roads", e.g. `http://valhalla:8002`; see [Follow roads](#follow-roads-map-matching) |
+| `MAP_MATCHING_URL` | no | Valhalla for Snap to paths, e.g. `http://valhalla:8002`; see [Snap to paths](#snap-to-paths-map-matching) |
 | `PORT`, `HOST` | no | Production server listen address, default `3000` on all interfaces |
 
 There is no Traccar token in env: each user's own sign-in is the only way to reach Traccar data. `.env` is gitignored and `.env.example` is committed. No env var uses the `VITE_` prefix, so nothing server-side can land in the client bundle.

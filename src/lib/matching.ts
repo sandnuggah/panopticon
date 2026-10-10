@@ -1,7 +1,7 @@
 import { distance, type LatLon, type TrailPiece } from './segments'
 import type { TrailPoint } from './trail'
 
-// "Follow roads": walking stretches of the trail can be snapped to streets and paths by a
+// Snap to paths: walking stretches of the trail can be snapped to streets and paths by a
 // map-matching service (Valhalla, see matching.server.ts). This part is shared by the browser, which
 // picks the walks worth snapping, and the server, which does the snapping.
 

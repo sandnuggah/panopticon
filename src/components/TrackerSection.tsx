@@ -11,7 +11,7 @@ import { RelativeTime } from './RelativeTime'
 const REFRESH_MS = 30_000
 
 /**
- * The tracker itself, on its asset's page (Settings → Manage assets): connection, GPS, signal,
+ * The tracker itself, on its asset's page (Settings → Assets): connection, GPS, signal,
  * network, battery, how often it reports, where its last fix was, and its model (see
  * lib/tracker.ts). Fetched when the page opens and every 30 s while it's open.
  */

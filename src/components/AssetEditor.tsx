@@ -6,7 +6,7 @@ import { editErrorMessage } from '../lib/editErrors'
 import { getManagedAsset, removeAsset, removeAssetImage, renameAsset, uploadAssetImage } from '../server/manage.functions'
 import type { EditResult } from '../server/manage.server'
 import { AssetAvatar } from './AssetAvatar'
-import { TrackerSection } from './TrackerDetails'
+import { TrackerSection } from './TrackerSection'
 
 type Loaded = Awaited<ReturnType<typeof getManagedAsset>>
 

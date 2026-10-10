@@ -1,8 +1,8 @@
-// What the tracker itself is doing, for the tracker details panel: whether it's connected, has a
-// GPS fix, has signal and battery, and how often it reports. Built on the server from Traccar's
-// device, its latest position and an hour of history (see tracker.server.ts); fetched when the
-// panel opens rather than streamed, so the map's data stays small. Only what the tracker reports
-// is filled in. Never the tracker ID (IMEI) or SIM number.
+// What the tracker itself is doing, for the Tracker section of an asset's page: whether it's
+// connected, has a GPS fix, has signal and battery, and how often it reports. Built on the server
+// from Traccar's device, its latest position and an hour of history (see tracker.server.ts);
+// fetched when the page opens rather than streamed, so the map's data stays small. Only what the
+// tracker reports is filled in. Never the tracker ID (IMEI) or SIM number.
 
 export type SignalLevel = 'poor' | 'fair' | 'good' | 'excellent'
 

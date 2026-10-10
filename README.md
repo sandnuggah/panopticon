@@ -82,9 +82,9 @@ The live map uses Server-Sent Events. Caddy passes them through as they arrive. 
 `proxy_read_timeout` above 30 s. The app sends `X-Accel-Buffering: no`, so nginx won't buffer the
 stream.
 
-## Follow roads (optional)
+## Snap to paths (optional)
 
-"Snap to paths" (Settings → Appearance; "Follow roads" in the code) draws walks along the streets and
+"Snap to paths" (Settings → Appearance) draws walks along the streets and
 paths they most likely took, using [Valhalla](https://github.com/valhalla/valhalla), a routing engine
 built from OpenStreetMap data that you run yourself. Trail points only go to it, never to a third
 party. Without it the switch is greyed out.

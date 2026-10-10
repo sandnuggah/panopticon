@@ -1,6 +1,6 @@
 import type { Ref } from 'react'
 
-// The pieces the map screen's cards share (BottomBar.tsx, ShareMenu.tsx), so they look alike.
+// The pieces the map screen's cards share (BottomBar.tsx, Share.tsx), so they look alike.
 
 /** A card's background: Konsta's grouped-list surface, a step darker than its rows in dark mode. */
 export const CARD_BG = 'ios:bg-ios-light-surface ios:dark:bg-[#1c1c1e] material:bg-md-light-surface-1 material:dark:bg-md-dark-surface-1'
