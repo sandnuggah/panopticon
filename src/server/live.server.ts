@@ -1,3 +1,4 @@
+import { BUILD_ID } from '../lib/buildId'
 import type { LiveUpdate } from '../lib/live'
 import { toDeviceUpdate, toPositionUpdate } from './assets.server'
 import { clearSession, getSessionToken } from './session.server'
@@ -85,6 +86,8 @@ export function relay(
       }
 
       send(`retry: ${RETRY_MS}\n\n`)
+      // Which build is serving, so a page from an older one can offer to reload.
+      send(`event: version\ndata: ${BUILD_ID}\n\n`)
       socket.addEventListener('message', (event) => {
         const updates = toUpdates(event.data, convert)
         if (updates.length > 0) send(`data: ${JSON.stringify(updates)}\n\n`)

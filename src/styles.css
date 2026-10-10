@@ -215,11 +215,17 @@ html.dark:has(.k-material) {
   background: #2b2b2b;
 }
 
-/* Floats over the map's top-left corner (the map's buttons are on the right). */
+/* Floats along the top of the map, under the status bar: the Live indicator at the left, and the
+   update notice at the right when there is one. */
 .map-overlay {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
   position: absolute;
   top: calc(12px + env(safe-area-inset-top));
   left: 12px;
+  right: 12px;
   z-index: 3;
   pointer-events: none;
 }

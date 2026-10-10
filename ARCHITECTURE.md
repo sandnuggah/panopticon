@@ -114,6 +114,7 @@ Consequences of pointing `web.url` at this app:
   - The stream is refused: `/live` can't tell from the socket why, so it checks the token with a REST call. If the token is dead it clears the session and returns 401, and the page goes to `/login`. Otherwise it returns 502; the page keeps what it has, shows "Offline, retrying" and retries with backoff (5 s doubling to 60 s).
 - **Phones:** background tabs get suspended, so when the page becomes visible again it reloads the list and trail history and reopens the stream.
 - **Live indicator:** "Live", "Connecting…" or "Offline, retrying", as a pill floating over the map's top-left corner, so a still map isn't mistaken for a still asset.
+- **Update available:** each build has an ID (`lib/buildId.ts`, set by Vite in `vite.config.ts`: the build's time, made once per build process so the server and browser code of one build share it; `dev` on the dev server). Every live stream starts with an `event: version` carrying the server's. A page from an older build hears a different one when its stream reconnects after a new release is deployed (a restart drops the stream), and shows **Update available · Reload** at the top right of the map, level with the Live indicator (`UpdateNotice.tsx`); tapping it reloads the page. That matters most for the Home Screen app, which otherwise keeps running the version it opened with, and whose old code can't call a newer server's functions.
 - **Scale:** one upstream socket per open tab. At 1–5 assets and a handful of users that's fine.
 
 ## Trail
@@ -450,6 +451,7 @@ src/
     AlertsPage.tsx                    Settings → Alerts: this phone's alerts, test, turn off
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
+    UpdateNotice.tsx                  Update available · Reload, after a new release
     TrackerSection.tsx                the Tracker section of an asset's page
     Share.tsx                         Share: send location, make and send live links
     RelativeTime.tsx
@@ -478,7 +480,8 @@ src/
     platform.ts                       iOS or Material from a User-Agent
     assetImage.ts                     crop + shrink photos (browser), sniff image type (server)
     editErrors.ts                     messages for failed asset changes
-    useLiveAssets.ts                  EventSource + trails + reconnect logic
+    useLiveAssets.ts                  EventSource + trails + reconnect logic, and whether a newer build is serving
+    buildId.ts                        this build's ID, from Vite
 ```
 
 - `*.server.ts` files are server-only; TanStack Start's import protection fails the build if browser code imports them.

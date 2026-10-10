@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ClientOnly, createFileRoute, isRedirect, redirect, useRouter } from '@tanstack/react-router'
 import { AssetDetailsCard } from '../components/AssetDetailsCard'
 import { LiveIndicator } from '../components/LiveIndicator'
+import { UpdateNotice } from '../components/UpdateNotice'
 import { BottomBar } from '../components/BottomBar'
 import { PlaceBanner } from '../components/PlaceBanner'
 import { PlaceEditor } from '../components/PlaceEditor'
@@ -96,7 +97,11 @@ function Home() {
     if (!place || !asset) return
     setBanner({ text: visitSentence(asset.name, visit, place.name), time: visit.time, key: Date.now(), assetId: asset.id })
   }
-  const { assets, trails, activities, stays, status } = useLiveAssets(loaderData.assets, settingsLoaded ? settings.trail : null, announce)
+  const { assets, trails, activities, stays, status, updateAvailable } = useLiveAssets(
+    loaderData.assets,
+    settingsLoaded ? settings.trail : null,
+    announce,
+  )
   const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
@@ -168,6 +173,7 @@ function Home() {
       <div className="map-area">
         <div className="map-overlay">
           <LiveIndicator status={status} />
+          {updateAvailable && <UpdateNotice />}
         </div>
         <ClientOnly fallback={mapPlaceholder}>
           <Suspense fallback={mapPlaceholder}>

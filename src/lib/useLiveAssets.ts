@@ -3,6 +3,7 @@ import { useRouter } from '@tanstack/react-router'
 import { getUser } from '../server/auth.functions'
 import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
+import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
 import type { PlaceVisit } from './places'
 import { currentActivity, currentStay, type Activity, type Stay } from './segments'
@@ -29,6 +30,8 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null,
   const assetsRef = useRef(initialAssets)
   const [trails, setTrails] = useState<Trails>({})
   const [status, setStatus] = useState<LiveStatus>('connecting')
+  // A newer release is serving than the one this page came from (see buildId.ts).
+  const [updateAvailable, setUpdateAvailable] = useState(false)
   // Bumped when we may have missed updates, to refetch trail history.
   const [historyVersion, setHistoryVersion] = useState(0)
   const historyMinutesRef = useRef(historyMinutes)
@@ -97,6 +100,9 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null,
         if (reconnecting) refresh()
         reconnecting = true
       }
+      source.addEventListener('version', (event) => {
+        if ((event as MessageEvent<string>).data !== BUILD_ID) setUpdateAvailable(true)
+      })
       source.onmessage = (event) => {
         try {
           onUpdates(JSON.parse(event.data) as LiveUpdate[])
@@ -166,5 +172,5 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null,
     return result
   }, [trails, now])
 
-  return { assets, trails: visibleTrails, activities, stays, status }
+  return { assets, trails: visibleTrails, activities, stays, status, updateAvailable }
 }
