@@ -1,5 +1,5 @@
 import type { GeoJSONSource, MapLibreMap } from 'maplibre-gl'
-import type { MyPosition } from '../lib/useMyPosition'
+import type { MyPosition } from '../../lib/useMyPosition'
 
 // Drawing your own position on the map (see useMyPosition): a blue dot with a soft circle for how
 // accurate it is, and the icon for the map button that turns it on and off. Class names avoid

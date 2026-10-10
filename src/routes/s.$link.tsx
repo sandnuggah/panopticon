@@ -15,7 +15,7 @@ import { getSharedAddress, getSharedView } from '../server/liveLinks.functions'
 // A live location link: one asset, followed live, for anyone with the link and without signing in.
 // See liveLinks.server.ts for what it shows and how it ends.
 
-const AssetMap = lazy(() => import('../components/AssetMap'))
+const AssetMap = lazy(() => import('../components/map/AssetMap'))
 
 const noTrails = {}
 const nothing = () => {}

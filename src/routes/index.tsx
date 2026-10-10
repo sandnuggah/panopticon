@@ -13,7 +13,7 @@ import { getUser } from '../server/auth.functions'
 import { getMapOptions } from '../server/map.functions'
 
 // maplibre needs a browser; keep it out of the server render and the initial bundle.
-const AssetMap = lazy(() => import('../components/AssetMap'))
+const AssetMap = lazy(() => import('../components/map/AssetMap'))
 
 /**
  * The selected asset, whether its details card is open (`?asset=12&details=true`), and the Settings
