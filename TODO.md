@@ -14,7 +14,7 @@ and cleared out now and then.
 ## Places and alerts
 
 - [x] Steps 1 and 2: places as Traccar geofences: Settings → Places, an editor on the map (circle picker, size 50 m–2 km, which assets), places drawn on the map, "Home" instead of the address in the details card, arrivals and departures from Traccar's events, a banner when one happens while the app is open. Mock Traccar has geofences and events. Released as `:45`; place names as solid indigo pills (14 px, no blurry halo) in `:57` (2026-10-10)
-- [ ] Try places on the real Traccar (`:58`): a Home for Betty, then check her arrivals and departures list (it needs reports allowed for the user) and the banner when she leaves
+- [ ] Try places on the real Traccar (`:59`): a Home for Betty, then check her arrivals and departures list (it needs reports allowed for the user) and the banner when she leaves
 - [x] Step 3: alerts with Web Push: Settings → Alerts per phone (leaves/arrives at each place, tracker offline), Traccar's event forwarding to `/hooks/traccar-events`, choices sealed on the devices, VAPID key from SESSION_SECRET. Tested against the mock and Apple's push service with a made-up subscription; not yet on a real iPhone. Released as `:46` (2026-10-10); wording says "device" rather than "phone" (alerts work in desktop browsers too) in `:58` (2026-10-11)
 - [ ] Try alerts on the real iPhone: copy the updated `deploy/compose.yaml` to the server (it now passes TRACCAR_EVENTS_SECRET and SIGN_IN_METHODS), set TRACCAR_EVENTS_SECRET in `.env` and the three traccar.xml lines (README → Alerts), turn on in the Home Screen app, Send a test alert, then a real "Betty leaves Home". Needs panopticon on https at its real domain (Apple refuses other VAPID subjects)
 - [ ] Research alerts on Android: Chrome's push goes through fcm.googleapis.com (allowed), but check Firefox and Samsung Internet's push services, whether the service worker shows the Declarative Web Push message there, whether the installed app is needed, and test on a real Android phone (or an emulator with Google Play services)
@@ -32,7 +32,7 @@ and cleared out now and then.
 - [x] Fixed: with the Auto map style, switching the phone between light and dark crashed the map screen (recolouring while the other style loaded). Released as `:54` (2026-10-10)
 - [ ] Retake the front page's screenshots when the UI changes (iOS Simulator, mock Traccar with MAP_MATCHING_URL for Snap to paths; status bar shows 9:41 while the arrivals list shows evening times)
 - [ ] Maybe: on wide screens, open the Settings and details cards from the side (like a sidebar in Apple Maps on the Mac) instead of as 576 px sheets in the middle of the bottom edge
-- [ ] Update the application icon (public/icon.svg, icon-192.png, icon-512.png, apple-touch-icon.png)
+- [x] A new app icon: a folded paper map with a red paper-cutout pin on the app's green (front page style, RAL colours); source in dev/icon-full.svg. Released as `:59` (2026-10-11)
 - [x] "Update available · Reload" at the top right of the map when a newer release is running: each build has an ID, the live stream sends the server's, a page from an older build shows the notice after its stream reconnects. Released as `:49` (2026-10-10); first visible when `:50` is deployed
 
 ## Later / maybe

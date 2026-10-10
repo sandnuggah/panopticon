@@ -366,6 +366,8 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
 - **Weight:** about 16 KB of CSS and 27 KB of JavaScript (both gzipped) for the whole app, against 280 KB for maplibre.
 - **Not used:** Konsta's strong `Segmented` control (its sliding highlight lagged one tap behind in testing), and its `Sheet` (no dragging). The pet theme ("Petopticon", pastels, and paw-print trails, now a setting of their own) was dropped with the move to Konsta.
 
+- **App icon:** a folded paper map with a red paper-cutout pin on the app's green, in the front page's style and RAL colours. `public/icon.svg` (rounded corners) is the browser's icon; the PNGs (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png` at 180 px) are `dev/icon-full.svg`, the same without rounded corners, since iOS and Android round them (the art stays inside Android's round safe zone). To render them: `/Applications/Chromium.app/Contents/MacOS/Chromium --headless --disable-gpu --hide-scrollbars --screenshot=$PWD/icon-1024.png --window-size=1024,1024 file://$PWD/dev/icon-full.svg`, then `sips -Z 512 icon-1024.png --out public/icon-512.png`, and 192 and 180 likewise. Headless Chromium mis-renders small windows, so render at 1024 and scale down.
+
 ## Map tiles
 
 - `MAP_STYLE_URL` is optional. The default is OpenFreeMap's `liberty` style: free, no API key, no analytics. OpenFreeMap does see which map areas you load.
@@ -383,6 +385,7 @@ server.mjs                            production server: srvx + static files + S
 Dockerfile, .dockerignore
 public/                               manifest + icons, color-scheme.js (dark mode), sw.js (alerts), screenshots/ (front page), copied to dist/client
 dev/mock-traccar.mjs                  a stand-in Traccar with made-up assets, for development
+dev/icon-full.svg                     the app icon without rounded corners, for the PNG icons
 src/
   start.ts                            request middleware: CSRF for server functions, security headers
   router.tsx                          also sets the per-request CSP nonce for Start's inline scripts
