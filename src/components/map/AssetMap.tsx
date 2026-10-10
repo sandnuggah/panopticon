@@ -28,7 +28,7 @@ const FOLLOW_MS = 1000
 /** How close to the middle of the map (px) a selected asset counts as centred. */
 const CENTRED_PX = 12
 /** About how much of the map's bottom edge the bottom bar covers, in pixels; it doesn't follow Dynamic Type. */
-const BOTTOM_BAR = 68
+const BOTTOM_BAR = 76
 
 /** Live link pages show no places; one empty list, so it never counts as a change. */
 const NO_PLACES: Place[] = []

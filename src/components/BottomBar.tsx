@@ -23,9 +23,10 @@ type Props = {
 }
 
 /**
- * The bar floating at the bottom of the map, like Apple Maps' search bar: your position on and off
- * at its left end, each asset's picture, and the Settings button (your initial) at its right, which
- * opens the Settings card (SettingsCard.tsx).
+ * The bars floating at the bottom of the map, like Apple Maps': one with your position on and off
+ * and each asset's picture, as wide as they need (scrolling sideways when there are too many), and
+ * at the right, on its own, the Settings button (your initial), which opens the Settings card
+ * (SettingsCard.tsx). One size whatever the text size, as iOS's bars are.
  */
 export function BottomBar({
   userName,
@@ -39,45 +40,49 @@ export function BottomBar({
   settingsButton,
 }: Props) {
   const now = useNow(30_000)
+  const surface =
+    'shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2'
   return (
     <div className="bottom-bar fixed-size absolute inset-x-0 bottom-0 z-10 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-      <div className="mx-auto flex h-14 max-w-xl items-center justify-between rounded-full px-1.5 shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2">
-        <button
-          type="button"
-          className={`grid size-11 place-items-center rounded-full active:opacity-60 ${showMe ? 'text-primary' : ''}`}
-          aria-label={showMe ? 'Hide my position' : 'Show my position'}
-          aria-pressed={showMe}
-          onClick={onToggleMe}
-        >
-          <LocationIcon filled={showMe} />
-        </button>
-        {/* Each asset's picture: the first tap centres it on the map, the next opens its details. */}
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1.5 [scrollbar-width:none]">
-          {assets.map((asset) => {
-            const selected = asset.id === selectedId
-            return (
-              <button
-                key={asset.id}
-                type="button"
-                className="shrink-0 rounded-full p-0.5 active:opacity-60"
-                aria-label={selected ? `${asset.name}: details` : `Show ${asset.name}`}
-                onClick={() => onAssetTap(asset.id)}
-              >
-                <AssetAvatar asset={asset} stale={isStale(asset, now)} />
-              </button>
-            )
-          })}
+      <div className="mx-auto flex max-w-xl items-center justify-between gap-2">
+        <div className={`flex h-16 min-w-0 items-center rounded-full px-2 ${surface}`}>
+          <button
+            type="button"
+            className={`grid size-12 shrink-0 place-items-center rounded-full active:opacity-60 [&>svg]:size-7 ${showMe ? 'text-primary' : ''}`}
+            aria-label={showMe ? 'Hide my position' : 'Show my position'}
+            aria-pressed={showMe}
+            onClick={onToggleMe}
+          >
+            <LocationIcon filled={showMe} />
+          </button>
+          {/* Each asset's picture: the first tap centres it on the map, the next opens its details. */}
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none]">
+            {assets.map((asset) => {
+              const selected = asset.id === selectedId
+              return (
+                <button
+                  key={asset.id}
+                  type="button"
+                  className="shrink-0 rounded-full active:opacity-60"
+                  aria-label={selected ? `${asset.name}: details` : `Show ${asset.name}`}
+                  onClick={() => onAssetTap(asset.id)}
+                >
+                  <AssetAvatar asset={asset} size="bar" stale={isStale(asset, now)} />
+                </button>
+              )
+            })}
+          </div>
         </div>
         <button
           ref={settingsButton}
           type="button"
-          className="rounded-full active:opacity-60"
+          className={`grid size-16 shrink-0 place-items-center rounded-full active:opacity-60 ${surface}`}
           aria-label="Settings"
           aria-haspopup="dialog"
           aria-expanded={settingsOpen}
           onClick={onOpenSettings}
         >
-          <UserInitial name={userName} className="size-11 text-lg" />
+          <UserInitial name={userName} className="size-12 text-xl" />
         </button>
       </div>
     </div>

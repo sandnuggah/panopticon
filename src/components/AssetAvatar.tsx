@@ -3,6 +3,7 @@ import { assetInitial, type Asset } from '../lib/asset'
 
 const SIZES = {
   small: 'size-10 text-base',
+  bar: 'size-12 text-lg',
   large: 'size-24 text-4xl',
 }
 
