@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { alertBody, alertTitle, ruleForEvent, type AlertRule } from '../lib/alerts'
+import { alertBody, alertTitle, crossPlace, ruleForEvent, settlePlace, SETTLE_MS, type AlertRule, type PlaceAlerts } from '../lib/alerts'
 import { sealAlerts, unsealAlerts, type AlertEntry } from './alertsSeal.server'
 import { env } from './env.server'
 import { attempt, loadManagedAssets, type EditResult } from './manage.server'
@@ -26,6 +26,11 @@ const OFFLINE_QUIET_MS = 30 * 60_000
 const goneEndpoints = new Set<string>()
 /** When each phone last heard that each asset went offline, by `deviceId endpoint`. */
 const lastOffline = new Map<string, number>()
+/** Each asset's alerts about each place while its crossings settle (lib/alerts.ts), by `deviceId placeId`. */
+const settling = new Map<string, { state: PlaceAlerts; latest?: AlertNews; timer?: ReturnType<typeof setTimeout> }>()
+
+/** One thing to alert about: what happened, to which device (with its attributes), where and when. */
+type AlertNews = { rule: AlertRule; device: { id: number; name: string; attributes: unknown }; placeName: string | null; time: string }
 
 export type AlertSetup = {
   /** Whether the server can send alerts (TRACCAR_EVENTS_SECRET is set, so Traccar forwards events). */
@@ -105,7 +110,7 @@ export function sendTestAlert(target: PushTarget, origin: string) {
  * alerts, so Traccar doesn't retry; 401 without the right secret, 404 when alerts aren't set up.
  */
 export async function handleTraccarEvent(request: Request): Promise<Response> {
-  const { eventsSecret, sessionSecret } = env()
+  const { eventsSecret } = env()
   if (!eventsSecret) return new Response(null, { status: 404 })
   if (!sameSecret(request.headers.get('authorization') ?? '', `Bearer ${eventsSecret}`)) return new Response(null, { status: 401 })
 
@@ -130,27 +135,64 @@ export async function handleTraccarEvent(request: Request): Promise<Response> {
   if (!rule || !(age < MAX_EVENT_AGE_MS)) return new Response(null, { status: 204 })
 
   const placeName = typeof object(data.geofence)?.name === 'string' ? (object(data.geofence)!.name as string) : null
+  const news: AlertNews = {
+    rule,
+    device: { id: device.id, name: device.name, attributes: device.attributes },
+    placeName,
+    time: event.eventTime,
+  }
+  if (rule === 'offline') await sendAlerts(news)
+  else await crossing(news)
+  return new Response(null, { status: 204 })
+}
+
+/** A crossing of a place: alerted now, or kept until the place settles (`crossPlace`). */
+async function crossing(news: AlertNews) {
+  const key = `${news.device.id} ${news.rule.split(':')[1]}`
+  const place = settling.get(key)
+  const { send, state } = crossPlace(place?.state, news.rule, Date.now())
+  if (send) {
+    if (place?.timer) clearTimeout(place.timer)
+    settling.set(key, { state })
+    return sendAlerts(news)
+  }
+  const timer = place?.timer ?? setTimeout(() => void settle(key), state.sentAt + SETTLE_MS - Date.now())
+  settling.set(key, { state, latest: news, timer })
+}
+
+/** The end of a place's settling time: the latest crossing, if the asset ended up on the other side. */
+async function settle(key: string) {
+  const place = settling.get(key)
+  if (!place) return
+  const { send, state } = settlePlace(place.state, Date.now())
+  if (state) settling.set(key, { state })
+  else settling.delete(key)
+  if (send && place.latest) await sendAlerts(place.latest)
+}
+
+/** Sends an alert to each phone that wants it, from the phones sealed on the device. */
+async function sendAlerts({ rule, device, placeName, time }: AlertNews) {
+  const sessionSecret = env().sessionSecret
   const entries = unsealAlerts(object(device.attributes)?.[ATTRIBUTE], device.id, sessionSecret).filter((entry) =>
     entry.rules.includes(rule),
   )
   await Promise.all(
     entries.map(async (entry) => {
       if (rule === 'offline') {
-        const key = `${device.id as number} ${entry.endpoint}`
+        const key = `${device.id} ${entry.endpoint}`
         if (Date.now() - (lastOffline.get(key) ?? 0) < OFFLINE_QUIET_MS) return
         lastOffline.set(key, Date.now())
       }
       const message = pushMessage(
-        alertTitle(rule, device.name as string, placeName),
-        alertBody(event.eventTime as string, entry.timeZone, entry.locale),
-        `${entry.origin}/?asset=${device.id as number}&details=true`,
-        `asset-${device.id as number}`,
+        alertTitle(rule, device.name, placeName),
+        alertBody(time, entry.timeZone, entry.locale),
+        `${entry.origin}/?asset=${device.id}&details=true`,
+        `asset-${device.id}`,
       )
       const result = await sendPush(entry, message, entry.origin, sessionSecret)
       if (result === 'gone') goneEndpoints.add(entry.endpoint)
     }),
   )
-  return new Response(null, { status: 204 })
 }
 
 /**

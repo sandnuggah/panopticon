@@ -44,3 +44,32 @@ export function alertBody(time: string, timeZone: string, locale: string): strin
 export function rulesFor(placeIds: number[]): AlertRule[] {
   return [...placeIds.flatMap((id): AlertRule[] => [`leave:${id}`, `arrive:${id}`]), 'offline']
 }
+
+/**
+ * How long crossings of a place settle after an alert about it. A tracker at the edge of a place,
+ * or a walk along it, crosses it back and forth (GPS fixes wander 15–25 m), and each crossing is a
+ * real event of Traccar's.
+ */
+export const SETTLE_MS = 10 * 60_000
+
+/** One asset's alerts about one place: the last one sent and when, and the latest crossing since. */
+export type PlaceAlerts = { sent: AlertRule; sentAt: number; latest: AlertRule | null }
+
+/**
+ * A crossing of a place (`leave:` or `arrive:`): the first alerts at once, so leaving is never
+ * late; those within SETTLE_MS of it wait for `settlePlace`.
+ */
+export function crossPlace(state: PlaceAlerts | undefined, rule: AlertRule, now: number): { send: boolean; state: PlaceAlerts } {
+  if (state && now - state.sentAt < SETTLE_MS) return { send: false, state: { ...state, latest: rule } }
+  return { send: true, state: { sent: rule, sentAt: now, latest: null } }
+}
+
+/**
+ * At the end of the settling time: the latest crossing, if it left the asset on the other side of
+ * the place than the last alert said (it came back, or left again), which starts a new settling
+ * time; otherwise nothing, and the place is settled.
+ */
+export function settlePlace(state: PlaceAlerts, now: number): { send: AlertRule | null; state: PlaceAlerts | undefined } {
+  if (state.latest === null || state.latest === state.sent) return { send: null, state: undefined }
+  return { send: state.latest, state: { sent: state.latest, sentAt: now, latest: null } }
+}

@@ -155,6 +155,10 @@ push service checks the address.
 version 6.14), for the offline alert. A tracker that just goes quiet, without hanging up, counts as
 offline after Traccar's `status.timeout`, 10 minutes by default.
 
+A walk along the edge of a place crosses it back and forth. After an alert about a place, its
+crossings in the next 10 minutes wait: when the 10 minutes are up you hear once more, only if the asset ended up on
+the other side.
+
 Traccar forwards every event, not just these; panopticon ignores the rest. Alerts stay on for a
 device until they're turned off there, also after signing out. Changing `SESSION_SECRET` turns
 everyone's alerts off: turn them on again on each device.
