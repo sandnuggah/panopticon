@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Block, Button, Page } from 'konsta/react'
 import { FeatureTrail, type Feature } from '../components/FeatureTrail'
+import { HowItWorks } from '../components/HowItWorks'
 import { ScreenshotGallery } from '../components/ScreenshotGallery'
 import { WelcomeScene } from '../components/WelcomeScene'
 import { BellIcon, LiveIcon, LocationIcon, LockIcon, PawIcon, PinIcon } from '../components/icons'
@@ -112,9 +113,12 @@ function WelcomePage() {
         </div>
         <SectionTitle>What it looks like</SectionTitle>
         <ScreenshotGallery />
-        <p className="px-8 pt-6 text-center text-sm opacity-60 lg:pt-14">
-          Panopticon works in any browser, and on iPhone and Android as an app on your Home Screen. It needs a Traccar server, which does
-          the tracking.
+        <SectionTitle>How the tracking works</SectionTitle>
+        <div className="lg:mx-auto lg:max-w-4xl">
+          <HowItWorks />
+        </div>
+        <p className="px-8 pt-10 text-center text-sm opacity-60 lg:pt-16">
+          Panopticon works in any browser, and on iPhone and Android as an app on your Home Screen.
         </p>
       </div>
     </Page>
