@@ -17,7 +17,14 @@ describe('mapStylesFor', () => {
 
   test('a self-hosted style is the only one', () => {
     const own = 'https://maps.example.com/style.json'
-    assert.deepEqual(mapStylesFor(own), { styles: [{ id: 'custom', name: 'Map', url: own }], defaultStyle: 'custom' })
+    assert.deepEqual(mapStylesFor(own), { styles: [{ id: 'custom', name: 'Map', url: own, dark: false }], defaultStyle: 'custom' })
+  })
+
+  test('the night maps are dark', () => {
+    const dark = mapStylesFor(liberty)
+      .styles.filter((style) => style.dark)
+      .map((style) => style.id)
+    assert.deepEqual(dark, ['dark', 'dark-blue'])
   })
 })
 

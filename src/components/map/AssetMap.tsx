@@ -147,7 +147,11 @@ export default function AssetMap({
   const [settings] = useSettings()
   const prefersDark = usePrefersDark()
   const styleChoice = settings.mapStyle ?? defaultStyle
-  const styleUrl = resolveStyle(styles, styleChoice, defaultStyle, prefersDark).url
+  const style = resolveStyle(styles, styleChoice, defaultStyle, prefersDark)
+  const styleUrl = style.url
+  // What's drawn on the map takes the map's colours, day or night, whatever the device's mode: a
+  // class on the map (styles.css .map-light, .map-dark) that the markers and the layers' colours read.
+  const mapTheme = style.dark ? 'map-dark' : 'map-light'
   const appliedStyleRef = useRef(styleUrl)
 
   useEffect(() => {
@@ -245,17 +249,16 @@ export default function AssetMap({
     showPawPrints(map, settings.pawPrints)
   }, [settings.pawPrints, styleLoaded])
 
-  // Trail colour for light or dark mode. Runs after the page's .dark class has changed (see
-  // public/color-scheme.js), so --trail already has the new mode's value. With the Auto map style
-  // the same change also switches to the other map style, which the effect above has just started
-  // loading; maplibre throws on the old layers then, and the new style's layers get the new
-  // colours as they're added (style.load).
+  // Trail and place colours for a day or night map. Runs after the map's class has changed, so
+  // --trail already has the new value. That only happens with a switch to another map style, which
+  // the effect above has just started loading; maplibre throws on the old layers then, and the new
+  // style's layers get the new colours as they're added (style.load).
   useEffect(() => {
     const map = mapRef.current
     if (!styleLoaded || !map || !map.isStyleLoaded()) return
     recolourTrails(map)
     recolourPlaces(map)
-  }, [prefersDark, styleLoaded])
+  }, [mapTheme, styleLoaded])
 
   // Keep one marker per located asset.
   useEffect(() => {
@@ -372,9 +375,9 @@ export default function AssetMap({
 
   return (
     <>
-      <div ref={containerRef} className="map" />
+      <div ref={containerRef} className={`map ${mapTheme}`} />
       <MapButtons map={mapRef} placement={buttons} showMe={showMe} onToggleMe={() => onShowMeChange(!showMe)} />
-      {picker && styleLoaded && <PlacePicker map={mapRef} {...picker} />}
+      {picker && styleLoaded && <PlacePicker map={mapRef} theme={mapTheme} {...picker} />}
       {note && (
         <p className="my-position-note" role="status">
           {note}

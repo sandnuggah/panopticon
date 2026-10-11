@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { classifyTrail, currentActivity, currentStay, distance, mergeOverlappingStays, type TrailPiece } from './segments.ts'
+import { classifyTrail, currentActivity, currentStay, stayDots, type TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
 // A made-up trip in the shape of real SinoTrack data: a report every 30 s, GPS lost underground,
@@ -239,33 +239,25 @@ describe('classifyTrail', () => {
   })
 })
 
-describe('mergeOverlappingStays', () => {
+describe('stayDots', () => {
   const stays = (points: TrailPoint[]) =>
     classifyTrail(points).filter((piece): piece is Extract<TrailPiece, { kind: 'stay' }> => piece.kind === 'stay')
 
-  test('coming back to the same place later is one circle', () => {
-    const visits = stays(new Trip().stay(10).walk(10).walk(10, -4).stay(10).points)
+  test('coming back to the same place later is one dot', () => {
+    const visits = stays(new Trip().stay(10).walk(10).walk(10, -4).stay(20).points)
     assert.equal(visits.length, 2)
-    const places = mergeOverlappingStays(visits)
-    assert.equal(places.length, 1)
-    assert.equal(places[0]!.to, visits[1]!.to, 'fades by the latest visit')
-    for (const visit of visits) assert.ok(distance(places[0]!.center, visit.center) + visit.radius <= places[0]!.radius + 0.5)
+    const { dots, dotOf } = stayDots(visits)
+    assert.equal(dots.length, 1)
+    assert.deepEqual(dotOf, [0, 0])
+    assert.equal(dots[0]!.to, visits[1]!.to, 'fades by the latest visit')
+    assert.deepEqual(dots[0]!.center, visits[1]!.center, 'at the longest visit')
+    assert.equal(dots[0]!.ms, visits[0]!.to - visits[0]!.from + visits[1]!.to - visits[1]!.from)
   })
 
-  test('stays apart are separate circles', () => {
-    assert.equal(mergeOverlappingStays(stays(new Trip().stay(10).walk(10).stay(10).points)).length, 2)
-  })
-
-  test('a merged circle that reaches a third takes it in too', () => {
-    const at = (north: number, east: number, to: number) => ({
-      center: { lat: START.lat + north / METERS_PER_DEGREE_LAT, lon: START.lon + east / METERS_PER_DEGREE_LON },
-      radius: 30,
-      to,
-    })
-    // The third overlaps neither of the first two, only the circle around both.
-    const [a, b, c] = [at(0, 0, 1), at(50, 0, 2), at(25, 70, 3)]
-    assert.ok(distance(a.center, c.center) > 60 && distance(b.center, c.center) > 60)
-    assert.equal(mergeOverlappingStays([a, b, c]).length, 1)
+  test('stays apart are separate dots', () => {
+    const { dots, dotOf } = stayDots(stays(new Trip().stay(10).walk(10).stay(10).points))
+    assert.equal(dots.length, 2)
+    assert.deepEqual(dotOf, [0, 1])
   })
 })
 

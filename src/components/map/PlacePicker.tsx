@@ -32,7 +32,15 @@ function metresPerPixel(lat: number, zoom: number): number {
  * the map moves under it, as in Find My. Drawn as a DOM circle over the map, so it stays round and
  * smooth during gestures.
  */
-export function PlacePicker({ map, start, startKey, radius, inset, onCenter }: PickerProps & { map: { current: MapLibreMap | null } }) {
+export function PlacePicker({
+  map,
+  theme,
+  start,
+  startKey,
+  radius,
+  inset,
+  onCenter,
+}: PickerProps & { map: { current: MapLibreMap | null }; theme: string }) {
   const [view, setView] = useState<{ lat: number; zoom: number; width: number; height: number } | null>(null)
   const onCenterRef = useRef(onCenter)
   const insetRef = useRef<Inset>({ bottom: 0, right: 0 })
@@ -100,7 +108,7 @@ export function PlacePicker({ map, start, startKey, radius, inset, onCenter }: P
   const middle = { x: (view.width - inset.right) / 2, y: (view.height - inset.bottom) / 2 }
   return (
     <div
-      className="place-picker"
+      className={`place-picker ${theme}`}
       style={{ left: middle.x - size / 2, top: middle.y - size / 2, width: size, height: size }}
       aria-hidden="true"
     >

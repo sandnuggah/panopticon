@@ -156,6 +156,28 @@ html.dark:has(.k-material) {
   --text: #ffffff;
 }
 
+/* What's drawn on the map (trail, places, markers and their labels) takes the map style's colours,
+   a day or a night map, whatever the device's mode (AssetMap, map/mapStyles.ts). */
+.map-light {
+  --trail: #2f8f5b;
+  --place: #5856d6;
+  --marker: #2f8f5b;
+  --marker-text: #ffffff;
+  --stale: #8e8e93;
+  --surface: #ffffff;
+  --text: #000000;
+}
+
+.map-dark {
+  --trail: #5cc98d;
+  --place: #7d7aff;
+  --marker: #5cc98d;
+  --marker-text: #06200f;
+  --stale: #636366;
+  --surface: #2c2c2e;
+  --text: #ffffff;
+}
+
 /* The map screen: the map fills it. Clip, not hidden: an overflow: hidden box can still be
    scrolled, and the browser does that to bring a focused element into view, such as a control in
    a card that's sliding away, which shifts the whole screen up. */
@@ -526,8 +548,8 @@ html.dark:has(.k-material) {
   pointer-events: none;
 }
 
-/* --place is lighter at night, too light behind white text: iOS's dark-mode indigo instead. */
-.dark .place-label {
+/* --place is lighter on a night map, too light behind white text: iOS's dark-mode indigo instead. */
+.map-dark .place-label {
   background: #5e5ce6;
 }
 

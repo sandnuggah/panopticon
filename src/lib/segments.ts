@@ -34,6 +34,8 @@ const STAY_MIN_MS = 2 * 60 * 1000
 const STAY_MAX_METERS = 40
 /** Stays are drawn at least this big, so a single spot still shows. */
 const STAY_MIN_RADIUS_METERS = 10
+/** Stays whose middles are this close are drawn as one dot (see stayDots). */
+const STAY_DOT_JOIN_METERS = 40
 /** Stays this close (edge to edge) are one place, if the moves between them stayed this near. */
 const PLACE_GAP_METERS = 25
 const WANDER_METERS = 50
@@ -64,43 +66,31 @@ export type Activity = 'vehicle' | 'underground'
 /** Staying put right now: since when, and whether that's when it began or only when the points do. */
 export type Stay = { since: number; began: boolean }
 
-/** A circle drawn on the map for one or more stays (see mergeOverlappingStays). */
-export type StayCircle = { center: LatLon; radius: number; to: number }
+/** A dot drawn on the map for one or more stays (see stayDots): where, when last, and how long in all. */
+export type StayDot = { center: LatLon; to: number; ms: number }
 
 /**
- * Stays whose circles overlap, whenever they were (back at the same place later, home on two
- * days), as one circle around both, until no circles overlap. For drawing: the trail itself keeps
- * each visit, so "Here since" comes from the current one. `to` is the latest visit's end, so a
- * place fades by when it was last there.
+ * Stays as dots on the map. A stay this close to a longer one's dot (back at the same place later,
+ * home on two days) joins it, whenever it was; the dot is at the longest stay of its group and fades by
+ * the latest. Returns the dots and, for each stay, the index of its dot, so the walks can run to it.
+ * This is only for drawing: the trail keeps each visit, so "Here since" is the current one.
  */
-export function mergeOverlappingStays(stays: StayCircle[]): StayCircle[] {
-  const places = stays.map(({ center, radius, to }) => ({ center, radius, to }))
-  for (let merged = true; merged;) {
-    merged = false
-    for (let i = 0; i < places.length && !merged; i++) {
-      for (let j = i + 1; j < places.length && !merged; j++) {
-        const [a, b] = [places[i]!, places[j]!]
-        if (distance(a.center, b.center) >= a.radius + b.radius) continue
-        places[i] = { ...enclosing(a, b), to: Math.max(a.to, b.to) }
-        places.splice(j, 1)
-        merged = true
-      }
+export function stayDots(stays: { center: LatLon; from: number; to: number }[]): { dots: StayDot[]; dotOf: number[] } {
+  const dots: StayDot[] = []
+  const dotOf: number[] = []
+  const longestFirst = stays.map((_, index) => index).sort((a, b) => stays[b]!.to - stays[b]!.from - (stays[a]!.to - stays[a]!.from))
+  for (const index of longestFirst) {
+    const stay = stays[index]!
+    const near = dots.findIndex((dot) => distance(dot.center, stay.center) <= STAY_DOT_JOIN_METERS)
+    if (near < 0) {
+      dotOf[index] = dots.push({ center: stay.center, to: stay.to, ms: stay.to - stay.from }) - 1
+    } else {
+      const dot = dots[near]!
+      dots[near] = { ...dot, to: Math.max(dot.to, stay.to), ms: dot.ms + stay.to - stay.from }
+      dotOf[index] = near
     }
   }
-  return places
-}
-
-/** The smallest circle around two circles. Close enough for circles of a few hundred metres. */
-function enclosing(a: StayCircle, b: StayCircle): Omit<StayCircle, 'to'> {
-  const d = distance(a.center, b.center)
-  if (d + b.radius <= a.radius) return a
-  if (d + a.radius <= b.radius) return b
-  const radius = (d + a.radius + b.radius) / 2
-  const along = (radius - a.radius) / d
-  return {
-    center: { lat: a.center.lat + (b.center.lat - a.center.lat) * along, lon: a.center.lon + (b.center.lon - a.center.lon) * along },
-    radius,
-  }
+  return { dots, dotOf }
 }
 
 /** Great-circle distance in metres. */

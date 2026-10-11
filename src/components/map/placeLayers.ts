@@ -17,7 +17,7 @@ const LABEL_MIN_PX = 24
 
 /** Adds the place layers, empty; again after each style load, before the trail's so they sit under it. */
 export function addPlaceLayers(map: MapLibreMap) {
-  const color = placeColor()
+  const color = placeColor(map)
   map.addSource(PLACES, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
   map.addLayer({ id: PLACES_FILL, type: 'fill', source: PLACES, paint: { 'fill-color': color, 'fill-opacity': 0.1 } })
   map.addLayer({
@@ -82,9 +82,9 @@ function size(place: Place): number {
   return (Math.max(...lats) - Math.min(...lats)) * 111_320
 }
 
-/** Repaints the places in the current --place colour, after light or dark mode changes. */
+/** Repaints the places in the current --place colour, after switching between a day and a night map. */
 export function recolourPlaces(map: MapLibreMap) {
-  const color = placeColor()
+  const color = placeColor(map)
   map.setPaintProperty(PLACES_FILL, 'fill-color', color)
   map.setPaintProperty(PLACES_OUTLINE, 'line-color', color)
 }
@@ -105,7 +105,7 @@ function top(place: Place): [number, number] {
   return [north.lon, north.lat]
 }
 
-/** The --place colour for the current light or dark mode; the map's paint properties can't read CSS variables. */
-export function placeColor(): string {
-  return getComputedStyle(document.documentElement).getPropertyValue('--place').trim() || '#5856d6'
+/** The --place colour for this map, a day or night map (AssetMap's .map-light, .map-dark); paint properties can't read CSS variables. */
+export function placeColor(map: MapLibreMap): string {
+  return getComputedStyle(map.getContainer()).getPropertyValue('--place').trim() || '#5856d6'
 }

@@ -1,19 +1,17 @@
 import type { GeoJSONSource, MapLibreMap } from 'maplibre-gl'
 import { walkKey } from '../../lib/matching'
-import { classifyTrail, mergeOverlappingStays, type LatLon, type StayCircle } from '../../lib/segments'
+import { classifyTrail, stayDots, type LatLon, type TrailPiece } from '../../lib/segments'
 import type { TrailPoint, Trails } from '../../lib/trail'
-import { circle } from './geometry'
 
 // The trail on the map, drawn by what the asset was doing (see segments.ts): walking as a line, or
 // as paw prints (Appearance → Paw prints); rides through their fixes, dashed, and dotted where they
-// went without GPS (underground); stays as soft circles, overlapping ones as one. Everything fades
-// with age. Markers are DOM elements, so they always sit above all of it.
+// went without GPS (underground); stays as dots, bigger the longer they were, with the walks running
+// through them, so a day reads as one path. Everything fades with age. Markers are DOM elements, so they always sit above all of it.
 
 const TRAILS = 'trails'
 const RIDES_VEHICLE = 'trail-vehicle'
 const RIDES_UNDERGROUND = 'trail-underground'
-const STAYS_FILL = 'trail-stays'
-const STAYS_OUTLINE = 'trail-stays-outline'
+const STAYS = 'trail-stays'
 const PAWS = 'paws'
 const PAW_IMAGE = 'paw-prints'
 /** Walking is drawn in short pieces so the trail can fade with age, oldest faintest. */
@@ -32,42 +30,21 @@ export function showPawPrints(map: MapLibreMap, on: boolean) {
   map.setLayoutProperty(PAWS, 'visibility', on ? 'visible' : 'none')
 }
 
-/** Repaints the trail in the current --trail colour, after light or dark mode changes. */
+/** Repaints the trail in the current --trail colour, after switching between a day and a night map. */
 export function recolourTrails(map: MapLibreMap) {
-  const color = trailColor()
-  for (const layer of [TRAILS, RIDES_VEHICLE, RIDES_UNDERGROUND, STAYS_OUTLINE]) map.setPaintProperty(layer, 'line-color', color)
-  map.setPaintProperty(STAYS_FILL, 'fill-color', color)
+  const color = trailColor(map)
+  for (const layer of [TRAILS, RIDES_VEHICLE, RIDES_UNDERGROUND]) map.setPaintProperty(layer, 'line-color', color)
+  map.setPaintProperty(STAYS, 'circle-color', color)
   map.updateImage(PAW_IMAGE, drawPawPrints(color))
 }
 
 /** Adds the trail layers, empty; again after each style load, since a new style drops them. */
 export function addTrailLayers(map: MapLibreMap) {
-  const color = trailColor()
+  const color = trailColor(map)
   const empty = toTrailFeatures({}, {})
   const kind = (value: string) => ['==', ['get', 'kind'], value] as ['==', ['get', string], string]
   const lineLayout = { 'line-cap': 'round', 'line-join': 'round' } as const
   map.addSource(TRAILS, { type: 'geojson', data: empty.trail })
-  map.addLayer({
-    id: STAYS_FILL,
-    type: 'fill',
-    source: TRAILS,
-    filter: kind('stay'),
-    paint: {
-      'fill-color': color,
-      'fill-opacity': ['*', 0.18, ['get', 'opacity']],
-    },
-  })
-  map.addLayer({
-    id: STAYS_OUTLINE,
-    type: 'line',
-    source: TRAILS,
-    filter: kind('stay'),
-    paint: {
-      'line-color': color,
-      'line-width': 1.5,
-      'line-opacity': ['*', 0.6, ['get', 'opacity']],
-    },
-  })
   map.addLayer({
     id: TRAILS,
     type: 'line',
@@ -105,6 +82,23 @@ export function addTrailLayers(map: MapLibreMap) {
       'line-width': 5,
       'line-opacity': ['get', 'opacity'],
       'line-dasharray': [0, 1.8],
+    },
+  })
+  // Stays on top of the lines that run through them: a dot with a white ring, 5 px across a short
+  // stop up to 9 px for an hour or more. White, like a location dot's, since the map can be light or
+  // dark whatever the device's mode (Settings → Map style).
+  map.addLayer({
+    id: STAYS,
+    type: 'circle',
+    source: TRAILS,
+    filter: kind('stay'),
+    paint: {
+      'circle-color': color,
+      'circle-radius': ['interpolate', ['linear'], ['get', 'minutes'], 2, 5, 60, 9],
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 2,
+      'circle-opacity': ['get', 'opacity'],
+      'circle-stroke-opacity': ['get', 'opacity'],
     },
   })
 
@@ -157,28 +151,38 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
         coordinates: coordinates.map((point) => [point.lon, point.lat]),
       },
     })
-    // Stays are drawn after the loop: overlapping ones as one circle.
-    const stays: StayCircle[] = []
-    for (const piece of classifyTrail(points)) {
+    const pieces = classifyTrail(points)
+    const stayIndexes = pieces.flatMap((piece, index) => (piece.kind === 'stay' ? [index] : []))
+    const { dots, dotOf } = stayDots(stayIndexes.map((index) => pieces[index] as Extract<TrailPiece, { kind: 'stay' }>))
+    /** The dot of the stay at `index` in the pieces, if there's a stay there. */
+    const dotAt = (index: number) => {
+      const stay = stayIndexes.indexOf(index)
+      return stay < 0 ? undefined : dots[dotOf[stay]!]!
+    }
+    pieces.forEach((piece, index) => {
       if (piece.kind === 'move') {
-        const walk = alongPaths(piece.points, snappedWalks[walkKey(piece.points)])
+        // From the dot of the stay before to the dot of the stay after, so the path is unbroken.
+        const [before, after] = [dotAt(index - 1), dotAt(index + 1)]
+        const walk = [
+          ...(before ? [{ ...before.center, time: piece.points[0]!.time }] : []),
+          ...alongPaths(piece.points, snappedWalks[walkKey(piece.points)]),
+          ...(after ? [{ ...after.center, time: piece.points.at(-1)!.time }] : []),
+        ]
         for (let i = 0; i < walk.length - 1; i += HOPS_PER_PIECE) {
           const chunk = walk.slice(i, i + HOPS_PER_PIECE + 1)
           trail.push(line('move', chunk, chunk.at(-1)!.time))
         }
         paws.push(line('move', walk, walk.at(-1)!.time))
-      } else if (piece.kind === 'stay') {
-        stays.push(piece)
-      } else {
+      } else if (piece.kind !== 'stay') {
         // Through the fixes on the way; legs without GPS are straight lines, dotted.
         for (const leg of piece.legs) trail.push(line(leg.kind, leg.points, leg.points.at(-1)!.time))
       }
-    }
-    for (const place of mergeOverlappingStays(stays)) {
+    })
+    for (const dot of dots) {
       trail.push({
         type: 'Feature',
-        properties: { id: Number(id), kind: 'stay', opacity: opacity(place.to) },
-        geometry: { type: 'Polygon', coordinates: [circle(place.center, place.radius)] },
+        properties: { id: Number(id), kind: 'stay', opacity: opacity(dot.to), minutes: dot.ms / 60_000 },
+        geometry: { type: 'Point', coordinates: [dot.center.lon, dot.center.lat] },
       })
     }
   }
@@ -233,7 +237,7 @@ function drawPawPrints(color: string): ImageData {
   return context.getImageData(0, 0, canvas.width, canvas.height)
 }
 
-/** The --trail colour for the current light or dark mode; the map's paint properties can't read CSS variables. */
-function trailColor(): string {
-  return getComputedStyle(document.documentElement).getPropertyValue('--trail').trim() || '#2f8f5b'
+/** The --trail colour for this map, a day or night map (AssetMap's .map-light, .map-dark); paint properties can't read CSS variables. */
+function trailColor(map: MapLibreMap): string {
+  return getComputedStyle(map.getContainer()).getPropertyValue('--trail').trim() || '#2f8f5b'
 }
