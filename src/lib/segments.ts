@@ -31,8 +31,8 @@ const RIDE_EDGE_MIN_METERS = 30
 const SILENT_MS = 10 * 60 * 1000
 /**
  * A stay: at least this long within this distance of where it started; then it goes on while new
- * fixes are within this distance of its middle, so fixes that settle a little off from where it
- * started (arriving from the street, then wandering indoors) don't end it.
+ * fixes are within this distance of the middle of those first fixes, so fixes that settle a little
+ * off from where it started (arriving from the street, then wandering indoors) don't end it.
  */
 const STAY_MIN_MS = 2 * 60 * 1000
 const STAY_MAX_METERS = 40
@@ -43,6 +43,8 @@ const STAY_DOT_JOIN_METERS = 40
 /** Stays this close (edge to edge) are one place, if the moves between them stayed this near. */
 const PLACE_GAP_METERS = 25
 const WANDER_METERS = 50
+/** A move of at most this many fixes between two stays in one place is a blip (GPS noise), not wandering. */
+const BLIP_FIXES = 2
 /** Live activity only counts while reports are this fresh. */
 const ACTIVITY_MAX_AGE_MS = 3 * 60 * 1000
 /** Underground right now: this long without a fix while switching between this many cell sites. */
@@ -112,8 +114,12 @@ type HopKind = 'walk' | 'vehicle' | 'underground' | 'gap'
 /** One step between two consecutive GPS fixes, with the reports without a fix in between. */
 type Hop = { from: TrailPoint; to: TrailPoint; kind: HopKind }
 
-/** The trail as pieces, oldest first. Reports without a fix only count as evidence, never as positions. */
-export function classifyTrail(points: TrailPoint[]): TrailPiece[] {
+/**
+ * The trail as pieces, oldest first. Reports without a fix only count as evidence, never as positions.
+ * Pottering about one place (a yard, a park) is one stay, so "Here since" holds; `showWandering`, for
+ * drawing, keeps the walking about as moves between its stops, and only joins stops across blips.
+ */
+export function classifyTrail(points: TrailPoint[], { showWandering = false } = {}): TrailPiece[] {
   const hops = toHops(points)
   if (hops.length === 0) {
     const fixes = points.filter((point) => point.valid)
@@ -121,7 +127,7 @@ export function classifyTrail(points: TrailPoint[]): TrailPiece[] {
   }
   const pieces: TrailPiece[] = []
   for (const stretch of toStretches(hops)) {
-    if (stretch.kind === 'walk') pieces.push(...splitWalk(stretch.points))
+    if (stretch.kind === 'walk') pieces.push(...splitWalk(stretch.points, showWandering))
     else if (stretch.kind !== 'gap') {
       pieces.push({ kind: stretch.kind, from: stretch.points[0]!, to: stretch.points.at(-1)!, legs: stretch.legs })
     }
@@ -272,7 +278,7 @@ type Part = { stay: boolean; points: TrailPoint[] }
  * Splits walking into moves between stays. A move's ends touch the stays around it. Stays in one
  * place with only local wandering between them (a yard, a park) become one; see mergePlaces.
  */
-function splitWalk(points: TrailPoint[]): TrailPiece[] {
+function splitWalk(points: TrailPoint[], showWandering: boolean): TrailPiece[] {
   const parts: Part[] = []
   let move: TrailPoint[] = []
   let i = 0
@@ -280,11 +286,10 @@ function splitWalk(points: TrailPoint[]): TrailPiece[] {
     let j = i
     while (j + 1 < points.length && distance(points[i]!, points[j + 1]!) <= STAY_MAX_METERS) j++
     if (points[j]!.time - points[i]!.time >= STAY_MIN_MS) {
-      let middle = centre(points.slice(i, j + 1))
-      while (j + 1 < points.length && distance(middle, points[j + 1]!) <= STAY_MAX_METERS) {
-        j++
-        middle = centre(points.slice(i, j + 1))
-      }
+      // The middle of the fixes it began with, kept as it is: a middle that moved with each new fix
+      // would follow a slow walk away.
+      const middle = centre(points.slice(i, j + 1))
+      while (j + 1 < points.length && distance(middle, points[j + 1]!) <= STAY_MAX_METERS) j++
       move.push(points[i]!)
       if (move.length > 1) parts.push({ stay: false, points: move })
       parts.push({ stay: true, points: points.slice(i, j + 1) })
@@ -297,21 +302,24 @@ function splitWalk(points: TrailPoint[]): TrailPiece[] {
   }
   if (move.length > 1) parts.push({ stay: false, points: move })
 
-  return mergePlaces(parts).map((part) => (part.stay ? toStay(part.points) : { kind: 'move', points: part.points }))
+  return mergePlaces(parts, showWandering).map((part) => (part.stay ? toStay(part.points) : { kind: 'move', points: part.points }))
 }
 
 /**
  * Pottering about one place (a yard, a park) gives many stays with short moves between them. Joins
  * two stays, and the move between them, when they're close and the move never strayed from them,
  * until nothing more joins; then moves that never left a neighbouring stay's circle join it too.
+ * With `blipsOnly`, for drawing, two stays only join across a move of a fix or two (GPS noise)
+ * when they're at the same spot, where they'd share a dot (see stayDots) anyway.
  */
-function mergePlaces(parts: Part[]): Part[] {
+function mergePlaces(parts: Part[], blipsOnly: boolean): Part[] {
   const merged = [...parts]
   for (let joined = true; joined;) {
     joined = false
     for (let k = 0; k + 2 < merged.length; k++) {
       const [a, between, b] = [merged[k]!, merged[k + 1]!, merged[k + 2]!]
-      if (a.stay && !between.stay && b.stay && samePlace(a.points, between.points, b.points)) {
+      const blip = () => between.points.length - 2 <= BLIP_FIXES && distance(centre(a.points), centre(b.points)) <= STAY_DOT_JOIN_METERS
+      if (a.stay && !between.stay && b.stay && (!blipsOnly || blip()) && samePlace(a.points, between.points, b.points)) {
         merged.splice(k, 3, { stay: true, points: [...a.points, ...between.points.slice(1, -1), ...b.points] })
         joined = true
       }

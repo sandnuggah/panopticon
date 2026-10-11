@@ -151,7 +151,7 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
         coordinates: coordinates.map((point) => [point.lon, point.lat]),
       },
     })
-    const pieces = classifyTrail(points)
+    const pieces = classifyTrail(points, { showWandering: true })
     const stayIndexes = pieces.flatMap((piece, index) => (piece.kind === 'stay' ? [index] : []))
     const { dots, dotOf } = stayDots(stayIndexes.map((index) => pieces[index] as Extract<TrailPiece, { kind: 'stay' }>))
     /** The dot of the stay at `index` in the pieces, if there's a stay there. */
@@ -173,7 +173,19 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
           trail.push(line('move', chunk, chunk.at(-1)!.time))
         }
         paws.push(line('move', walk, walk.at(-1)!.time))
-      } else if (piece.kind !== 'stay') {
+      } else if (piece.kind === 'stay') {
+        // Straight on from another stop, a few dozen metres off (pottering about a park): a line
+        // between their dots.
+        const [before, here] = [dotAt(index - 1), dotAt(index)!]
+        if (before && before !== here) {
+          const walk = [
+            { ...before.center, time: piece.from },
+            { ...here.center, time: piece.from },
+          ]
+          trail.push(line('move', walk, piece.from))
+          paws.push(line('move', walk, piece.from))
+        }
+      } else {
         // Through the fixes on the way; legs without GPS are straight lines, dotted.
         for (const leg of piece.legs) trail.push(line(leg.kind, leg.points, leg.points.at(-1)!.time))
       }

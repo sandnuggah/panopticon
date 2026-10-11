@@ -17,7 +17,7 @@ export function useSnappedWalks(trails: Trails, enabled: boolean): Record<string
   const asked = useRef(new Set<string>())
 
   const walks = useMemo(
-    () => (enabled ? Object.values(trails).flatMap((points) => matchableWalks(classifyTrail(points))) : []),
+    () => (enabled ? Object.values(trails).flatMap((points) => matchableWalks(classifyTrail(points, { showWandering: true }))) : []),
     [trails, enabled],
   )
 
