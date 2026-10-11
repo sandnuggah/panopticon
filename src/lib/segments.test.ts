@@ -307,6 +307,61 @@ describe('currentStay', () => {
     assert.ok(Math.abs(stay.since - arrived) <= 30_000, `since ${stay.since - arrived} ms after arriving`)
   })
 
+  test('settling a little off from where the stay began is the same stay', () => {
+    // Walking home along the street, then indoors, where the fixes wander: one, after 345 s, is
+    // over 40 m from the stay's first fix but close to its middle. Seconds from that first fix,
+    // metres north and east of it (the mock Traccar's arrival home, which used to lose its stay).
+    const fixes = [
+      [-115, 73, 87],
+      [-110, 68, 89],
+      [-105, 63, 92],
+      [-100, 56, 93],
+      [-95, 48, 93],
+      [-90, 40, 91],
+      [-85, 34, 92],
+      [-80, 30, 95],
+      [-75, 26, 97],
+      [-70, 23, 91],
+      [-65, 21, 83],
+      [-60, 20, 76],
+      [-55, 21, 72],
+      [-50, 22, 68],
+      [-45, 21, 64],
+      [-40, 18, 57],
+      [-35, 15, 49],
+      [-30, 13, 42],
+      [-25, 13, 37],
+      [-20, 12, 32],
+      [-15, 8, 24],
+      [-10, 4, 15],
+      [-5, 1, 7],
+      [0, 0, 0],
+      [5, 0, -5],
+      [10, -1, -10],
+      [15, -4, -17],
+      [20, -10, -19],
+      [25, -12, -15],
+      [30, -17, -11],
+      [35, -24, -8],
+      [45, -32, -7],
+      [105, -36, -15],
+      [165, -37, -14],
+      [225, -26, -1],
+      [285, -27, -3],
+      [345, -40, -14],
+      [405, -38, -11],
+    ]
+    const points = fixes.map(([seconds, north, east]) => ({
+      lat: START.lat + north! / METERS_PER_DEGREE_LAT,
+      lon: START.lon + east! / METERS_PER_DEGREE_LON,
+      time: START.time + seconds! * 1000,
+      valid: true,
+    }))
+    const stay = currentStay(points, START.time + 410_000)
+    assert.ok(stay, 'still staying')
+    assert.ok(stay.since <= START.time, 'since arriving')
+  })
+
   test('a stay from the first point on may have begun earlier', () => {
     const trip = new Trip().stay(10)
     assert.equal(currentStay(trip.points, trip.now)?.began, false)

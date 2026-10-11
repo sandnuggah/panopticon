@@ -29,7 +29,11 @@ const RIDE_EDGE_MIN_METERS = 30
  * That says nothing about GPS, so it's never evidence of being underground.
  */
 const SILENT_MS = 10 * 60 * 1000
-/** A stay: at least this long within this distance of where it started. */
+/**
+ * A stay: at least this long within this distance of where it started; then it goes on while new
+ * fixes are within this distance of its middle, so fixes that settle a little off from where it
+ * started (arriving from the street, then wandering indoors) don't end it.
+ */
 const STAY_MIN_MS = 2 * 60 * 1000
 const STAY_MAX_METERS = 40
 /** Stays are drawn at least this big, so a single spot still shows. */
@@ -276,6 +280,11 @@ function splitWalk(points: TrailPoint[]): TrailPiece[] {
     let j = i
     while (j + 1 < points.length && distance(points[i]!, points[j + 1]!) <= STAY_MAX_METERS) j++
     if (points[j]!.time - points[i]!.time >= STAY_MIN_MS) {
+      let middle = centre(points.slice(i, j + 1))
+      while (j + 1 < points.length && distance(middle, points[j + 1]!) <= STAY_MAX_METERS) {
+        j++
+        middle = centre(points.slice(i, j + 1))
+      }
       move.push(points[i]!)
       if (move.length > 1) parts.push({ stay: false, points: move })
       parts.push({ stay: true, points: points.slice(i, j + 1) })
@@ -334,12 +343,17 @@ function withinStay(stay: StayPiece, points: TrailPoint[], margin: number): bool
 
 type StayPiece = Extract<TrailPiece, { kind: 'stay' }>
 
-/** Where a stay was, and how big an area: 90% of the fixes lie within the radius, so one stray fix doesn't blow it up. */
-function toStay(points: TrailPoint[]): StayPiece {
-  const center = {
+/** The middle of some points: their average. */
+function centre(points: TrailPoint[]): LatLon {
+  return {
     lat: points.reduce((sum, point) => sum + point.lat, 0) / points.length,
     lon: points.reduce((sum, point) => sum + point.lon, 0) / points.length,
   }
+}
+
+/** Where a stay was, and how big an area: 90% of the fixes lie within the radius, so one stray fix doesn't blow it up. */
+function toStay(points: TrailPoint[]): StayPiece {
+  const center = centre(points)
   const distances = points.map((point) => distance(center, point)).sort((a, b) => a - b)
   const radius = Math.max(STAY_MIN_RADIUS_METERS, distances[Math.ceil(distances.length * 0.9) - 1]!)
   return { kind: 'stay', center, radius, from: points[0]!.time, to: points.at(-1)!.time }
