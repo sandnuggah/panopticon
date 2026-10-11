@@ -111,12 +111,12 @@ function WelcomePage() {
         <div className="lg:mx-auto lg:max-w-3xl">
           <FeatureTrail features={FEATURES} />
         </div>
-        <SectionTitle>What it looks like</SectionTitle>
-        <ScreenshotGallery />
         <SectionTitle>How the tracking works</SectionTitle>
         <div className="lg:mx-auto lg:max-w-4xl">
           <HowItWorks />
         </div>
+        <SectionTitle>What it looks like</SectionTitle>
+        <ScreenshotGallery />
         <p className="px-8 pt-10 text-center text-sm opacity-60 lg:pt-16">
           Panopticon works in any browser, and on iPhone and Android as an app on your Home Screen.
         </p>
