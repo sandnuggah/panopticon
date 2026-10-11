@@ -19,7 +19,7 @@ npm run dev            # http://localhost:3000
 
 `npm run typecheck` checks types; `npm run build && npm start` runs the production build locally.
 
-No Traccar to hand? `node dev/mock-traccar.mjs` runs a stand-in with three made-up assets and two places on port 8082 (Sixten walks a round of real streets on Södermalm). Put
+No Traccar to hand? `node dev/mock-traccar.mjs` runs a stand-in with three made-up assets and two places on port 8082 (Betty goes for a walk on real streets on Södermalm every three hours, and starts just home from one; `HOME_SINCE=-6` starts it six minutes before she's back). Put
 `TRACCAR_URL=http://127.0.0.1:8082` in `.env.development.local` and sign in as `pet@example.com` / `secret`.
 
 ## Configure

@@ -7,16 +7,17 @@
 // Event forwarding, for alerts: FORWARD_URL=http://localhost:3001/hooks/traccar-events and
 // FORWARD_HEADER='Authorization: Bearer <TRACCAR_EVENTS_SECRET>' post live events there, as
 // Traccar's event.forward.url and event.forward.header do.
-// Assets: Betty (photo, at one spot for two hours after a walk), Sixten (on a dog walk, live) and
-// Bamse (offline, no position). Places: Daycare (Betty's spot) and Home (on Sixten's walk, so he
-// keeps arriving and leaving). Only the endpoints panopticon uses, roughly as Traccar answers them.
+// Assets: Betty (photo, lives at Home and goes for a walk round Södermalm every three hours; the
+// mock starts just after she's back), Sixten (at daycare since a walk there) and Bamse (offline, no
+// position). Places: Home (Betty's) and Daycare (Sixten's). Only the endpoints panopticon uses,
+// roughly as Traccar answers them. The front page's screenshots are taken against this (README).
 
 import crypto from 'node:crypto'
 import http from 'node:http'
 import zlib from 'node:zlib'
 
 const PORT = Number(process.env.PORT ?? 8082)
-/** How often Sixten moves, and how often Betty reports. */
+/** How often a walking dog's tracker reports; a still one reports less often. */
 const STEP_MS = Number(process.env.STEP_MS ?? 5000)
 
 const users = [
@@ -68,11 +69,11 @@ let nextDeviceId = 100
 
 const geofences = [
   { id: 1, name: 'Daycare', description: null, area: 'CIRCLE (59.3577 18.0912, 120)', calendarId: 0, attributes: {} },
-  { id: 2, name: 'Home', description: null, area: 'CIRCLE (59.31565 18.07455, 60)', calendarId: 0, attributes: {} },
+  { id: 2, name: 'Home', description: null, area: 'CIRCLE (59.3132 18.0785, 50)', calendarId: 0, attributes: {} },
 ]
 let nextGeofenceId = 3
 /** Device-geofence links, as "deviceId:geofenceId". */
-const links = new Set(['30:1', '10:2'])
+const links = new Set(['30:2', '10:1'])
 const events = []
 let nextEventId = 1
 /** Each device's geofences at its latest position, to notice arriving and leaving. */
@@ -169,124 +170,137 @@ function report(deviceId, time, lat, lon, valid = true) {
 
 const history = new Map(devices.map((device) => [device.id, []]))
 const DAYCARE = [59.3577, 18.0912]
+const HOME = [59.3132, 18.0785]
 const jitter = () => (Math.random() - 0.5) * 0.0003
+/** A still tracker (asleep, or indoors) reports this often. */
+const STILL_MS = 60_000
 
-// Betty: walked to daycare between three and two hours ago, and has been there since.
+// Sixten: walked to daycare between three and two hours ago, and has been there since.
 {
   const from = [59.3455, 18.0815]
   const walkStart = start - 3 * 3600_000
-  for (let t = walkStart, i = 0; t < start; t += 30_000, i++) {
+  for (let t = walkStart; t < start; t += 30_000) {
     const progress = Math.min(1, (t - walkStart) / 3600_000)
     const [lat, lon] = progress < 1 ? [from[0] + (DAYCARE[0] - from[0]) * progress, from[1] + (DAYCARE[1] - from[1]) * progress] : DAYCARE
-    history.get(30).push(report(30, t, lat + jitter() * (progress < 1 ? 0.3 : 1), lon + jitter() * (progress < 1 ? 0.3 : 1)))
+    history.get(10).push(report(10, t, lat + jitter() * (progress < 1 ? 0.3 : 1), lon + jitter() * (progress < 1 ? 0.3 : 1)))
   }
 }
 
-// Sixten: a made-up dog walk on Södermalm, round and round, along real streets and paths: from
-// Nytorget to Medborgarplatsen, a sniff about Björns trädgård (the Home place), through Vitabergsparken
-// and back. The route came once from OpenStreetMap's foot router (routing.openstreetmap.de) and is
-// kept here, simplified; nothing is fetched at run time. Each point: latitude, longitude, and how
-// long he stops there (s). Walking pace varies by stretch, and the fixes wobble a few metres.
+// Betty: a made-up dog walk on Södermalm, along real streets, steps and paths: from home by
+// Åsögatan to a sniff at Nytorget, play in Vitabergsparken, the view from Fjällgatan, a sniff by
+// Katarina kyrka and home again, about 2.9 km in 50 minutes. The route came once from Valhalla's
+// pedestrian router (the one Snap to paths uses, see README) and is kept here, simplified; nothing
+// is fetched at run time. Each point: latitude, longitude, and how long she stops there (s).
 const ROUTE = [
-  [59.31254, 18.08158, 0],
-  [59.31202, 18.07777, 0],
-  [59.31181, 18.07713, 0],
-  [59.31209, 18.07474, 0],
-  [59.31208, 18.07461, 0],
-  [59.31409, 18.07365, 0],
-  [59.31415, 18.07371, 0],
-  [59.31432, 18.07364, 0],
-  [59.31437, 18.07356, 0],
-  [59.31432, 18.07315, 0],
-  [59.31427, 18.07317, 0],
-  [59.31422, 18.07284, 40],
-  [59.31425, 18.07306, 0],
-  [59.31433, 18.07302, 0],
-  [59.31439, 18.07342, 0],
-  [59.31523, 18.07345, 0],
-  [59.31523, 18.07337, 0],
-  [59.31534, 18.07334, 0],
-  [59.31534, 18.0732, 0],
-  [59.31547, 18.07316, 0],
-  [59.31563, 18.07449, 0],
-  [59.31563, 18.07466, 90],
-  [59.31555, 18.07472, 0],
-  [59.31556, 18.07484, 0],
-  [59.31562, 18.07488, 0],
-  [59.31559, 18.07499, 0],
-  [59.31504, 18.07525, 0],
-  [59.31518, 18.07622, 0],
-  [59.31469, 18.07645, 0],
-  [59.31526, 18.08112, 0],
-  [59.31404, 18.08181, 0],
-  [59.31407, 18.08204, 0],
-  [59.31404, 18.08211, 0],
-  [59.31388, 18.08212, 0],
-  [59.3134, 18.08238, 0],
-  [59.31337, 18.08251, 0],
-  [59.31326, 18.08257, 0],
-  [59.31352, 18.08455, 0],
-  [59.31349, 18.08463, 0],
-  [59.31309, 18.08481, 0],
-  [59.31311, 18.08494, 0],
+  [59.3132, 18.0785, 0],
+  [59.31348, 18.07835, 0],
+  [59.31374, 18.0804, 0],
+  [59.31277, 18.08088, 0],
+  [59.31275, 18.0807, 100],
+  [59.31277, 18.08088, 0],
+  [59.3131, 18.08072, 0],
+  [59.3136, 18.0847, 0],
   [59.31294, 18.08501, 0],
   [59.31296, 18.08534, 0],
   [59.31293, 18.08525, 0],
   [59.31267, 18.08549, 0],
   [59.31264, 18.08606, 0],
-  [59.3123, 18.08615, 0],
-  [59.31213, 18.08649, 0],
-  [59.31195, 18.08659, 0],
-  [59.31188, 18.08653, 45],
-  [59.31195, 18.08659, 0],
-  [59.3121, 18.08653, 0],
-  [59.3123, 18.08615, 0],
-  [59.31264, 18.08606, 0],
-  [59.31267, 18.08549, 0],
-  [59.31293, 18.08525, 0],
-  [59.31296, 18.08534, 0],
-  [59.31294, 18.08501, 0],
-  [59.31301, 18.08498, 0],
-  [59.31254, 18.08158, 0],
+  [59.31273, 18.0871, 0],
+  [59.31258, 18.08717, 0],
+  [59.31267, 18.08745, 0],
+  [59.31217, 18.08764, 0],
+  [59.31198, 18.08788, 0],
+  [59.31206, 18.08797, 0],
+  [59.31205, 18.088, 420],
+  [59.31206, 18.08797, 0],
+  [59.31209, 18.08801, 0],
+  [59.31224, 18.08782, 0],
+  [59.31235, 18.08784, 0],
+  [59.31253, 18.08818, 0],
+  [59.31264, 18.08809, 0],
+  [59.313, 18.08703, 0],
+  [59.31313, 18.08694, 0],
+  [59.31321, 18.08712, 0],
+  [59.31329, 18.08697, 0],
+  [59.31552, 18.08604, 0],
+  [59.31548, 18.08382, 0],
+  [59.31763, 18.08273, 0],
+  [59.31769, 18.08288, 0],
+  [59.3178, 18.08275, 0],
+  [59.31782, 18.08282, 0],
+  [59.31778, 18.08302, 0],
+  [59.31752, 18.08315, 0],
+  [59.31752, 18.0832, 120],
+  [59.31752, 18.08315, 0],
+  [59.31782, 18.08295, 0],
+  [59.31779, 18.08269, 0],
+  [59.31787, 18.08211, 0],
+  [59.3183, 18.08013, 0],
+  [59.3181, 18.07997, 0],
+  [59.31802, 18.08011, 0],
+  [59.31804, 18.07996, 0],
+  [59.31762, 18.08024, 0],
+  [59.31738, 18.0785, 0],
+  [59.31649, 18.07895, 0],
+  [59.31634, 18.07778, 0],
+  [59.3163, 18.0778, 90],
+  [59.31634, 18.07778, 0],
+  [59.31637, 18.07807, 0],
+  [59.31596, 18.07898, 0],
+  [59.31596, 18.07922, 0],
+  [59.31374, 18.0804, 0],
+  [59.31348, 18.07835, 0],
+  [59.3132, 18.0785, 0],
 ]
-const WALK = ROUTE.map(([lat, lon, wait]) => ({ at: [lat, lon], wait }))
 const METRES_PER_DEGREE = 111_320
-const walkLegs = WALK.slice(1).map((stop, index) => {
-  const from = WALK[index].at
-  const dy = (stop.at[0] - from[0]) * METRES_PER_DEGREE
-  const dx = (stop.at[1] - from[1]) * METRES_PER_DEGREE * Math.cos((from[0] * Math.PI) / 180)
+const walkLegs = ROUTE.slice(1).map(([lat, lon, wait], index) => {
+  const from = ROUTE[index]
+  const dy = (lat - from[0]) * METRES_PER_DEGREE
+  const dx = (lon - from[1]) * METRES_PER_DEGREE * Math.cos((from[0] * Math.PI) / 180)
   // A pace of its own for each stretch, 1.1–1.6 m/s.
   const speed = 1.1 + ((index * 7) % 6) * 0.1
-  return { from, to: stop.at, metres: Math.hypot(dx, dy), wait: stop.wait, seconds: Math.hypot(dx, dy) / speed }
+  return { from: [from[0], from[1]], to: [lat, lon], wait, seconds: Math.hypot(dx, dy) / speed }
 })
-/** Small, smooth noise from a number, so the same step always gives the same wobble. */
+const WALK_MS = walkLegs.reduce((sum, leg) => sum + leg.seconds + leg.wait, 0) * 1000
+/**
+ * A walk every three hours. The mock starts HOME_SINCE minutes after she got home from one (4 by
+ * default); a negative number starts it that long before she's back, to get ready for screenshots.
+ */
+const CYCLE_MS = 3 * 3600_000
+const cycleStart = start - WALK_MS - Number(process.env.HOME_SINCE ?? 4) * 60_000
+/** Small, smooth noise from a number, so the same moment always gives the same wobble. */
 const wobble = (n, seed) => Math.sin(n * 0.37 + seed) * 0.6 + Math.sin(n * 1.13 + seed * 2) * 0.4
-let sixtenStep = 0
-/** Where Sixten is at a step (STEP_MS apart): walking 1.1–1.6 m/s, waiting at stops, fixes off by ~5 m. */
-function sixtenAt(step) {
-  let seconds = (step * STEP_MS) / 1000
-  const lap = walkLegs.reduce((sum, leg) => sum + leg.seconds + leg.wait, 0)
-  seconds %= lap
-  let position = WALK[0].at
+/** Moves a point by up to `metres` of wobble, the same for the same `n`. */
+function wander([lat, lon], n, metres) {
+  const degrees = metres / METRES_PER_DEGREE
+  return [lat + wobble(n, 1) * degrees, lon + (wobble(n, 7) * degrees) / Math.cos((lat * Math.PI) / 180)]
+}
+/** Where Betty is at a time, and whether she's out walking: 1.1–1.6 m/s, stops, fixes off by ~5 m (~10 m indoors). */
+function bettyAt(time) {
+  const n = Math.floor(time / STEP_MS)
+  let seconds = ((((time - cycleStart) % CYCLE_MS) + CYCLE_MS) % CYCLE_MS) / 1000
+  if (seconds * 1000 >= WALK_MS) return { at: wander(HOME, n, 10), walking: false }
   for (const leg of walkLegs) {
-    const walk = leg.seconds
-    if (seconds < walk) {
-      const along = seconds / walk
-      position = [leg.from[0] + (leg.to[0] - leg.from[0]) * along, leg.from[1] + (leg.to[1] - leg.from[1]) * along]
-      break
+    if (seconds < leg.seconds) {
+      const along = seconds / leg.seconds
+      const at = [leg.from[0] + (leg.to[0] - leg.from[0]) * along, leg.from[1] + (leg.to[1] - leg.from[1]) * along]
+      return { at: wander(at, n, 4.5), walking: true }
     }
-    seconds -= walk
-    if (seconds < leg.wait) {
-      position = leg.to
-      break
-    }
+    seconds -= leg.seconds
+    if (seconds < leg.wait) return { at: wander(leg.to, n, leg.wait > 300 ? 12 : 4.5), walking: true }
     seconds -= leg.wait
   }
-  const metres = 4.5 / METRES_PER_DEGREE
-  return [position[0] + wobble(step, 1) * metres, position[1] + (wobble(step, 7) * metres) / Math.cos((position[0] * Math.PI) / 180)]
+  return { at: wander(HOME, n, 10), walking: false }
 }
-for (let t = start - 3 * 3600_000; t <= start; t += STEP_MS) {
-  history.get(10).push(report(10, t, ...sixtenAt(sixtenStep++)))
+// Six hours back, so the arrivals list has the walk before this one too.
+{
+  let lastReport = -Infinity
+  for (let t = start - 6 * 3600_000; t <= start; t += STEP_MS) {
+    const { at, walking } = bettyAt(t)
+    if (!walking && t - lastReport < STILL_MS) continue
+    history.get(30).push(report(30, t, ...at))
+    lastReport = t
+  }
 }
 
 const latest = () =>
@@ -624,12 +638,15 @@ server.on('upgrade', (req, socket) => {
   socket.on('error', () => sockets.delete(socket))
 })
 
-// Sixten keeps walking; Betty reports from daycare every few steps.
+// Betty reports every step while she's out and every minute at home; Sixten every minute from daycare.
 let tick = 0
 setInterval(() => {
   const now = Date.now()
-  const positions = [report(10, now, ...sixtenAt(sixtenStep++))]
-  if (tick++ % 6 === 0) positions.push(report(30, now, DAYCARE[0] + jitter(), DAYCARE[1] + jitter()))
+  const betty = bettyAt(now)
+  const still = tick++ % Math.max(1, Math.round(STILL_MS / STEP_MS)) === 0
+  const positions = []
+  if (betty.walking || still) positions.push(report(30, now, ...betty.at))
+  if (still) positions.push(report(10, now, DAYCARE[0] + jitter(), DAYCARE[1] + jitter()))
   for (const position of positions) {
     history.get(position.deviceId)?.push(position)
     const device = devices.find((candidate) => candidate.id === position.deviceId)

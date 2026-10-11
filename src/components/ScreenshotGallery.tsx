@@ -1,11 +1,12 @@
 /**
  * The front page's screenshots: the app on an iPhone, light or dark to match the visitor's own
  * mode, in a row that scrolls sideways and snaps to each shot. Taken in the iOS Simulator against
- * the mock Traccar (dev/mock-traccar.mjs), so they show made-up assets and places only; the files
- * are in public/screenshots, 600 px wide.
+ * the mock Traccar (dev/mock-traccar.mjs), so they show made-up assets and places only: the Bright
+ * map, Betty just home from her walk, Snap to paths on (Valhalla, MAP_MATCHING_URL). The files are
+ * in public/screenshots, 600 px wide.
  */
 const SHOTS = [
-  { file: 'map', caption: 'Sixten’s walk, snapped to the streets' },
+  { file: 'map', caption: 'Betty’s walk, snapped to the streets' },
   { file: 'details', caption: 'At Home, with arrivals and departures' },
   { file: 'place', caption: 'Placing Home on the map' },
   { file: 'settings', caption: 'Assets, places, alerts and more' },
