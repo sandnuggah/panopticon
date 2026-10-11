@@ -24,6 +24,7 @@ and cleared out now and then.
 - [ ] Research alerts on Android: Chrome's push goes through fcm.googleapis.com (allowed), but check Firefox and Samsung Internet's push services, whether the service worker shows the Declarative Web Push message there, whether the installed app is needed, and test on a real Android phone (or an emulator with Google Play services)
 - [ ] Watch for false "left Home" at the edge of a place (ST-904L fixes wander 15–25 m); the position filters below would help
 - [ ] An alert when an asset's battery goes low: Traccar's `batteryLevel` on its positions (check that the ST-904L reports it) below a threshold, once per charge, as a new rule in Settings → Alerts; or Traccar's `lowBattery` alarm where the tracker sends one
+- [ ] Share assets and places between users, such as a family with one dog: everyone sees the same assets and places, and a place added by one shows for all. Traccar has this as permissions (a user linked to devices and geofences, or a group); find out how to set it up from Panopticon (who may invite, what an invited user can change) and how alerts work per user
 
 ## Code
 
