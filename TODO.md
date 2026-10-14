@@ -13,6 +13,8 @@ and cleared out now and then.
 - [x] Stays as dots instead of circles: a dot with a white ring where the asset stayed (bigger the longer), the walks running through them so the trail reads as one path, stays within 40 m sharing a dot. The circles grew far bigger than Home indoors and made the map busy. Released as `:62` (2026-10-11)
 - [x] Stays fixed after `:62`: "Here since" no longer drops out for a couple of minutes after arriving home (a stay now goes on while fixes are near the middle of its first fixes), and the map shows the walking about a place again (the stops in a park as their own dots with lines between; `:62` hid a walk down to Skeppet in Tullgårdsparken inside one dot). Released as `:63` (2026-10-11)
 - [ ] Check `:63` on a real walk: is the stretch to Skeppet (or the like) back, and does home stay calm, with no scribbles from indoor GPS wander?
+- [x] Calmer trails: walks to and from a stay are snapped from its middle (no straight spokes out of Home), walks are snapped where they went along paths and drawn as recorded elsewhere (a run on the grass), and the latest outing (since the last stay of 20 minutes or more) is drawn in front of older ones. Released as `:69` (2026-10-14)
+- [ ] Check `:69` on Kofi's real trail (6 hours, Snap to paths on): spokes out of Home gone, only grass runs straight, the latest outing clearly in front. Compare with the 2026-10-14 screenshot (Tullgårdsparken, Stora Blecktornsparken)
 
 ## Places and alerts
 
