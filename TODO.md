@@ -15,6 +15,9 @@ and cleared out now and then.
 - [ ] Check `:63` on a real walk: is the stretch to Skeppet (or the like) back, and does home stay calm, with no scribbles from indoor GPS wander?
 - [x] Calmer trails: walks to and from a stay are snapped from its middle (no straight spokes out of Home), walks are snapped where they went along paths and drawn as recorded elsewhere (a run on the grass), and the latest outing (since the last stay of 20 minutes or more) is drawn in front of older ones. Released as `:69` (2026-10-14)
 - [ ] Check `:69` on Kofi's real trail (6 hours, Snap to paths on): spokes out of Home gone, only grass runs straight, the latest outing clearly in front. Compare with the 2026-10-14 screenshot (Tullgårdsparken, Stora Blecktornsparken)
+- [x] Calmer walks in parks: stricter snapping in parks (8 m, 5 fixes in a row, parks from the map's own tiles), lone GPS spikes left out (the V out to Tullgårdsgatan), and the matched line's detours out to a street and back cut across. Released as `:72` (2026-10-14)
+- [ ] Use Traccar's `accuracy` on trail points: phones (Traccar Client) report it per fix, so fixes worse than ~30–50 m could be left out or count for less, instead of guessing from the shape. The spike filter keeps a far-off fix whose neighbours are minutes apart (a line into Hammarby IP on 2026-10-14) because it might be real; accuracy would tell. Today the trail drops it on the server (`loadTrails`); check what the ST-904L sends (probably 0, so keep the shape rules for it)
+- [ ] Asset types (dog, bike, bag, person, car…) with their own tunings for the map: how fast counts as a ride, how long a stay, whether to snap to footpaths or roads (Valhalla's pedestrian or bicycle costing), park rules, spike limits, paw prints or not, and a fitting icon. Chosen per asset on its page, stored in Traccar (the device's category or an attribute); today everything is tuned for a dog on foot
 
 ## Places and alerts
 
