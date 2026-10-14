@@ -59,6 +59,8 @@ type Props = {
    * Settings card on the map screen, in the panel on live link pages. The map shows none itself.
    */
   onAttribution: (attributions: string[]) => void
+  /** Once, when the map has first drawn itself with its style and the tiles in view (the map screen's loading screen waits for it). */
+  onLoad?: () => void
   /** The user's places (Settings → Places), drawn under the trail. None on live link pages. */
   places?: Place[]
   /** While a place is being added or changed (PlaceEditor): the circle to place, and which place it is. */
@@ -80,6 +82,7 @@ export default function AssetMap({
   showMe,
   onShowMeChange,
   onAttribution,
+  onLoad,
   places = NO_PLACES,
   picker = null,
 }: Props) {
@@ -120,8 +123,10 @@ export default function AssetMap({
   // the selected asset together, or just you.
   const { position: me, note } = useMyPosition(showMe, () => onShowMeChange(false))
   const onAttributionRef = useRef(onAttribution)
+  const onLoadRef = useRef(onLoad)
   useEffect(() => {
     onAttributionRef.current = onAttribution
+    onLoadRef.current = onLoad
   })
   const meMarkerRef = useRef<Marker | null>(null)
   const framedRef = useRef(false)
@@ -163,6 +168,14 @@ export default function AssetMap({
       // Added below, at the top.
       attributionControl: false,
     })
+    // Ready once a frame has drawn with the style and the tiles in view. maplibre's own 'load'
+    // waits until every source is idle, which trail and live updates keep putting off.
+    const onRender = () => {
+      if (!map.isStyleLoaded() || !map.areTilesLoaded()) return
+      map.off('render', onRender)
+      onLoadRef.current?.()
+    }
+    map.on('render', onRender)
     // Every style load, the first and after switching: places, then the trails and your position on top.
     map.on('style.load', () => {
       addPlaceLayers(map)

@@ -704,3 +704,69 @@ html.dark:has(.k-material) {
     animation: none;
   }
 }
+
+/* The map screen's loading screen (LoadingScreen.tsx): it fades out once the map is ready. */
+.loading-screen {
+  transition: opacity 300ms ease;
+}
+
+.loading-screen-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(120 120 128 / 0.2);
+}
+
+.loading-bar-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+  transition: width 400ms ease;
+}
+
+/* The bar's width per step done (a class, since the CSP blocks style attributes). */
+.loading-bar-1-of-4 {
+  width: 25%;
+}
+
+.loading-bar-2-of-4 {
+  width: 50%;
+}
+
+.loading-bar-3-of-4 {
+  width: 75%;
+}
+
+.loading-bar-4-of-4 {
+  width: 100%;
+}
+
+.loading-spinner {
+  border: 2.5px solid rgb(120 120 128 / 0.25);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-screen,
+  .loading-bar-fill {
+    transition: none;
+  }
+
+  .loading-spinner {
+    animation-duration: 2.4s;
+  }
+}

@@ -29,6 +29,8 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null,
   const [assets, setAssets] = useState(initialAssets)
   const assetsRef = useRef(initialAssets)
   const [trails, setTrails] = useState<Trails>({})
+  // Whether the first trail history has come back (or failed), for the loading screen.
+  const [trailsLoaded, setTrailsLoaded] = useState(false)
   const [status, setStatus] = useState<LiveStatus>('connecting')
   // A newer release is serving than the one this page came from (see buildId.ts).
   const [updateAvailable, setUpdateAvailable] = useState(false)
@@ -53,6 +55,7 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null,
     if (trail === null) return
     if (assetIdsKey === '') {
       setTrails({})
+      setTrailsLoaded(true)
       return
     }
     let cancelled = false
@@ -63,6 +66,9 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null,
         if (!cancelled && history) setTrails(history)
       })
       .catch((error) => console.warn('Could not load trails:', error))
+      .finally(() => {
+        if (!cancelled) setTrailsLoaded(true)
+      })
     return () => {
       cancelled = true
     }
@@ -172,5 +178,5 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null,
     return result
   }, [trails, now])
 
-  return { assets, trails: visibleTrails, activities, stays, status, updateAvailable }
+  return { assets, trails: visibleTrails, trailsLoaded, activities, stays, status, updateAvailable }
 }

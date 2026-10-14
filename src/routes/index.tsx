@@ -6,8 +6,10 @@ import { UpdateNotice } from '../components/UpdateNotice'
 import { BottomBar } from '../components/BottomBar'
 import { PlaceBanner } from '../components/PlaceBanner'
 import { PlaceEditor } from '../components/PlaceEditor'
+import { LoadingScreen } from '../components/LoadingScreen'
 import { parseSettingsView, SettingsCard, type SettingsView } from '../components/SettingsCard'
-import { visitSentence, type PlaceVisit } from '../lib/places'
+import type { Asset } from '../lib/asset'
+import { visitSentence, type Place, type PlaceVisit } from '../lib/places'
 import type { LatLon } from '../lib/segments'
 import type { Inset } from '../components/map/PlacePicker'
 import { useSettings } from '../lib/settings'
@@ -50,30 +52,168 @@ export const Route = createFileRoute('/')({
     if (!user) throw redirect({ to: '/welcome' })
     return { user }
   },
-  loader: async () => {
-    const [assets, mapOptions, places] = await Promise.all([
-      getAssets(),
-      getMapOptions(),
-      // Without places the map still works.
+  // Not awaited: the page goes out at once with the loading screen, and each part streams in as
+  // Traccar answers it (see Home). Each settles to plain data: a redirect can't be streamed.
+  loader: () => ({
+    // When loading began, for the loading screen's times: from the page's start when the server
+    // renders it (null), from now when moving here within the app.
+    startedAt: typeof window === 'undefined' ? null : performance.now(),
+    assets: settle(getAssets()),
+    mapOptions: settle(getMapOptions()),
+    // Without places the map still works.
+    places: settle(
       getPlaces().catch((error: unknown) => {
-        // Signed out: go to /login like the other calls do.
         if (isRedirect(error)) throw error
         console.warn('Could not load places:', error)
-        return []
+        return [] as Place[]
       }),
-    ])
-    return { assets, mapOptions, places }
-  },
+    ),
+  }),
   // Reload when arriving (e.g. after signing in). Selecting an asset or using the Settings card only
   // changes the search params ('stay'); live updates keep the map current.
   shouldReload: ({ cause }) => cause !== 'stay',
+  // Nothing kept from an earlier visit (say, signed out): coming back loads afresh behind the loading screen.
+  gcTime: 0,
   component: Home,
 })
 
+/** A streamed part of the page's data: its value, or why there's none (signed out: Traccar refused the token). */
+type Settled<T> = { value: T } | { signedOut: true } | { failed: true }
+
+function settle<T>(promise: Promise<T>): Promise<Settled<T>> {
+  return promise.then(
+    (value) => ({ value }),
+    (error: unknown) => (isRedirect(error) ? { signedOut: true as const } : { failed: true as const }),
+  )
+}
+
+type MapData = {
+  assets: Asset[]
+  mapOptions: Awaited<ReturnType<typeof getMapOptions>>
+  places: Place[]
+}
+
+/** What the loading screen waits for, in order. */
+type Step = 'assets' | 'places' | 'map' | 'trails'
+
+/** Once the map is ready, how long the loading screen waits for the trails before it goes anyway. */
+const TRAILS_GRACE_MS = 2_000
+/** Once the assets and places are in, how long it waits for the map (say its tiles can't load). */
+const MAP_GRACE_MS = 8_000
+
+/**
+ * The map screen behind its loading screen. The loader's data arrives part by part; the map screen
+ * appears once the assets, places and map options are in, and the loading screen fades out once the
+ * map has drawn itself and the trails are in, or soon after. Reloads (reconnecting, coming back to
+ * the tab) swap the new data in as it arrives, without the loading screen.
+ */
 function Home() {
   const loaderData = Route.useLoaderData()
-  const { asset: selectedId, details, settings: cardView, place: editedPlace } = Route.useSearch()
   const { user } = Route.useRouteContext()
+  const router = useRouter()
+  const [data, setData] = useState<Partial<MapData>>({})
+  const [doneAt, setDoneAt] = useState<Partial<Record<Step, number>>>({})
+  const [failed, setFailed] = useState(false)
+  const [screen, setScreen] = useState<'loading' | 'leaving' | 'gone'>('loading')
+  // Each step's time is from when loading began, the server's part included.
+  const startedAt = useRef(loaderData.startedAt ?? 0)
+  const finish = useCallback(
+    (step: Step) =>
+      setDoneAt((current) => (current[step] === undefined ? { ...current, [step]: performance.now() - startedAt.current } : current)),
+    [],
+  )
+
+  useEffect(() => {
+    let current = true
+    const take =
+      <K extends keyof MapData>(key: K, step?: Step) =>
+      (result: Settled<MapData[K]>) => {
+        if (!current) return
+        if ('value' in result) {
+          setData((previous) => ({ ...previous, [key]: result.value }))
+          if (step) finish(step)
+        } else if ('signedOut' in result) {
+          // Traccar refused the token. The page had already gone out, so the server couldn't clear
+          // the session cookie as it does otherwise. Asking again, not streamed, does: then it's the
+          // sign-in page. If the session is fine after all, load the page's data again.
+          current = false
+          getAssets().then(
+            () => void router.invalidate(),
+            (error: unknown) => {
+              if (isRedirect(error)) void router.navigate({ to: '/login' })
+              else setFailed(true)
+            },
+          )
+        } else {
+          setFailed(true)
+        }
+      }
+    setFailed(false)
+    void loaderData.assets.then(take('assets', 'assets'))
+    void loaderData.places.then(take('places', 'places'))
+    void loaderData.mapOptions.then(take('mapOptions'))
+    return () => {
+      current = false
+    }
+  }, [loaderData])
+
+  useEffect(() => {
+    if (screen !== 'loading') return
+    const leave = () => setScreen('leaving')
+    if (doneAt.map !== undefined && doneAt.trails !== undefined) return leave()
+    const wait = doneAt.map !== undefined ? TRAILS_GRACE_MS : doneAt.assets !== undefined && doneAt.places !== undefined ? MAP_GRACE_MS : 0
+    if (wait === 0) return
+    const timer = setTimeout(leave, wait)
+    return () => clearTimeout(timer)
+  }, [doneAt, screen])
+
+  useEffect(() => {
+    if (screen !== 'leaving') return
+    // After the fade (styles.css .loading-screen).
+    const timer = setTimeout(() => setScreen('gone'), 350)
+    return () => clearTimeout(timer)
+  }, [screen])
+
+  const { assets, places, mapOptions } = data
+  return (
+    <>
+      {assets && places && mapOptions && (
+        <MapScreen
+          data={{ assets, places, mapOptions }}
+          user={user}
+          loadingTrails={screen === 'gone' && doneAt.trails === undefined}
+          onMapLoad={() => finish('map')}
+          onTrailsLoaded={() => finish('trails')}
+        />
+      )}
+      {screen !== 'gone' && (
+        <LoadingScreen
+          steps={[
+            { label: assets ? `Your assets (${assets.length})` : 'Your assets', doneAt: doneAt.assets },
+            { label: places ? `Places (${places.length})` : 'Places', doneAt: doneAt.places },
+            { label: 'Map', doneAt: doneAt.map },
+            { label: 'Trails', doneAt: doneAt.trails },
+          ]}
+          leaving={screen === 'leaving'}
+          failed={failed}
+          onRetry={() => void router.invalidate()}
+        />
+      )}
+    </>
+  )
+}
+
+type MapScreenProps = {
+  data: MapData
+  user: { name: string; email?: string }
+  /** The loading screen has gone but the trails haven't come yet: a note by the Live pill. */
+  loadingTrails: boolean
+  onMapLoad: () => void
+  onTrailsLoaded: () => void
+}
+
+function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsLoaded }: MapScreenProps) {
+  const { asset: selectedId, details, settings: cardView, place: editedPlace } = Route.useSearch()
   const navigate = Route.useNavigate()
   const cards = useCardHistory({
     details: details === true,
@@ -99,11 +239,14 @@ function Home() {
     if (!place || !asset) return
     setBanner({ text: visitSentence(asset.name, visit, place.name), time: visit.time, key: Date.now(), assetId: asset.id })
   }
-  const { assets, trails, activities, stays, status, updateAvailable } = useLiveAssets(
+  const { assets, trails, trailsLoaded, activities, stays, status, updateAvailable } = useLiveAssets(
     loaderData.assets,
     settingsLoaded ? settings.trail : null,
     announce,
   )
+  useEffect(() => {
+    if (trailsLoaded) onTrailsLoaded()
+  }, [trailsLoaded])
   const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
@@ -180,7 +323,15 @@ function Home() {
     <main className="app">
       <div className="map-area">
         <div className="map-overlay">
-          <LiveIndicator status={status} />
+          <div className="flex flex-col items-start gap-2">
+            <LiveIndicator status={status} />
+            {loadingTrails && (
+              <span className="loading-trails inline-flex h-7 items-center gap-2 rounded-full px-3 text-[0.8125em] shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2">
+                <span className="loading-spinner size-3.5" aria-hidden="true" />
+                Loading trails
+              </span>
+            )}
+          </div>
           {updateAvailable && <UpdateNotice />}
         </div>
         <ClientOnly fallback={mapPlaceholder}>
@@ -199,6 +350,7 @@ function Home() {
               showMe={showMe}
               onShowMeChange={setShowMe}
               onAttribution={setAttribution}
+              onLoad={onMapLoad}
               places={places}
               picker={
                 editing && place !== undefined

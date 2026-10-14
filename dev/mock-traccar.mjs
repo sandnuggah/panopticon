@@ -6,7 +6,7 @@
 // Sign in as pet@example.com / secret, or viewer@example.com / secret (can't change assets).
 // Event forwarding, for alerts: FORWARD_URL=http://localhost:3001/hooks/traccar-events and
 // FORWARD_HEADER='Authorization: Bearer <TRACCAR_EVENTS_SECRET>' post live events there, as
-// Traccar's event.forward.url and event.forward.header do.
+// Traccar's event.forward.url and event.forward.header do. DELAY_MS=800 makes it a slow Traccar.
 // Assets: Betty (photo, lives at Home and goes for a walk round Södermalm every three hours; the
 // mock starts just after she's back), Sixten (at daycare since a walk there) and Bamse (offline, no
 // position). Places: Home (Betty's) and Daycare (Sixten's). Only the endpoints panopticon uses,
@@ -19,6 +19,8 @@ import zlib from 'node:zlib'
 const PORT = Number(process.env.PORT ?? 8082)
 /** How often a walking dog's tracker reports; a still one reports less often. */
 const STEP_MS = Number(process.env.STEP_MS ?? 5000)
+/** A slow Traccar, for trying loading screens: every API request waits this long (ms), position history three times as long. */
+const DELAY_MS = Number(process.env.DELAY_MS ?? 0)
 
 const users = [
   { id: 1, name: 'Adam', email: 'pet@example.com', password: 'secret', readonly: false, deviceReadonly: false, deviceLimit: -1 },
@@ -410,6 +412,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://mock')
   const key = `${req.method} ${url.pathname}`
   console.log(new Date().toISOString().slice(11, 19), key, url.search.slice(0, 60))
+  if (DELAY_MS > 0) await new Promise((resolve) => setTimeout(resolve, url.searchParams.has('from') ? DELAY_MS * 3 : DELAY_MS))
 
   if (key === 'GET /api/server') {
     return json(res, 200, { id: 1, registration: false, readonly: false, deviceReadonly: false, openIdEnabled: true, openIdForce: false })
