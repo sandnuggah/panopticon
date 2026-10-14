@@ -369,6 +369,7 @@ Markers show the picture uploaded for a device in Traccar's own UI (device setti
 - **Not used:** Konsta's strong `Segmented` control (its sliding highlight lagged one tap behind in testing), and its `Sheet` (no dragging). The pet theme ("Petopticon", pastels, and paw-print trails, now a setting of their own) was dropped with the move to Konsta.
 
 - **App icon:** a folded paper map with a red paper-cutout pin on the app's green, in the front page's style and RAL colours. `public/icon.svg` (rounded corners) is the browser's icon; the PNGs (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png` at 180 px) are `dev/icon-full.svg`, the same without rounded corners, since iOS and Android round them (the art stays inside Android's round safe zone). To render them: `/Applications/Chromium.app/Contents/MacOS/Chromium --headless --disable-gpu --hide-scrollbars --screenshot=$PWD/icon-1024.png --window-size=1024,1024 file://$PWD/dev/icon-full.svg`, then `sips -Z 512 icon-1024.png --out public/icon-512.png`, and 192 and 180 likewise. Headless Chromium mis-renders small windows, so render at 1024 and scale down.
+- **Link previews:** sharing the front page's address (in iMessage, Slack, WhatsApp and the like) shows a picture, the title and the description, from Open Graph tags in `welcome.tsx`'s `head`. The picture is `public/og-image.png`, 1200 × 630: the paper-map scene with the title and the tagline, made from `dev/og-image.html` (the scene's SVG and styles as the page renders them, frozen mid-bob; the title in Nunito Black, SIL Open Font License, since SF Pro Rounded may not be baked into an image). To render it: `/Applications/Chromium.app/Contents/MacOS/Chromium --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=5000 --screenshot=$PWD/public/og-image.png --window-size=1200,630 file://$PWD/dev/og-image.html`. Previews need the picture's full address, so the page's loader asks the server for its own (`getSiteOrigin`, `site.functions.ts`): the reverse proxy's `X-Forwarded-Proto` and `X-Forwarded-Host` (or `Host`), the first of each when proxies chain, and the request's own address when they're missing or malformed.
 
 ## Map tiles
 
@@ -388,6 +389,7 @@ Dockerfile, .dockerignore
 public/                               manifest + icons, color-scheme.js (dark mode), sw.js (alerts), screenshots/ (front page), copied to dist/client
 dev/mock-traccar.mjs                  a stand-in Traccar with made-up assets, for development
 dev/icon-full.svg                     the app icon without rounded corners, for the PNG icons
+dev/og-image.html                     the front page's link preview picture, rendered to public/og-image.png
 src/
   start.ts                            request middleware: CSRF for server functions, security headers
   router.tsx                          also sets the per-request CSP nonce for Start's inline scripts

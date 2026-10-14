@@ -6,18 +6,40 @@ import { ScreenshotGallery } from '../components/ScreenshotGallery'
 import { WelcomeScene } from '../components/WelcomeScene'
 import { BellIcon, LiveIcon, LocationIcon, LockIcon, PawIcon, PinIcon } from '../components/icons'
 import { getUser } from '../server/auth.functions'
+import { getSiteOrigin } from '../server/site.functions'
 
 // The front page: what Panopticon is and does, with the way in. Where the map (/) sends visitors who
 // aren't signed in; signed in, its button opens the map instead of the sign-in page.
 
+const DESCRIPTION = 'A live map of your dog, your bag and your bike, on your own Traccar server.'
+
 export const Route = createFileRoute('/welcome')({
-  loader: async () => ({ signedIn: (await getUser()) !== null }),
-  head: () => ({
-    meta: [
-      { title: 'Panopticon' },
-      { name: 'description', content: 'A live map of your dog, your bag and your bike, on your own Traccar server.' },
-    ],
-  }),
+  loader: async () => {
+    const [user, origin] = await Promise.all([getUser(), getSiteOrigin()])
+    return { signedIn: user !== null, origin }
+  },
+  // Link previews (iMessage, Slack, WhatsApp and the like) read the Open Graph tags: the front page's
+  // picture with the title (public/og-image.png, made from dev/og-image.html), at its full address.
+  head: ({ loaderData }) => {
+    const origin = loaderData?.origin ?? ''
+    return {
+      meta: [
+        { title: 'Panopticon' },
+        { name: 'description', content: DESCRIPTION },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:site_name', content: 'Panopticon' },
+        { property: 'og:title', content: 'Panopticon' },
+        { property: 'og:description', content: DESCRIPTION },
+        { property: 'og:url', content: `${origin}/welcome` },
+        { property: 'og:image', content: `${origin}/og-image.png` },
+        { property: 'og:image:type', content: 'image/png' },
+        { property: 'og:image:width', content: '1200' },
+        { property: 'og:image:height', content: '630' },
+        { property: 'og:image:alt', content: 'A paper map with a dog, a briefcase and a bike on it, and the title Panopticon' },
+        { name: 'twitter:card', content: 'summary_large_image' },
+      ],
+    }
+  },
   component: WelcomePage,
 })
 

@@ -80,7 +80,8 @@ panopticon.example.com {
 
 The live map uses Server-Sent Events. Caddy passes them through as they arrive. With nginx, raise
 `proxy_read_timeout` above 30 s. The app sends `X-Accel-Buffering: no`, so nginx won't buffer the
-stream.
+stream. Also pass the original host and scheme (`proxy_set_header Host $host;` and
+`proxy_set_header X-Forwarded-Proto $scheme;`), so link previews of the front page point at your domain.
 
 ## Snap to paths (optional)
 
