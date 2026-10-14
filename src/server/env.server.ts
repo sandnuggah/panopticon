@@ -18,7 +18,7 @@ type Env = {
   signInMethods: { sso: boolean; password: boolean }
 }
 
-const DEFAULT_MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
+const DEFAULT_MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/bright'
 
 let cached: Env | undefined
 

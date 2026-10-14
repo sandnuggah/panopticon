@@ -5,7 +5,7 @@
 /** `dark`: a night map, so what's drawn on it (trail, places, markers) takes its dark colours. */
 export type MapStyle = { id: string; name: string; url: string; dark: boolean }
 
-/** Standard by day, Dark by night: the device's light or dark mode. */
+/** The default style (Bright) by day, Dark by night: the device's light or dark mode. */
 export const AUTO_STYLE = 'auto'
 
 const OPENFREEMAP = 'https://tiles.openfreemap.org'
@@ -28,7 +28,7 @@ export function mapStylesFor(styleUrl: string): { styles: MapStyle[]; defaultSty
     return { styles: [{ id: 'custom', name: 'Map', url: styleUrl, dark: false }], defaultStyle: 'custom' }
   const styles = OPENFREEMAP_STYLES.map(([id, name, path, dark]) => ({ id, name, url: `${OPENFREEMAP}/styles/${path}`, dark }))
   const configured = styles.find((style) => style.url === styleUrl.replace(/\/$/, ''))
-  return { styles, defaultStyle: configured?.id ?? 'standard' }
+  return { styles, defaultStyle: configured?.id ?? 'bright' }
 }
 
 /** The style to draw for a choice (a style's id, or Auto); unknown choices fall back to the default. */

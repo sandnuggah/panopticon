@@ -21,6 +21,7 @@ type Props = {
 export function Appearance({ listColors, styles, defaultStyle, canSnapToPaths }: Props) {
   const [settings, updateSettings] = useSettings()
   const styleChoice = settings.mapStyle ?? defaultStyle
+  const defaultName = styles.find((style) => style.id === defaultStyle)?.name ?? 'the default'
   return (
     <>
       {styles.length > 1 && (
@@ -38,7 +39,7 @@ export function Appearance({ listColors, styles, defaultStyle, canSnapToPaths }:
               />
             ))}
           </List>
-          <BlockFooter>Auto is Standard in light mode and Dark in dark mode. Saved in this browser only.</BlockFooter>
+          <BlockFooter>Auto is {defaultName} in light mode and Dark in dark mode. Saved in this browser only.</BlockFooter>
         </>
       )}
       <BlockTitle>Trail</BlockTitle>
