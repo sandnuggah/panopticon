@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { circleWkt, parseArea, placeCenter, radiusLabel, visitLabel, visitSentence, visitsBetween } from './places.ts'
+import { circleWkt, durationLabel, parseArea, placeCenter, radiusLabel, visitRows, visitSentence, visitsBetween } from './places.ts'
 
 describe('parseArea', () => {
   test("a circle: latitude first, radius in metres, as Traccar's own UI writes it", () => {
@@ -51,9 +51,40 @@ describe('places', () => {
     assert.deepEqual(visitsBetween(3, [2], [2], 'T'), [])
   })
 
+  test('visitRows: each departure is out until the next arrival, anywhere', () => {
+    const visit = (placeId: number, arrived: boolean, time: string) => ({ placeId, arrived, time })
+    // Newest first: home again, out from home, at daycare, then left it and nothing since.
+    assert.deepEqual(visitRows([visit(2, true, '17:47'), visit(2, false, '16:58'), visit(1, true, '14:47'), visit(1, false, '09:30')]), [
+      { kind: 'arrived', placeId: 2, time: '17:47' },
+      { kind: 'out', placeId: 2, time: '16:58', until: '17:47' },
+      { kind: 'arrived', placeId: 1, time: '14:47' },
+      { kind: 'out', placeId: 1, time: '09:30', until: '14:47' },
+    ])
+    // Out now: no arrival since.
+    assert.deepEqual(visitRows([visit(2, false, '18:10'), visit(2, true, '17:47')])[0], {
+      kind: 'out',
+      placeId: 2,
+      time: '18:10',
+      until: null,
+    })
+    // Left two places at once: both out until the same arrival.
+    const both = visitRows([visit(3, true, '12:00'), visit(1, false, '11:00'), visit(2, false, '11:00')])
+    assert.deepEqual(
+      both.map((row) => (row.kind === 'out' ? row.until : null)),
+      [null, '12:00', '12:00'],
+    )
+  })
+
+  test('durations', () => {
+    assert.equal(durationLabel(20_000), '1 min')
+    assert.equal(durationLabel(49 * 60_000), '49 min')
+    assert.equal(durationLabel(120 * 60_000), '2 h')
+    assert.equal(durationLabel(125 * 60_000), '2 h 5 min')
+    assert.equal(durationLabel(27 * 3_600_000), '1 d 3 h')
+    assert.equal(durationLabel(48 * 3_600_000), '2 d')
+  })
+
   test('labels', () => {
-    assert.equal(visitLabel({ arrived: true }, 'Home'), 'Arrived at Home')
-    assert.equal(visitLabel({ arrived: false }, 'Home'), 'Left Home')
     assert.equal(visitSentence('Betty', { arrived: true }, 'Daycare'), 'Betty arrived at Daycare')
     assert.equal(radiusLabel(75), '75 m')
     assert.equal(radiusLabel(1500), '1.5 km')

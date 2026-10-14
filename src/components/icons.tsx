@@ -50,6 +50,39 @@ export function LockIcon() {
   )
 }
 
+/** An arrow going in through a door: arrived at a place. */
+export function ArrivedIcon() {
+  return (
+    <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14M3.5 12H14M10 8l4 4-4 4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** A winding route between two points: out, away from its places. */
+export function OutIcon() {
+  return (
+    <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="5.5" cy="18.5" r="2.5" fill="currentColor" />
+      <circle cx="18.5" cy="5.5" r="2.5" fill="currentColor" />
+      <path
+        d="M8.5 18.5H15a3.25 3.25 0 0 0 0-6.5H9a3.25 3.25 0 0 1 0-6.5h6.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 /** A map pin: places. */
 export function PinIcon() {
   return (

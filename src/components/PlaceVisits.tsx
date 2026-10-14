@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatTime } from '../lib/share'
-import { visitLabel, type Place, type PlaceVisit } from '../lib/places'
+import { durationLabel, visitRows, type Place, type PlaceVisit } from '../lib/places'
+import { ArrivedIcon, OutIcon } from './icons'
 import { useNow } from '../lib/useNow'
 import { getPlaceVisits } from '../server/places.functions'
 
@@ -15,7 +16,11 @@ type Props = {
   placeIds: number[]
 }
 
-/** An asset's latest arrivals at and departures from its places, from Traccar's events. */
+/**
+ * An asset's latest arrivals at and departures from its places, from Traccar's events: an arrival
+ * as the place with an arrow going in, a departure as how long it was out until it arrived somewhere
+ * again (or so far), with a winding route. Screen readers hear "Arrived at Home", "Left Home, out 49 min".
+ */
 export function PlaceVisits({ assetId, places, placeIds }: Props) {
   const now = useNow(60_000)
   const [visits, setVisits] = useState<PlaceVisit[]>()
@@ -38,10 +43,10 @@ export function PlaceVisits({ assetId, places, placeIds }: Props) {
     }
   }, [assetId, placesKey])
 
-  // Visits to places since removed have no name to show.
-  const named = (visits ?? []).flatMap((visit) => {
-    const place = places.find((candidate) => candidate.id === visit.placeId)
-    return place ? [{ ...visit, label: visitLabel(visit, place.name) }] : []
+  // Visits to places since removed have no name to show (an arrival there still ends a trip out).
+  const named = visitRows(visits ?? []).flatMap((row) => {
+    const place = places.find((candidate) => candidate.id === row.placeId)
+    return place ? [{ ...row, placeName: place.name }] : []
   })
 
   return (
@@ -55,10 +60,32 @@ export function PlaceVisits({ assetId, places, placeIds }: Props) {
         <p className="opacity-60">None in the last week.</p>
       ) : (
         <ul>
-          {named.slice(0, SHOWN).map((visit) => (
-            <li key={`${visit.time}-${visit.placeId}-${visit.arrived}`} className="flex flex-wrap justify-between gap-x-3 py-0.5">
-              <span>{visit.label}</span>
-              <span className="opacity-60">{formatTime(Date.parse(visit.time), now)}</span>
+          {named.slice(0, SHOWN).map((row) => (
+            <li key={`${row.time}-${row.placeId}-${row.kind}`} className="flex items-center gap-x-2.5 py-0.5">
+              {row.kind === 'arrived' ? (
+                <>
+                  <span className="shrink-0 text-primary">
+                    <ArrivedIcon />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="sr-only">Arrived at </span>
+                    {row.placeName}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="shrink-0 text-[var(--offline)]">
+                    <OutIcon />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="sr-only">Left {row.placeName}, </span>
+                    {row.until === null
+                      ? `Out ${durationLabel(now - Date.parse(row.time))} so far`
+                      : `Out ${durationLabel(Date.parse(row.until) - Date.parse(row.time))}`}
+                  </span>
+                </>
+              )}
+              <span className="shrink-0 opacity-60">{formatTime(Date.parse(row.time), now)}</span>
             </li>
           ))}
         </ul>
