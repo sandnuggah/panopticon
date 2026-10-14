@@ -249,6 +249,30 @@ describe('classifyTrail', () => {
     )
   })
 
+  test('a lone fix out to one side and straight back is left out (GPS jumping)', () => {
+    const points = new Trip().walk(5).points
+    const spike = points[5]!
+    points[5] = { ...spike, lat: spike.lat - 70 / METERS_PER_DEGREE_LAT }
+    const pieces = classifyTrail(points)
+    assert.deepEqual(kinds(pieces), ['move'])
+    const drawn = (pieces[0] as Extract<TrailPiece, { kind: 'move' }>).points
+    assert.equal(drawn.length, points.length - 1)
+    assert.ok(!drawn.includes(points[5]!))
+  })
+
+  test('turning a corner keeps the fix at the corner', () => {
+    // 45 m between fixes, east and then north.
+    const at = (east: number, north: number, step: number): TrailPoint => ({
+      lat: START.lat + north / METERS_PER_DEGREE_LAT,
+      lon: START.lon + east / METERS_PER_DEGREE_LON,
+      time: START.time + step * 30_000,
+      valid: true,
+    })
+    const points = [at(0, 0, 0), at(45, 0, 1), at(90, 0, 2), at(90, 45, 3), at(90, 90, 4)]
+    const pieces = classifyTrail(points)
+    assert.equal((pieces[0] as Extract<TrailPiece, { kind: 'move' }>).points.length, 5)
+  })
+
   test('reports without a fix are never drawn as positions', () => {
     for (const piece of classifyTrail(new Trip().walk(5).underground(1800, 6).walk(5).points)) {
       if (piece.kind === 'move') assert.ok(piece.points.every((point) => point.valid))

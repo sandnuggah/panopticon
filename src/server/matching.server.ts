@@ -18,7 +18,7 @@ const cache = new Map<string, LatLon[] | null>()
 export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | null> {
   const url = env().mapMatchingUrl
   if (!url) return null
-  const key = points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join(';')
+  const key = points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}${point.park ? 'p' : ''}`).join(';')
   if (cache.has(key)) return cache.get(key)!
 
   let result: LatLon[] | null = null
@@ -46,7 +46,7 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
       const line = trips
         .sort((a, b) => firstPoint(a) - firstPoint(b))
         .flatMap((trip) => (trip.legs ?? []).flatMap((leg) => (leg.shape ? decodePolyline6(leg.shape) : [])))
-      if (line.length >= 2) result = snapAlong(points, line)
+      if (line.length >= 2) result = snapAlong(points, line)?.map(({ lat, lon }) => ({ lat, lon })) ?? null
     } else if (response.status !== 400) {
       // 400 means Valhalla found no match (e.g. points far from any path); anything else is worth a log line.
       console.warn(`Map matching failed with HTTP ${response.status}`)

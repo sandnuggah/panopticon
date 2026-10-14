@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // Let Vite bundle the worker and hand maplibre the resulting same-origin URL.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { isStale, type Asset } from '../../lib/asset'
+import { parkFromRings, type Park } from '../../lib/parks'
 import type { Place } from '../../lib/places'
 import type { Trails } from '../../lib/trail'
 import type { LatLon } from '../../lib/segments'
@@ -61,6 +62,8 @@ type Props = {
   onAttribution: (attributions: string[]) => void
   /** Once, when the map has first drawn itself with its style and the tiles in view (the map screen's loading screen waits for it). */
   onLoad?: () => void
+  /** The parks in the map's loaded tiles, once it's ready and after each move, for Snap to paths (see parks.ts). */
+  onParks?: (parks: Park[]) => void
   /** The user's places (Settings → Places), drawn under the trail. None on live link pages. */
   places?: Place[]
   /** While a place is being added or changed (PlaceEditor): the circle to place, and which place it is. */
@@ -83,6 +86,7 @@ export default function AssetMap({
   onShowMeChange,
   onAttribution,
   onLoad,
+  onParks,
   places = NO_PLACES,
   picker = null,
 }: Props) {
@@ -124,9 +128,11 @@ export default function AssetMap({
   const { position: me, note } = useMyPosition(showMe, () => onShowMeChange(false))
   const onAttributionRef = useRef(onAttribution)
   const onLoadRef = useRef(onLoad)
+  const onParksRef = useRef(onParks)
   useEffect(() => {
     onAttributionRef.current = onAttribution
     onLoadRef.current = onLoad
+    onParksRef.current = onParks
   })
   const meMarkerRef = useRef<Marker | null>(null)
   const framedRef = useRef(false)
@@ -177,6 +183,8 @@ export default function AssetMap({
         if (!basemap.every((id) => map.getSource(id) === undefined || map.isSourceLoaded(id))) return
         map.off('render', onRender)
         onLoadRef.current?.()
+        onParksRef.current?.(parksInView(map))
+        map.on('moveend', () => onParksRef.current?.(parksInView(map)))
       }
       map.on('render', onRender)
     })
@@ -453,4 +461,33 @@ function fitAll(map: MapLibreMap, assets: Asset[]) {
     maxZoom: ASSET_ZOOM,
     duration: 0,
   })
+}
+
+/**
+ * The parks in the map's loaded tiles, from the OpenMapTiles schema OpenFreeMap uses: city parks
+ * are `landcover` with subclass `park` (OpenStreetMap's leisure=park), nature reserves the `park`
+ * layer. Other map styles may have neither: no parks, and snapping is as everywhere else.
+ */
+function parksInView(map: MapLibreMap): Park[] {
+  const parks: Park[] = []
+  try {
+    for (const [id, source] of Object.entries(map.getStyle().sources)) {
+      if (source.type !== 'vector') continue
+      for (const layer of ['landcover', 'park']) {
+        for (const feature of map.querySourceFeatures(id, { sourceLayer: layer })) {
+          if (layer === 'landcover' && feature.properties?.subclass !== 'park') continue
+          const geometry = feature.geometry
+          const polygons =
+            geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.type === 'MultiPolygon' ? geometry.coordinates : []
+          for (const rings of polygons) {
+            const park = parkFromRings(rings as [number, number][][])
+            if (park) parks.push(park)
+          }
+        }
+      }
+    }
+  } catch {
+    // A style switch under way: no parks this time.
+  }
+  return parks
 }

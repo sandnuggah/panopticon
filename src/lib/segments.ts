@@ -47,6 +47,14 @@ const WANDER_METERS = 50
 const BLIP_FIXES = 2
 /** On the map, a stop shorter than this is part of the walk (a dog sniffing), not a dot of its own. */
 const SHORT_STOP_MS = 5 * 60 * 1000
+/**
+ * A lone fix at least this far from the fixes either side of it, all within SPIKE_MAX_MS, while
+ * those two are much closer to each other (at most SPIKE_SHORTCUT of the way through it), went out
+ * and straight back: GPS jumping among buildings or trees, not a trip down the street. It's left out.
+ */
+const SPIKE_MIN_METERS = 40
+const SPIKE_SHORTCUT = 0.6
+const SPIKE_MAX_MS = 3 * 60 * 1000
 /** Live activity only counts while reports are this fresh. */
 const ACTIVITY_MAX_AGE_MS = 3 * 60 * 1000
 /** Underground right now: this long without a fix while switching between this many cell sites. */
@@ -140,7 +148,7 @@ type Hop = { from: TrailPoint; to: TrailPoint; kind: HopKind }
  * drawing, keeps the walking about as moves between its stops, and only joins stops across blips.
  */
 export function classifyTrail(points: TrailPoint[], { showWandering = false } = {}): TrailPiece[] {
-  const hops = toHops(points)
+  const hops = toHops(withoutSpikes(points))
   if (hops.length === 0) {
     const fixes = points.filter((point) => point.valid)
     return fixes.length > 0 ? [toStay(fixes)] : []
@@ -198,6 +206,25 @@ export function currentActivity(points: TrailPoint[], now: number): Activity | n
     }
   }
   return null
+}
+
+/** The points without GPS spikes (see SPIKE_MIN_METERS). */
+function withoutSpikes(points: TrailPoint[]): TrailPoint[] {
+  const fixes = points.filter((point) => point.valid)
+  const spikes = new Set<TrailPoint>()
+  let before: TrailPoint | undefined
+  fixes.forEach((fix, index) => {
+    const after = fixes[index + 1]
+    if (before && after && isSpike(before, fix, after)) spikes.add(fix)
+    else before = fix
+  })
+  return spikes.size > 0 ? points.filter((point) => !spikes.has(point)) : points
+}
+
+function isSpike(before: TrailPoint, fix: TrailPoint, after: TrailPoint): boolean {
+  if (after.time - before.time > SPIKE_MAX_MS) return false
+  const [out, back] = [distance(before, fix), distance(fix, after)]
+  return out >= SPIKE_MIN_METERS && back >= SPIKE_MIN_METERS && distance(before, after) <= SPIKE_SHORTCUT * (out + back)
 }
 
 function toHops(points: TrailPoint[]): Hop[] {

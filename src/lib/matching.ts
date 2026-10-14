@@ -14,7 +14,8 @@ const MIN_WALK_METERS = 75
 export const MAX_WALKS_PER_REQUEST = 20
 export const MAX_POINTS_PER_WALK = 400
 
-export type MatchablePoint = LatLon & { time: number }
+/** `park`: in a park, where snapping is stricter (see snap.ts). */
+export type MatchablePoint = LatLon & { time: number; park?: boolean }
 
 /** Identifies a walk by its first and last fix and how many it has; it changes as the walk grows. */
 export function walkKey(points: TrailPoint[]): string {
@@ -27,7 +28,10 @@ export function walkKey(points: TrailPoint[]): string {
  * stay's middle, where the map draws it from (its dot): leaving home then follows the street from
  * the door, not a straight line to the first fix outside, which comes once the tracker wakes.
  */
-export function matchableWalks(pieces: TrailPiece[]): { key: string; points: MatchablePoint[] }[] {
+export function matchableWalks(
+  pieces: TrailPiece[],
+  inPark: (point: LatLon) => boolean = () => false,
+): { key: string; points: MatchablePoint[] }[] {
   const walks: { key: string; points: MatchablePoint[] }[] = []
   pieces.forEach((piece, index) => {
     if (piece.kind !== 'move' || piece.points.length < 3) return
@@ -38,7 +42,9 @@ export function matchableWalks(pieces: TrailPiece[]): { key: string; points: Mat
     if (kept.at(-1) !== piece.points.at(-1)) kept.push(piece.points.at(-1)!)
     if (kept.length < 3) return
     // Room for the two stays' middles within the limit.
-    const points: MatchablePoint[] = kept.slice(-(MAX_POINTS_PER_WALK - 2)).map(({ lat, lon, time }) => ({ lat, lon, time }))
+    const points: MatchablePoint[] = kept
+      .slice(-(MAX_POINTS_PER_WALK - 2))
+      .map(({ lat, lon, time }) => (inPark({ lat, lon }) ? { lat, lon, time, park: true } : { lat, lon, time }))
     const [before, after] = [pieces[index - 1], pieces[index + 1]]
     if (before?.kind === 'stay') points.unshift({ ...before.center, time: points[0]!.time - 1000 })
     if (after?.kind === 'stay') points.push({ ...after.center, time: points.at(-1)!.time + 1000 })

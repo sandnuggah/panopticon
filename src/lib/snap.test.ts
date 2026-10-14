@@ -43,6 +43,32 @@ describe('snapAlong', () => {
     ])
   })
 
+  test('in a park, a path nearby counts only when the fixes keep close to it', () => {
+    // Running on the grass 12–15 m beside a park path: snapped outside a park, as recorded inside one.
+    const onGrass = [at(10, 14), at(40, -12), at(70, 15), at(100, -13), at(130, 12), at(160, -14)]
+    assert.notEqual(snapAlong(onGrass, PATH), null)
+    assert.equal(
+      snapAlong(
+        onGrass.map((point) => ({ ...point, park: true })),
+        PATH,
+      ),
+      null,
+    )
+    // Walking along the park path: still snapped.
+    const onPath = [at(10, 3), at(40, -2), at(70, 4), at(100, -3), at(130, 2), at(160, -4)]
+    assert.deepEqual(
+      snapAlong(
+        onPath.map((point) => ({ ...point, park: true })),
+        PATH,
+      )!.map(metres),
+      [
+        [10, 0],
+        [100, 0],
+        [160, 0],
+      ],
+    )
+  })
+
   test('too few fixes near the path: drawn as recorded', () => {
     assert.equal(snapAlong([at(0, 60), at(50, 1), at(100, -2), at(150, 70)], PATH), null)
   })
@@ -57,6 +83,20 @@ describe('snapAlong', () => {
       [200, 0],
       [100, 0],
       [5, 0],
+    ])
+  })
+
+  test('a detour out to a street and back, between two fixes, is cut across', () => {
+    // The matcher took the path down to a street 35 m off and back up, where the fixes went straight
+    // on: from the fix before, straight to the one on the way back up.
+    const detour = [at(0, 0), at(50, 0), at(65, -35), at(80, 0), at(150, 0)]
+    const walk = [at(10, 2), at(30, -3), at(50, 1), at(73, -12), at(95, 2), at(120, -1)]
+    assert.deepEqual(snapAlong(walk, detour)!.map(metres), [
+      [10, 0],
+      [50, 0],
+      [75, -13],
+      [80, 0],
+      [120, 0],
     ])
   })
 })

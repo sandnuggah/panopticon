@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { matchWalks } from '../server/map.functions'
 import { MAX_WALKS_PER_REQUEST, matchableWalks } from './matching'
+import { isInPark, type Park } from './parks'
 import { classifyTrail, type LatLon } from './segments'
 import type { Trails } from './trail'
 
@@ -10,15 +11,22 @@ const DEBOUNCE_MS = 1_000
 /**
  * Snap to paths: the walks on these trails snapped to streets and paths, by walk key (see
  * matching.ts). Walks the server can't snap closely enough are simply missing, and drawn as recorded.
+ * `parks` (from the map, null until it's ready): fixes in them are snapped more strictly, so walks
+ * wait for them.
  */
-export function useSnappedWalks(trails: Trails, enabled: boolean): Record<string, LatLon[]> {
+export function useSnappedWalks(trails: Trails, enabled: boolean, parks: Park[] | null): Record<string, LatLon[]> {
   // null: asked, and it can't be snapped.
   const [results, setResults] = useState<Record<string, LatLon[] | null>>({})
   const asked = useRef(new Set<string>())
 
   const walks = useMemo(
-    () => (enabled ? Object.values(trails).flatMap((points) => matchableWalks(classifyTrail(points, { showWandering: true }))) : []),
-    [trails, enabled],
+    () =>
+      enabled && parks
+        ? Object.values(trails).flatMap((points) =>
+            matchableWalks(classifyTrail(points, { showWandering: true }), (point) => isInPark(point, parks)),
+          )
+        : [],
+    [trails, enabled, parks],
   )
 
   useEffect(() => {

@@ -9,6 +9,7 @@ import { PlaceEditor } from '../components/PlaceEditor'
 import { LoadingScreen } from '../components/LoadingScreen'
 import { parseSettingsView, SettingsCard, type SettingsView } from '../components/SettingsCard'
 import type { Asset } from '../lib/asset'
+import type { Park } from '../lib/parks'
 import { visitSentence, type Place, type PlaceVisit } from '../lib/places'
 import type { LatLon } from '../lib/segments'
 import type { Inset } from '../components/map/PlacePicker'
@@ -247,7 +248,9 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   useEffect(() => {
     if (trailsLoaded) onTrailsLoaded()
   }, [trailsLoaded])
-  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths)
+  // Parks in the map's tiles (null until the map is ready), where walks are snapped more strictly.
+  const [parks, setParks] = useState<Park[] | null>(null)
+  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths, parks)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
 
@@ -351,6 +354,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
               onShowMeChange={setShowMe}
               onAttribution={setAttribution}
               onLoad={onMapLoad}
+              onParks={setParks}
               places={places}
               picker={
                 editing && place !== undefined
