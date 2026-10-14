@@ -42,6 +42,8 @@ and cleared out now and then.
 - [x] A new app icon: a folded paper map with a red paper-cutout pin on the app's green (front page style, RAL colours); source in dev/icon-full.svg. Released as `:59` (2026-10-11)
 - [ ] Re-add Panopticon to the iPhone's Home Screen to get the new icon (iOS keeps the old one)
 - [x] "Update available · Reload" at the top right of the map when a newer release is running: each build has an ID, the live stream sends the server's, a page from an older build shows the notice after its stream reconnects. Released as `:49` (2026-10-10); first visible when `:50` is deployed
+- [x] Link previews for the front page: sharing `/welcome` shows the paper-map scene with the title (public/og-image.png, 1200 × 630, made from dev/og-image.html), the description and the title, with the picture's full address from the reverse proxy's forwarded host and scheme (Caddy and Traefik pass them as they are; nginx needs `proxy_set_header Host $host`). Released as `:66` (2026-10-14)
+- [ ] Check the link preview once `:66` is deployed: paste the `/welcome` address into Messages or Slack (`curl -s https://<domain>/welcome | grep -o 'og:image" content="[^"]*"'` shows the picture's address)
 
 ## Later / maybe
 
