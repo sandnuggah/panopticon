@@ -168,14 +168,18 @@ export default function AssetMap({
       // Added below, at the top.
       attributionControl: false,
     })
-    // Ready once a frame has drawn with the style and the tiles in view. maplibre's own 'load'
-    // waits until every source is idle, which trail and live updates keep putting off.
-    const onRender = () => {
-      if (!map.isStyleLoaded() || !map.areTilesLoaded()) return
-      map.off('render', onRender)
-      onLoadRef.current?.()
-    }
-    map.on('render', onRender)
+    // Ready once a frame has drawn with the base map's tiles in view. maplibre's own 'load' (and
+    // isStyleLoaded) wait for every source, the trail's and places' too, which their updates keep
+    // putting off; so only the style's own sources count, as they are before ours are added.
+    map.once('style.load', () => {
+      const basemap = Object.keys(map.getStyle().sources)
+      const onRender = () => {
+        if (!basemap.every((id) => map.getSource(id) === undefined || map.isSourceLoaded(id))) return
+        map.off('render', onRender)
+        onLoadRef.current?.()
+      }
+      map.on('render', onRender)
+    })
     // Every style load, the first and after switching: places, then the trails and your position on top.
     map.on('style.load', () => {
       addPlaceLayers(map)
