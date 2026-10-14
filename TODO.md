@@ -25,6 +25,7 @@ and cleared out now and then.
 - [ ] Watch for false "left Home" at the edge of a place (ST-904L fixes wander 15–25 m); the position filters below would help
 - [ ] An alert when an asset's battery goes low: Traccar's `batteryLevel` on its positions (check that the ST-904L reports it) below a threshold, once per charge, as a new rule in Settings → Alerts; or Traccar's `lowBattery` alarm where the tracker sends one
 - [ ] Share assets and places between users, such as a family with one dog. Investigated 2026-10-14, parked: in Traccar only an admin or a manager (a user with a user limit) can link other users to trackers and places, and a place shows for someone only when it's linked to them as well as to the tracker. Ideas looked at (a Family page with invites; linking new places to everyone who sees the tracker; places that follow their trackers) all got convoluted. Works today without Panopticon: Traccar's UI, Settings → Users → Connections, linking each person to the tracker and each place
+- [x] Arrivals and departures as icons: an arrival is the place with an arrow going in, a departure is how long the asset was out until its next arrival ("Out 49 min", or "so far"). Released as `:68` (2026-10-14)
 
 ## Code
 
@@ -44,6 +45,8 @@ and cleared out now and then.
 - [x] "Update available · Reload" at the top right of the map when a newer release is running: each build has an ID, the live stream sends the server's, a page from an older build shows the notice after its stream reconnects. Released as `:49` (2026-10-10); first visible when `:50` is deployed
 - [x] Link previews for the front page: sharing `/welcome` shows the paper-map scene with the title (public/og-image.png, 1200 × 630, made from dev/og-image.html), the description and the title, with the picture's full address from the reverse proxy's forwarded host and scheme (Caddy and Traefik pass them as they are; nginx needs `proxy_set_header Host $host`). Released as `:66` (2026-10-14)
 - [ ] Check the link preview once `:66` is deployed: paste the `/welcome` address into Messages or Slack (`curl -s https://<domain>/welcome | grep -o 'og:image" content="[^"]*"'` shows the picture's address)
+- [x] A loading screen with progress for the map: the page goes out at once and the assets, places and map options stream in; the screen shows each step (assets, places, map, trails) with when it was done, so a slow load shows where the time goes, and fades out once the map has drawn (a "Loading trails" note waits for slow trails). Released as `:67`; the Map step counts only the base map's tiles in `:68` (2026-10-14)
+- [ ] Watch the loading screen's times on the phone when the app is slow, and fix the step that takes the time (Traccar's answers for assets and places, the map code and tiles, or trail history)
 
 ## Later / maybe
 
