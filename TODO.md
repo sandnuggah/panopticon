@@ -53,3 +53,4 @@ and cleared out now and then.
 - [ ] Try Traccar's position filters for the ST-904L: `filter.maxSpeed` ≈ 27 (knots), `coordinates.filter` with `coordinates.minError` 15–25 m
 - [ ] Email Mictrack: EU distributor or VAT-included shipping, MT710L CE approval date, and whether the MT710L uses the MT710's `tlt2h` protocol
 - [ ] If an MT710 arrives: show its place (such as Home) instead of "No recent contact" while its home mode keeps it quiet
+- [ ] Smooth the trail where it isn't snapped (a dog running on the grass): gentle curves through the fixes instead of straight lines, so it reads as a run. A matter of taste: the curves suggest a path the fixes don't really show

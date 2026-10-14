@@ -23,21 +23,25 @@ export function walkKey(points: TrailPoint[]): string {
 
 /**
  * The walks in these pieces worth snapping, without jitter: stays are already carved out, and a
- * walk must get somewhere and keep at least 3 points.
+ * walk must get somewhere and keep at least 3 points. A walk from or to a stay starts or ends at the
+ * stay's middle, where the map draws it from (its dot): leaving home then follows the street from
+ * the door, not a straight line to the first fix outside, which comes once the tracker wakes.
  */
 export function matchableWalks(pieces: TrailPiece[]): { key: string; points: MatchablePoint[] }[] {
   const walks: { key: string; points: MatchablePoint[] }[] = []
-  for (const piece of pieces) {
-    if (piece.kind !== 'move' || piece.points.length < 3) continue
-    if (distance(piece.points[0]!, piece.points.at(-1)!) < MIN_WALK_METERS) continue
+  pieces.forEach((piece, index) => {
+    if (piece.kind !== 'move' || piece.points.length < 3) return
+    if (distance(piece.points[0]!, piece.points.at(-1)!) < MIN_WALK_METERS) return
     const kept = [piece.points[0]!]
     for (const point of piece.points.slice(1)) if (distance(kept.at(-1)!, point) >= JITTER_METERS) kept.push(point)
     if (kept.at(-1) !== piece.points.at(-1)) kept.push(piece.points.at(-1)!)
-    if (kept.length < 3) continue
-    walks.push({
-      key: walkKey(piece.points),
-      points: kept.slice(-MAX_POINTS_PER_WALK).map(({ lat, lon, time }) => ({ lat, lon, time })),
-    })
-  }
+    if (kept.length < 3) return
+    // Room for the two stays' middles within the limit.
+    const points: MatchablePoint[] = kept.slice(-(MAX_POINTS_PER_WALK - 2)).map(({ lat, lon, time }) => ({ lat, lon, time }))
+    const [before, after] = [pieces[index - 1], pieces[index + 1]]
+    if (before?.kind === 'stay') points.unshift({ ...before.center, time: points[0]!.time - 1000 })
+    if (after?.kind === 'stay') points.push({ ...after.center, time: points.at(-1)!.time + 1000 })
+    walks.push({ key: walkKey(piece.points), points })
+  })
   return walks
 }

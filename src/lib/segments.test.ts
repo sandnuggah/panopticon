@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { classifyTrail, currentActivity, currentStay, stayDots, type TrailPiece } from './segments.ts'
+import { classifyTrail, currentActivity, currentStay, latestOutingStart, stayDots, type TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
 // A made-up trip in the shape of real SinoTrack data: a report every 30 s, GPS lost underground,
@@ -248,6 +248,27 @@ describe('classifyTrail', () => {
       if (piece.kind === 'move') assert.ok(piece.points.every((point) => point.valid))
       if (piece.kind === 'underground') assert.ok(piece.legs.every((leg) => leg.points.every((point) => point.valid)))
     }
+  })
+})
+
+describe('latestOutingStart', () => {
+  test('the latest outing starts when the last long stay ended', () => {
+    // Home, a walk, home again, another walk with a short stop: the latest outing is the second walk.
+    const trip = new Trip().stay(60).walk(10).stay(40).walk(8).stay(5).walk(8)
+    const pieces = classifyTrail(trip.points)
+    const secondHome = pieces.filter((piece) => piece.kind === 'stay')[1] as Extract<TrailPiece, { kind: 'stay' }>
+    assert.equal(latestOutingStart(pieces), secondHome.to)
+  })
+
+  test('back home for a long while: the outing that ended there is the latest', () => {
+    const trip = new Trip().stay(60).walk(10).stay(40).walk(8).stay(45)
+    const pieces = classifyTrail(trip.points)
+    const stays = pieces.filter((piece): piece is Extract<TrailPiece, { kind: 'stay' }> => piece.kind === 'stay')
+    assert.equal(latestOutingStart(pieces), stays[1]!.to)
+  })
+
+  test('no long stay: it is all one outing', () => {
+    assert.equal(latestOutingStart(classifyTrail(new Trip().walk(10).stay(5).walk(10).points)), null)
   })
 })
 

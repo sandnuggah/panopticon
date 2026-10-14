@@ -1,12 +1,14 @@
 import type { GeoJSONSource, MapLibreMap } from 'maplibre-gl'
 import { walkKey } from '../../lib/matching'
-import { classifyTrail, stayDots, type LatLon, type TrailPiece } from '../../lib/segments'
+import { classifyTrail, latestOutingStart, stayDots, type LatLon, type TrailPiece } from '../../lib/segments'
 import type { TrailPoint, Trails } from '../../lib/trail'
 
 // The trail on the map, drawn by what the asset was doing (see segments.ts): walking as a line, or
 // as paw prints (Appearance → Paw prints); rides through their fixes, dashed, and dotted where they
 // went without GPS (underground); stays as dots, bigger the longer they were, with the walks running
-// through them, so a day reads as one path. Everything fades with age. Markers are DOM elements, so they always sit above all of it.
+// through them, so a day reads as one path. The latest outing (since the last long stay, see
+// latestOutingStart) is drawn in front, and older ones fade into the background; within each, the
+// older parts are fainter. Markers are DOM elements, so they always sit above all of it.
 
 const TRAILS = 'trails'
 const RIDES_VEHICLE = 'trail-vehicle'
@@ -140,9 +142,13 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
   for (const [id, points] of Object.entries(trails)) {
     const fixes = points.filter((point) => point.valid)
     if (fixes.length === 0) continue
-    // Oldest faintest: 0.2 at the start of the trail, 0.9 at its newest point.
+    const pieces = classifyTrail(points, { showWandering: true })
+    // The latest outing from 0.55 at its start to 0.95 at its newest point; older ones from 0.12 to 0.25.
     const [oldest, newest] = [fixes[0]!.time, fixes.at(-1)!.time]
-    const opacity = (time: number) => 0.2 + 0.7 * (newest > oldest ? (time - oldest) / (newest - oldest) : 1)
+    const outing = latestOutingStart(pieces) ?? oldest
+    const along = (time: number, from: number, to: number) => (to > from ? Math.min(1, Math.max(0, (time - from) / (to - from))) : 1)
+    const opacity = (time: number) =>
+      time >= outing ? 0.55 + 0.4 * along(time, outing, newest) : 0.12 + 0.13 * along(time, oldest, outing)
     const line = (kind: string, coordinates: LatLon[], time: number): TrailFeature => ({
       type: 'Feature',
       properties: { id: Number(id), kind, opacity: opacity(time) },
@@ -151,7 +157,6 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>)
         coordinates: coordinates.map((point) => [point.lon, point.lat]),
       },
     })
-    const pieces = classifyTrail(points, { showWandering: true })
     const stayIndexes = pieces.flatMap((piece, index) => (piece.kind === 'stay' ? [index] : []))
     const { dots, dotOf } = stayDots(stayIndexes.map((index) => pieces[index] as Extract<TrailPiece, { kind: 'stay' }>))
     /** The dot of the stay at `index` in the pieces, if there's a stay there. */

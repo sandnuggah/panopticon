@@ -72,6 +72,24 @@ export type Activity = 'vehicle' | 'underground'
 /** Staying put right now: since when, and whether that's when it began or only when the points do. */
 export type Stay = { since: number; began: boolean }
 
+/** A stay this long is a base (home, daycare, the office): the outings are between them. */
+const BASE_STAY_MS = 20 * 60 * 1000
+
+/**
+ * When the asset's latest outing began, for drawing it in front of the older ones: the end of the
+ * last stay of at least BASE_STAY_MS before its latest movement. Staying somewhere that long right
+ * now ends that outing; it doesn't start a new one. Null when there's no such stay: it's all one outing.
+ */
+export function latestOutingStart(pieces: TrailPiece[]): number | null {
+  const isBase = (piece: TrailPiece | undefined) => piece?.kind === 'stay' && piece.to - piece.from >= BASE_STAY_MS
+  const end = isBase(pieces.at(-1)) ? pieces.length - 1 : pieces.length
+  for (let index = end - 1; index >= 0; index--) {
+    const piece = pieces[index]!
+    if (piece.kind === 'stay' && isBase(piece)) return piece.to
+  }
+  return null
+}
+
 /** A dot drawn on the map for one or more stays (see stayDots): where, when last, and how long in all. */
 export type StayDot = { center: LatLon; to: number; ms: number }
 
