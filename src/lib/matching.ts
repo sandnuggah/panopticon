@@ -7,7 +7,7 @@ import type { TrailPoint } from './trail'
 
 /** Points closer than this to the previous kept one are standing-still jitter, dropped before matching. */
 const JITTER_METERS = 15
-/** A walk must end at least this far from where it started: wandering around a yard isn't snapped. */
+/** A walk must get at least this far from where it started: wandering around a yard isn't snapped. */
 const MIN_WALK_METERS = 75
 
 /** At most this many walks per request, each at most this many points. */
@@ -23,7 +23,7 @@ export function walkKey(points: TrailPoint[]): string {
 
 /**
  * The walks in these pieces worth snapping, without jitter: stays are already carved out, and a
- * walk must get somewhere and keep at least 3 points. A walk from or to a stay starts or ends at the
+ * walk must get somewhere (out and back counts) and keep at least 3 points. A walk from or to a stay starts or ends at the
  * stay's middle, where the map draws it from (its dot): leaving home then follows the street from
  * the door, not a straight line to the first fix outside, which comes once the tracker wakes.
  */
@@ -31,7 +31,8 @@ export function matchableWalks(pieces: TrailPiece[]): { key: string; points: Mat
   const walks: { key: string; points: MatchablePoint[] }[] = []
   pieces.forEach((piece, index) => {
     if (piece.kind !== 'move' || piece.points.length < 3) return
-    if (distance(piece.points[0]!, piece.points.at(-1)!) < MIN_WALK_METERS) return
+    // Anywhere along it, not just at its end: a walk round the block and home again counts.
+    if (!piece.points.some((point) => distance(piece.points[0]!, point) >= MIN_WALK_METERS)) return
     const kept = [piece.points[0]!]
     for (const point of piece.points.slice(1)) if (distance(kept.at(-1)!, point) >= JITTER_METERS) kept.push(point)
     if (kept.at(-1) !== piece.points.at(-1)) kept.push(piece.points.at(-1)!)

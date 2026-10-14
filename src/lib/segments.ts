@@ -45,6 +45,8 @@ const PLACE_GAP_METERS = 25
 const WANDER_METERS = 50
 /** A move of at most this many fixes between two stays in one place is a blip (GPS noise), not wandering. */
 const BLIP_FIXES = 2
+/** On the map, a stop shorter than this is part of the walk (a dog sniffing), not a dot of its own. */
+const SHORT_STOP_MS = 5 * 60 * 1000
 /** Live activity only counts while reports are this fresh. */
 const ACTIVITY_MAX_AGE_MS = 3 * 60 * 1000
 /** Underground right now: this long without a fix while switching between this many cell sites. */
@@ -320,7 +322,28 @@ function splitWalk(points: TrailPoint[], showWandering: boolean): TrailPiece[] {
   }
   if (move.length > 1) parts.push({ stay: false, points: move })
 
-  return mergePlaces(parts, showWandering).map((part) => (part.stay ? toStay(part.points) : { kind: 'move', points: part.points }))
+  const merged = mergePlaces(parts, showWandering)
+  return (showWandering ? joinShortStops(merged) : merged).map((part) =>
+    part.stay ? toStay(part.points) : { kind: 'move', points: part.points },
+  )
+}
+
+/**
+ * For drawing: stops shorter than SHORT_STOP_MS become part of the walk around them, so a walk with
+ * a dog that keeps stopping to sniff is one path, snapped as one, not pieces between dots.
+ */
+function joinShortStops(parts: Part[]): Part[] {
+  const joined: Part[] = []
+  for (const part of parts) {
+    const short = part.stay && part.points.at(-1)!.time - part.points[0]!.time < SHORT_STOP_MS
+    const asMove = short ? { stay: false, points: part.points } : part
+    const last = joined.at(-1)
+    // Neighbouring parts share their end point.
+    if (last && !last.stay && !asMove.stay)
+      last.points = [...last.points, ...asMove.points.slice(last.points.at(-1) === asMove.points[0] ? 1 : 0)]
+    else joined.push({ ...asMove, points: [...asMove.points] })
+  }
+  return joined
 }
 
 /**

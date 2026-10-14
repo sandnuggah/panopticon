@@ -30,13 +30,22 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
         shape: points.map((point) => ({ lat: point.lat, lon: point.lon, time: Math.round(point.time / 1000) })),
         costing: 'pedestrian',
         shape_match: 'map_snap',
-        trace_options: { search_radius: 50, gps_accuracy: 15, breakage_distance: 2000 },
+        // A dog's tracker: fixes 20–30 m off are common (tried on a real walk, 2026-10-14).
+        trace_options: { search_radius: 60, gps_accuracy: 25, breakage_distance: 2000 },
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
     if (response.ok) {
-      const body = (await response.json()) as { trip?: { legs?: { shape?: string }[] } }
-      const line = (body.trip?.legs ?? []).flatMap((leg) => (leg.shape ? decodePolyline6(leg.shape) : []))
+      // Where the trace breaks (a stretch it can't match), Valhalla answers with several trips: the
+      // first in `trip`, the rest in `alternates`, each saying which points it covers. All of them,
+      // in order, are the walk.
+      type Trip = { legs?: { shape?: string }[]; locations?: { original_index?: number }[] }
+      const body = (await response.json()) as { trip?: Trip; alternates?: { trip?: Trip }[] }
+      const trips = [body.trip, ...(body.alternates ?? []).map((alternate) => alternate.trip)].filter((trip): trip is Trip => !!trip)
+      const firstPoint = (trip: Trip) => trip.locations?.[0]?.original_index ?? 0
+      const line = trips
+        .sort((a, b) => firstPoint(a) - firstPoint(b))
+        .flatMap((trip) => (trip.legs ?? []).flatMap((leg) => (leg.shape ? decodePolyline6(leg.shape) : [])))
       if (line.length >= 2) result = snapAlong(points, line)
     } else if (response.status !== 400) {
       // 400 means Valhalla found no match (e.g. points far from any path); anything else is worth a log line.

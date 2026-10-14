@@ -172,6 +172,12 @@ describe('classifyTrail', () => {
     assert.equal(kinds(classifyTrail(points, { showWandering: true })).filter((kind) => kind === 'stay').length, 2)
   })
 
+  test('on the map, a short stop is part of the walk', () => {
+    const points = new Trip().stay(30).walk(5).stay(3).walk(5).stay(30).points
+    assert.deepEqual(kinds(classifyTrail(points)), ['stay', 'move', 'stay', 'move', 'stay'])
+    assert.deepEqual(kinds(classifyTrail(points, { showWandering: true })), ['stay', 'move', 'stay'])
+  })
+
   test('a GPS blip in one place is no wandering', () => {
     const points = new Trip().stay(10).walk(0.5, 5).walk(0.5, -5).stay(10).points
     assert.deepEqual(kinds(classifyTrail(points, { showWandering: true })), ['stay'])
