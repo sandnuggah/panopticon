@@ -12,7 +12,19 @@ import { AddAssetForm } from './AddAssetForm'
 import { Appearance } from './Appearance'
 import { AssetEditor } from './AssetEditor'
 import { AssetsList } from './AssetsList'
-import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass, ROWS, SIDE_PANEL_MAX_HEIGHT, sidePanel, sidePanelClosed } from './cards'
+import {
+  Backdrop,
+  CARD_BG,
+  CloseButton,
+  moveFocus,
+  pageCardClass,
+  ROWS,
+  SIDE_PANEL_MAX_HEIGHT,
+  sidePanel,
+  sidePanelClosed,
+  useCover,
+  type Cover,
+} from './cards'
 import { AlertsPage } from './AlertsPage'
 import { AppearanceIcon, BackIcon, BellIcon, ListIcon, LiveIcon, PersonIcon, PinIcon } from './icons'
 import { LiveLinksList } from './LiveLinksList'
@@ -68,6 +80,11 @@ type Props = {
   onClose: () => void
   /** The Settings button in the bottom bar, which gets focus back when everything closes. */
   returnFocus: RefObject<HTMLButtonElement | null>
+  /**
+   * What the card covers of the map while open, so the map centres the selected asset in what's
+   * left: only as a side panel on a wide screen; on a phone it's a sheet over most of the map.
+   */
+  onCover: (cover: Cover) => void
 }
 
 /**
@@ -93,9 +110,13 @@ export function SettingsCard({
   onClosePage,
   onClose,
   returnFocus,
+  onCover,
 }: Props) {
   const open = view !== undefined
   const pageOpen = open && view !== 'main'
+  // The page cards open in the same column, so the Settings card's cover is theirs too.
+  const card = useRef<HTMLElement>(null)
+  useCover(card, open, onCover, { wideOnly: true })
   const settingsClose = useRef<HTMLButtonElement>(null)
   const pageHeader = useRef<HTMLButtonElement>(null)
   // While the page card slides away it keeps showing what it showed.
@@ -154,6 +175,7 @@ export function SettingsCard({
     <>
       <Backdrop shown={open} z="z-30" onClick={onClose} />
       <section
+        ref={card}
         role="dialog"
         aria-modal="true"
         aria-label="Settings"

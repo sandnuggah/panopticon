@@ -1,7 +1,8 @@
-import { lazy, Suspense, useCallback, useState } from 'react'
+import { lazy, Suspense, useCallback, useRef, useState } from 'react'
 import { ClientOnly, createFileRoute } from '@tanstack/react-router'
 import { Page } from 'konsta/react'
 import { AssetAvatar } from '../components/AssetAvatar'
+import { NO_COVER, useCover } from '../components/cards'
 import { LiveIndicator } from '../components/LiveIndicator'
 import { MapCredits } from '../components/MapCredits'
 import { RelativeTime } from '../components/RelativeTime'
@@ -54,6 +55,10 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
   // Your own position, from the map's buttons; and the map data's credits, shown in the panel.
   const [showMe, setShowMe] = useState(false)
   const [credits, setCredits] = useState<string[]>([])
+  // The panel covers the bottom of the map: the asset is centred in the rest.
+  const panel = useRef<HTMLElement>(null)
+  const [cover, setCover] = useState(NO_COVER)
+  useCover(panel, true, setCover, { panel: false })
   const mapPlaceholder = <div className="map map-placeholder" />
 
   return (
@@ -78,12 +83,14 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
               showMe={showMe}
               onShowMeChange={setShowMe}
               onAttribution={setCredits}
+              cover={cover}
             />
           </Suspense>
         </ClientOnly>
       </div>
       {/* A floating panel over the map, with what a viewer may see. */}
       <section
+        ref={panel}
         className="absolute inset-x-0 bottom-0 z-10 mx-auto max-w-xl px-2 pb-[max(8px,env(safe-area-inset-bottom))]"
         aria-label={asset.name}
       >

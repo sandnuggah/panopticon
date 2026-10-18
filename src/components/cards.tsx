@@ -1,4 +1,4 @@
-import type { Ref } from 'react'
+import { useLayoutEffect, type Ref, type RefObject } from 'react'
 import { CloseIcon } from './icons'
 
 // The pieces the map screen's cards share (SettingsCard, AssetDetailsCard, Share), so they look alike.
@@ -80,4 +80,53 @@ export const SIDE_PANEL_ABOVE_ZOOM = 'lg:max-h-[calc(100dvh-env(safe-area-inset-
  */
 export function pageCardClass(open: boolean, side: Side = 'right'): string {
   return `absolute inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+8px)] z-60 mx-auto max-w-xl px-2 transition-transform duration-300 ease-out ${sidePanel(side, true)} ${open ? '' : `translate-y-[calc(100%+16px)] ${sidePanelClosed(side)}`}`
+}
+
+/** How much of the map a card covers, in pixels from each edge, so the map centres what's left (AssetMap). */
+export type Cover = { top: number; right: number; bottom: number; left: number }
+
+export const NO_COVER: Cover = { top: 0, right: 0, bottom: 0, left: 0 }
+
+export function sameCover(a: Cover, b: Cover): boolean {
+  return a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.left === b.left
+}
+
+/**
+ * Reports what a card covers of the map while it's open, and no cover once it closes: the bottom
+ * on a phone, its side on a wide screen (lg), where it's a side panel. Measured from where the card
+ * sits when open, not where it is mid-slide, so the map can move along with it; kept up to date as
+ * its height changes (text loading, Dynamic Type). `wideOnly`: a card that covers the map on a
+ * phone only as a modal (Settings) counts only as a side panel. `panel: false`: a card that stays
+ * at the bottom on a wide screen too (the live link page's).
+ */
+export function useCover(
+  card: RefObject<HTMLElement | null>,
+  open: boolean,
+  onCover: (cover: Cover) => void,
+  { wideOnly = false, panel = true } = {},
+) {
+  useLayoutEffect(() => {
+    const element = card.current
+    const screen = element?.offsetParent
+    if (!element || !(screen instanceof HTMLElement) || !open) return onCover(NO_COVER)
+    const report = () => {
+      const side = panel && window.matchMedia('(min-width: 1024px)').matches
+      // offsetTop and offsetLeft leave out the slide's transform.
+      if (!side) return onCover(wideOnly ? NO_COVER : { ...NO_COVER, bottom: screen.clientHeight - element.offsetTop })
+      const onLeft = element.offsetLeft + element.offsetWidth / 2 < screen.clientWidth / 2
+      onCover(
+        onLeft
+          ? { ...NO_COVER, left: element.offsetLeft + element.offsetWidth }
+          : { ...NO_COVER, right: screen.clientWidth - element.offsetLeft },
+      )
+    }
+    report()
+    const observer = new ResizeObserver(report)
+    observer.observe(element)
+    window.addEventListener('resize', report)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', report)
+    }
+  }, [card, open, onCover, wideOnly, panel])
 }

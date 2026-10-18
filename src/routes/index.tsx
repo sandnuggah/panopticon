@@ -4,6 +4,7 @@ import { AssetDetailsCard } from '../components/AssetDetailsCard'
 import { LiveIndicator } from '../components/LiveIndicator'
 import { UpdateNotice } from '../components/UpdateNotice'
 import { BottomBar } from '../components/BottomBar'
+import { NO_COVER, sameCover, type Cover } from '../components/cards'
 import { PlaceBanner } from '../components/PlaceBanner'
 import { PlaceEditor } from '../components/PlaceEditor'
 import { LoadingScreen } from '../components/LoadingScreen'
@@ -254,6 +255,18 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
 
+  // What the cards cover of the map: the selected asset is centred in the rest.
+  const [detailsCover, setDetailsCover] = useState(NO_COVER)
+  const [settingsCover, setSettingsCover] = useState(NO_COVER)
+  const onDetailsCover = useCallback((cover: Cover) => setDetailsCover((current) => (sameCover(current, cover) ? current : cover)), [])
+  const onSettingsCover = useCallback((cover: Cover) => setSettingsCover((current) => (sameCover(current, cover) ? current : cover)), [])
+  const mapCover: Cover = {
+    top: Math.max(detailsCover.top, settingsCover.top),
+    right: Math.max(detailsCover.right, settingsCover.right),
+    bottom: Math.max(detailsCover.bottom, settingsCover.bottom),
+    left: Math.max(detailsCover.left, settingsCover.left),
+  }
+
   // Adding or changing a place: the editor card at the bottom, the circle on the map above it.
   const editing = editedPlace !== undefined
   const placeKey = String(editedPlace)
@@ -355,6 +368,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
               onAttribution={setAttribution}
               onLoad={onMapLoad}
               onParks={setParks}
+              cover={mapCover}
               places={places}
               picker={
                 editing && place !== undefined
@@ -388,6 +402,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
         places={places}
         onTop={cardView === undefined}
         onClose={closeDetails}
+        onCover={onDetailsCover}
       />
       <BottomBar
         userName={user.name}
@@ -413,6 +428,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
         onClosePage={closePage}
         onClose={closeSettings}
         returnFocus={settingsButton}
+        onCover={onSettingsCover}
       />
       {editing && place !== undefined && (
         <PlaceEditor

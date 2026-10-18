@@ -18,6 +18,7 @@ import { circle } from './geometry'
 import { createMarkerElement, updateMarkerElement } from './markers'
 import { addTrailLayers, recolourTrails, setTrails, showPawPrints } from './trailLayers'
 import { addPlaceLayers, recolourPlaces, setPlaces } from './placeLayers'
+import { NO_COVER, type Cover } from '../cards'
 import { MapButtons } from './MapButtons'
 import { PlacePicker, type PickerProps } from './PlacePicker'
 
@@ -30,6 +31,8 @@ const FOLLOW_MS = 1000
 const CENTRED_PX = 12
 /** About how much of the map's bottom edge the bottom bar covers, in pixels; it doesn't follow Dynamic Type. */
 const BOTTOM_BAR = 76
+/** How long the map takes to move along with a card opening or closing: as long as the card's slide. */
+const CARD_MS = 300
 
 /** Live link pages show no places; one empty list, so it never counts as a change. */
 const NO_PLACES: Place[] = []
@@ -64,6 +67,11 @@ type Props = {
   onLoad?: () => void
   /** The parks in the map's loaded tiles, once it's ready and after each move, for Snap to paths (see parks.ts). */
   onParks?: (parks: Park[]) => void
+  /**
+   * What the cards cover of the map (the details card, a side panel): the middle of the rest is
+   * the map's middle, where a selected asset is centred and followed. The bottom bar counts too.
+   */
+  cover?: Cover
   /** The user's places (Settings → Places), drawn under the trail. None on live link pages. */
   places?: Place[]
   /** While a place is being added or changed (PlaceEditor): the circle to place, and which place it is. */
@@ -87,6 +95,7 @@ export default function AssetMap({
   onAttribution,
   onLoad,
   onParks,
+  cover = NO_COVER,
   places = NO_PLACES,
   picker = null,
 }: Props) {
@@ -114,6 +123,17 @@ export default function AssetMap({
   const flightCountRef = useRef(0)
   /** True during a user gesture (zoom, pinch, drag); follow updates wait for it to finish. */
   const gestureRef = useRef(false)
+  /** The zoom the selection flight under way is heading for. */
+  const flightZoomRef = useRef(ASSET_ZOOM)
+
+  // The visible map, as maplibre's padding: what the cards cover, and the bottom bar under them.
+  const bar = buttons === 'above-bar' ? BOTTOM_BAR : 0
+  const padding = { top: cover.top, right: cover.right, bottom: Math.max(cover.bottom, bar), left: cover.left }
+  const paddingRef = useRef(padding)
+  paddingRef.current = padding
+  /** While the place picker is open, it sets the padding itself. */
+  const pickingRef = useRef(false)
+  pickingRef.current = picker !== null
 
   // Moving the map yourself pauses following; zooming doesn't. The selection stays either way.
   // Only uses refs and a state setter, so the map's event handlers can keep the first one.
@@ -144,8 +164,8 @@ export default function AssetMap({
       // The selected asset: deselect it when it's centred (or being followed); otherwise centre it
       // again, which also resumes following.
       const point = map.project([target.lon, target.lat])
-      const container = map.getContainer()
-      const offCentre = Math.hypot(point.x - container.clientWidth / 2, point.y - container.clientHeight / 2)
+      const middle = visibleMiddle(map)
+      const offCentre = Math.hypot(point.x - middle.x, point.y - middle.y)
       if (following || offCentre <= CENTRED_PX) onDeselect()
       else onSelect(id)
     }
@@ -226,11 +246,19 @@ export default function AssetMap({
       if (endedFlight !== undefined && endedFlight !== flightRef.current) return // replaced by a newer one
       if (endedFlight !== undefined) flightRef.current = null
       else if (event.originalEvent) gestureRef.current = false
-      else return
+      else return keepPadding()
       // After a selection flight or a zoom gesture (double-tap zooms around the tap, a pinch drifts),
       // catch up with the asset, which may have moved meanwhile.
-      if (targetRef.current) map.easeTo({ center: targetRef.current, duration: 300 })
+      if (targetRef.current) map.easeTo({ center: targetRef.current, padding: paddingRef.current, duration: 300 })
+      else keepPadding()
     })
+    // A move that was to change the padding can be cut short (a drag, a newer move): once the map is
+    // at rest, it gets the padding it should have, with a followed asset in the middle of it.
+    const keepPadding = () => {
+      if (pickingRef.current || map.isMoving() || samePadding(map.getPadding(), paddingRef.current)) return
+      if (targetRef.current) map.easeTo({ center: targetRef.current, padding: paddingRef.current, duration: CARD_MS })
+      else map.jumpTo(stillWith(map, paddingRef.current))
+    }
 
     mapRef.current = map
     const markers = markersRef.current
@@ -327,6 +355,7 @@ export default function AssetMap({
     const target = assets.find((asset) => asset.id === selectedId)?.location
     if (!cameraPlacedRef.current) {
       cameraPlacedRef.current = true
+      map.setPadding(paddingRef.current)
       if (target) {
         map.jumpTo({ center: [target.lon, target.lat], zoom: ASSET_ZOOM })
       } else {
@@ -335,14 +364,9 @@ export default function AssetMap({
     } else if (target) {
       const flightId = ++flightCountRef.current
       flightRef.current = flightId
+      flightZoomRef.current = Math.max(map.getZoom(), ASSET_ZOOM)
       // The id comes back on this flight's moveend, which then lets follow updates through.
-      map.flyTo(
-        {
-          center: [target.lon, target.lat],
-          zoom: Math.max(map.getZoom(), ASSET_ZOOM),
-        },
-        { flightId },
-      )
+      map.flyTo({ center: [target.lon, target.lat], zoom: flightZoomRef.current }, { flightId })
     }
     // Not keyed on `assets`: new positions of the selected asset are handled by following, below.
   }, [selectedId, focusToken])
@@ -358,6 +382,28 @@ export default function AssetMap({
     gestureRef.current = false
     map.easeTo({ center: [targetLon, targetLat], duration: FOLLOW_MS })
   }, [targetLon, targetLat, following])
+
+  // When a card opens, closes or changes height, the middle of the visible map moves. A followed
+  // asset goes along with the card, staying in the middle of what's visible (a selection flight on
+  // its way there is re-aimed); otherwise the map stays put and only its middle moves. The place
+  // picker sets the padding itself while it's open.
+  const picking = picker !== null
+  const paddingKey = `${padding.top} ${padding.right} ${padding.bottom} ${padding.left}`
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !cameraPlacedRef.current || picking) return
+    if (samePadding(map.getPadding(), padding)) return
+    const target = targetRef.current
+    if (target) {
+      const flying = flightRef.current !== null && map.isMoving()
+      const flightId = ++flightCountRef.current
+      flightRef.current = flightId
+      if (flying) map.flyTo({ center: target, zoom: flightZoomRef.current, padding }, { flightId })
+      else map.easeTo({ center: target, padding, duration: CARD_MS }, { flightId })
+      return
+    }
+    map.jumpTo(stillWith(map, padding))
+  }, [paddingKey, picking])
 
   // While following, zoom gestures zoom around the centre (the asset), not the fingers or cursor.
   useEffect(() => {
@@ -434,21 +480,31 @@ function frameMe(map: MapLibreMap, me: MyPosition, asset: LatLon | undefined) {
     return
   }
   const bounds = new LngLatBounds([me.lon, me.lat], [me.lon, me.lat]).extend([asset.lon, asset.lat])
-  map.fitBounds(bounds, {
-    padding: clearOfBottom(80),
-    maxZoom: MY_POSITION_ZOOM + 1,
-    duration: 800,
-  })
+  // On top of the map's own padding, which keeps clear of the cards and the bottom bar.
+  map.fitBounds(bounds, { padding: 80, maxZoom: MY_POSITION_ZOOM + 1, duration: 800 })
 }
 
-/** Even padding, plus room for the bottom bar along the map's bottom edge. */
-function clearOfBottom(padding: number) {
-  return {
-    top: padding,
-    right: padding,
-    left: padding,
-    bottom: padding + BOTTOM_BAR,
-  }
+type Padding = { top: number; right: number; bottom: number; left: number }
+
+function samePadding(a: Partial<Padding>, b: Padding): boolean {
+  return a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.left === b.left
+}
+
+/** A new padding, with the map staying where it is: the point at the new middle becomes the centre. */
+function stillWith(map: MapLibreMap, padding: Padding) {
+  const { clientWidth: width, clientHeight: height } = map.getContainer()
+  const middle: [number, number] = [
+    padding.left + (width - padding.left - padding.right) / 2,
+    padding.top + (height - padding.top - padding.bottom) / 2,
+  ]
+  return { center: map.unproject(middle), padding }
+}
+
+/** The middle of the visible map (see the `cover` prop), in pixels. */
+function visibleMiddle(map: MapLibreMap): { x: number; y: number } {
+  const { top = 0, right = 0, bottom = 0, left = 0 } = map.getPadding()
+  const { clientWidth: width, clientHeight: height } = map.getContainer()
+  return { x: left + (width - left - right) / 2, y: top + (height - top - bottom) / 2 }
 }
 
 function fitAll(map: MapLibreMap, assets: Asset[]) {
@@ -456,11 +512,7 @@ function fitAll(map: MapLibreMap, assets: Asset[]) {
   if (located.length === 0) return
   const bounds = new LngLatBounds()
   for (const { lon, lat } of located) bounds.extend([lon, lat])
-  map.fitBounds(bounds, {
-    padding: clearOfBottom(64),
-    maxZoom: ASSET_ZOOM,
-    duration: 0,
-  })
+  map.fitBounds(bounds, { padding: 64, maxZoom: ASSET_ZOOM, duration: 0 })
 }
 
 /**

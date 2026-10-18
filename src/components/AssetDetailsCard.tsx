@@ -5,7 +5,7 @@ import type { Activity, Stay } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { BatteryGauge } from './BatteryGauge'
-import { CARD_BG, CloseButton, moveFocus, SIDE_PANEL_MAX_HEIGHT, sidePanel, sidePanelClosed } from './cards'
+import { CARD_BG, CloseButton, moveFocus, SIDE_PANEL_MAX_HEIGHT, sidePanel, sidePanelClosed, useCover, type Cover } from './cards'
 import { PlaceVisits } from './PlaceVisits'
 import { RelativeTime } from './RelativeTime'
 import { Share } from './Share'
@@ -24,6 +24,8 @@ type Props = {
   /** False while a card over this one is open (Settings), so Escape closes that one instead. */
   onTop: boolean
   onClose: () => void
+  /** What the card covers of the map while open, so the map centres the asset in what's left. */
+  onCover: (cover: Cover) => void
 }
 
 /**
@@ -31,8 +33,10 @@ type Props = {
  * tapping its picture in the bottom bar a second time. No backdrop: the map stays in view and can
  * be moved. Absolute inside the map screen, like the Settings card (see BottomBar.tsx).
  */
-export function AssetDetailsCard({ asset, activity, stay, address, places, onTop, onClose }: Props) {
+export function AssetDetailsCard({ asset, activity, stay, address, places, onTop, onClose, onCover }: Props) {
   const open = asset !== undefined
+  const card = useRef<HTMLElement>(null)
+  useCover(card, open, onCover)
   const closeButton = useRef<HTMLButtonElement>(null)
   // While the card slides away it keeps showing what it showed.
   const last = useRef<{ asset: Asset; activity?: Activity; stay?: Stay; address?: string }>(undefined)
@@ -63,6 +67,7 @@ export function AssetDetailsCard({ asset, activity, stay, address, places, onTop
 
   return (
     <section
+      ref={card}
       role="dialog"
       aria-label={shown?.asset.name ?? 'Asset'}
       inert={!open}
