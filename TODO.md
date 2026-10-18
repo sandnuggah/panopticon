@@ -3,6 +3,11 @@
 Kept by Claude at Adam's request. Newest items at the bottom of each section; done items are ticked
 and cleared out now and then.
 
+## Name and focus
+
+- [ ] Rename the app to something pet related (pettrac or the like; it was "tracpet" before it became Panopticon). Pick a name first (check it's free on GitHub and as a domain). It's in 39 files: the title, front page and link preview picture (dev/og-image.html → public/og-image.png), the web app manifest and icon, README and ARCHITECTURE, package.json, the GHCR image (`ghcr.io/sandnuggah/panopticon`, so compose files change too), the GitHub repo, the production domain, and browser storage keys (`panopticon.settings`, `panopticon.liveLinks`, the `panopticon-theme` and `panopticon-sso` cookies): move what's stored under the old keys over, or everyone's settings and live links reset and they're signed out
+- [ ] Only pets: take out what says it's for anything else. The front page's picture (the briefcase and the bike in WelcomeScene.tsx, dev/og-image.html), its description and tagline ("your dog, your bag and your bike"), How it works ("in the bag or under the saddle"), the README's "pets, bikes, bags…", and words like "asset" in the UI where "pet" reads better (Assets, Add asset)
+
 ## Trail on the map
 
 - [ ] Snap train and metro rides to the tracks. Today they're drawn through their GPS fixes (30 s apart, so curves are cut) and straight through tunnels and silences. Valhalla can't do rail; [OpenRailRouting](https://github.com/geofabrik/OpenRailRouting) (Geofabrik, GraphHopper-based, self-hosted, OSM rail incl. metro tunnels) can match fixes to tracks and route tunnel and silent legs between their ends. Trafiklab GTFS ruled out (needs a key, no track shapes found). Steps:
@@ -17,7 +22,6 @@ and cleared out now and then.
 - [ ] Check `:69` on Kofi's real trail (6 hours, Snap to paths on): spokes out of Home gone, only grass runs straight, the latest outing clearly in front. Compare with the 2026-10-14 screenshot (Tullgårdsparken, Stora Blecktornsparken)
 - [x] Calmer walks in parks: stricter snapping in parks (8 m, 5 fixes in a row, parks from the map's own tiles), lone GPS spikes left out (the V out to Tullgårdsgatan), and the matched line's detours out to a street and back cut across. Released as `:72` (2026-10-14)
 - [ ] Use Traccar's `accuracy` on trail points: phones (Traccar Client) report it per fix, so fixes worse than ~30–50 m could be left out or count for less, instead of guessing from the shape. The spike filter keeps a far-off fix whose neighbours are minutes apart (a line into Hammarby IP on 2026-10-14) because it might be real; accuracy would tell. Today the trail drops it on the server (`loadTrails`); check what the ST-904L sends (probably 0, so keep the shape rules for it)
-- [ ] Asset types (dog, bike, bag, person, car…) with their own tunings for the map: how fast counts as a ride, how long a stay, whether to snap to footpaths or roads (Valhalla's pedestrian or bicycle costing), park rules, spike limits, paw prints or not, and a fitting icon. Chosen per asset on its page, stored in Traccar (the device's category or an attribute); today everything is tuned for a dog on foot
 
 ## Places and alerts
 
@@ -53,12 +57,12 @@ and cleared out now and then.
 - [x] A loading screen with progress for the map: the page goes out at once and the assets, places and map options stream in; the screen shows each step (assets, places, map, trails) with when it was done, so a slow load shows where the time goes, and fades out once the map has drawn (a "Loading trails" note waits for slow trails). Released as `:67`; the Map step counts only the base map's tiles in `:68` (2026-10-14)
 - [x] Watched the loading screen on the phone: it shows its progress, and the slow loads came from the connection (Tailscale through an exit node), not the app (2026-10-18)
 - [x] The selected asset is centred in the part of the map that's visible: above the details card on a phone, beside the side panels on a wide screen, above the bottom bar and the live link page's panel. A followed asset glides along as a card opens and closes. Released as `:73` (2026-10-18)
-- [ ] Check `:73` on the phone: opening an asset's details lifts it above the card (in two steps when the arrivals list loads), closing brings it back down, and a dragged map stays put
+- [x] Checked `:73` on the phone: the asset stays in view above the details card (2026-10-18)
 
 ## Stats
 
 - [x] A Stats card per asset, from Stats beside Share on the details card: today, this week or this month, with distance walked and a bar per day (compared with the same days before when the tracker reported on all of them), walks, the longest, stops on walks, time out walking, furthest from Home and the walk streak (days in a row with 500 m or more, over 90 days). Worked out on the server a day at a time from Traccar's history with the map's own rules; finished days kept in memory. Released as `:74` (2026-10-18)
-- [ ] Check `:74` on Kofi's real week: do the walks, distance and stops look believable, and how long does the first opening take (the 90 days of the streak)? Walks with a stop of 5 minutes or more count as two
+- [x] Checked `:74` on Kofi's real week: the stats look right (2026-10-18)
 - [ ] More stats, later: new streets or parks walked this week, a heatmap of the neighbourhood, the fastest stretch on foot (a zoomie), time at each place, rides and how far, battery per day and how long a charge lasts
 
 ## Trackers
@@ -68,7 +72,7 @@ and cleared out now and then.
 - [ ] Show the MT710's place (such as Home) instead of "No recent contact" while its home mode keeps it quiet
 - [ ] No offline alert while the MT710's home mode keeps it quiet: it sends nothing at home, so Traccar marks it offline after 10 minutes each time it comes home. Skip the offline alert (and the Offline status) while its last position is inside a place, or at least inside one where home mode is set up
 - [ ] Set up home mode on the MT710: `MODE,8,<password>,T` (T = 10–60 s between reports when out), then `DEF,R` at home with a GPS fix, which saves the 3 strongest Wi-Fi networks and a 30–300 m zone. `DEF,R` only works sent from the server: try it as a custom command from Traccar (untested); with power saving on the mobile network it only arrives when the tracker next wakes
-- [ ] Try Snap to paths, stays and spikes on its walks: it reports differently from the ST-904L, so the dog tunings may need adjusting (see Asset types above)
+- [ ] Try Snap to paths, stays and spikes on its walks: it reports differently from the ST-904L, so the dog tunings may need adjusting
 
 ## Later / maybe
 
