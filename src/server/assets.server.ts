@@ -87,7 +87,7 @@ export function toPositionUpdate(position: TraccarPosition): LiveUpdate {
   return update
 }
 
-function toTrailPoint(position: TraccarPosition): TrailPoint {
+export function toTrailPoint(position: TraccarPosition): TrailPoint {
   const point: TrailPoint = {
     lat: position.latitude,
     lon: position.longitude,

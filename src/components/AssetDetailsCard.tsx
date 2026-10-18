@@ -9,6 +9,7 @@ import { CARD_BG, CloseButton, moveFocus, SIDE_PANEL_MAX_HEIGHT, sidePanel, side
 import { PlaceVisits } from './PlaceVisits'
 import { RelativeTime } from './RelativeTime'
 import { Share } from './Share'
+import { Stats } from './Stats'
 
 type Props = {
   /** The asset to show, or undefined while the card is closed. */
@@ -140,7 +141,7 @@ function Details({
         {/* Trackers that report volts only: shown as text, since volts don't map to bars reliably. */}
         {percent === undefined && asset.battery?.volts !== undefined && <p className="opacity-60">Battery {asset.battery.volts} V</p>}
       </div>
-      <Share asset={asset} address={address} active={open} />
+      <Share asset={asset} address={address} active={open} beside={<Stats asset={asset} places={places} active={open} />} />
       {hasPlaces && <PlaceVisits assetId={asset.id} places={places} placeIds={asset.placeIds} />}
     </>
   )

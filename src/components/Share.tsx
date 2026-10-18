@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from '@tanstack/react-router'
 import { BlockFooter, BlockTitle, Button, List, ListItem } from 'konsta/react'
@@ -16,6 +16,8 @@ type Props = {
   address: string | undefined
   /** False once the card holding Share has closed, which closes the Share card too. */
   active: boolean
+  /** A button beside Share (Stats); Sharing live goes under them. */
+  beside?: ReactNode
 }
 
 /** How long a notice under the buttons stays. */
@@ -27,7 +29,7 @@ const NOTICE_MS = 3_000
  * into the map screen (a portal), so it covers the screen rather than the details card it's in. While a live link made in this browser is active, Sharing live beside it
  * opens Settings → Live links, where links are stopped.
  */
-export function Share({ asset, address, active }: Props) {
+export function Share({ asset, address, active, beside }: Props) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   // A link Safari wouldn't share straight after it was made: the button sends it on the next tap.
@@ -120,8 +122,14 @@ export function Share({ asset, address, active }: Props) {
             Share
           </Button>
         )}
+        {beside}
         {live && (
-          <Button rounded outline onClick={() => void navigate({ to: '/', search: (prev) => ({ ...prev, settings: 'live-links' }) })}>
+          <Button
+            rounded
+            outline
+            className="col-span-2"
+            onClick={() => void navigate({ to: '/', search: (prev) => ({ ...prev, settings: 'live-links' }) })}
+          >
             <span className="mr-1.5 size-2 rounded-full bg-[var(--online)]" aria-hidden="true" />
             Sharing live
           </Button>

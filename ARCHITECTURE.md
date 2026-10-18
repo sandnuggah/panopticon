@@ -178,6 +178,14 @@ Optional: with `MAP_MATCHING_URL` set, the Appearance page offers **Snap to path
   - An hour costs nothing extra, since 3 hours of history is always loaded. Longer means more per asset on each load: a day of reports every 30 s is about 2,900 points per asset.
   - Saved in the browser as `trail`. A saved length that's no longer offered moves to the closest one by ratio (anything up to 2 hours becomes 1 hour, never Off; 3 hours becomes 6); `trailMinutes`, the older name, is still read.
 
+## Stats
+
+**Stats** beside Share on an asset's details card opens the Stats card (`Stats.tsx`, over the screen like Share): the asset's walks today, this week (from Monday) or this month, in local days.
+
+- **What's counted** (`lib/stats.ts` with tests): walks are `move` pieces from the classifier as the map draws them (`showWandering`, so stops under 5 minutes are part of the walk) that get at least 75 m from where they started, as for Snap to paths; rides aren't walks. **Walked** is their length, leaving out steps under 15 m (standing-still jitter), with a bar per day; **Walks** and the **Longest**; **Out walking**, their time; **Stops on walks**, pauses of at least a minute within 20 m on a walk (sniffing, peeing, saying hello: a 20-second pee between fixes 30 s apart leaves no trace, so it's not called pee stops); **Furthest from Home**, from the asset's place called Home, or else its first place, hidden without one; and the **Walk streak**, days in a row with at least 500 m of walks over the last 90 days, the current one (today doesn't break it before it's over) and the longest. The week and month are compared with the same days of the one before, only when the tracker reported on all of them (not with a new tracker, or across a day it was off), and not today with yesterday, since today isn't over.
+- **Where it's worked out** (`getDayStats` → `stats.server.ts`): on the server, a day at a time from Traccar's position history, at most 92 days and 4 at once per request. A week of a tracker reporting every half minute is some 10,000 positions, so only each day's few numbers go to the browser. Days that ended over an hour ago are kept in memory (20,000 at most, across assets and users), so after the first look only today is fetched again; a cached day is only given out after Traccar confirms the user can see the asset. The card asks for the period and the one before in one request, then the streak's 90 days. Traccar's own summary and stops reports weren't used: their distance adds up every fix, jitter at home included, and their stops follow rules for vehicles.
+- **Needs** Traccar's history, so reports allowed for the user, like the trail.
+
 ## Addresses
 
 The selected asset's card shows its street address, e.g. "Storviltsgatan 5, Stockholm".
@@ -443,6 +451,8 @@ src/
     sso.server.ts                     /auth/sso, callback, Traccar email-link redirects
     places.server.ts                  places as Traccar geofences: load with their assets, save, remove, visits
     places.functions.ts               getPlaces, savePlaceChange, deletePlace, getPlaceVisits
+    stats.functions.ts                getDayStats (an asset's walks, a day at a time)
+    stats.server.ts                   works out days from Traccar's history, keeps the days that are over
     alerts.server.ts                  alerts: the Traccar events hook, this phone's choices onto the devices
     alerts.functions.ts               getAlertSetup, savePhoneAlertChoices, sendPhoneTestAlert
     alertsSeal.server.ts              sealing a device's alert choices (AES-GCM) + tests
@@ -484,6 +494,7 @@ src/
     HowItWorks.tsx                    the front page's How the tracking works, with Traccar's tracker counts
     TrackerSection.tsx                the Tracker section of an asset's page
     Share.tsx                         Share: send location, make and send live links
+    Stats.tsx                         Stats: the Stats card (walks today, this week or this month)
     RelativeTime.tsx
   lib/
     asset.ts                          Asset view model + isStale (shared with the browser)
@@ -495,6 +506,7 @@ src/
     usePhonePush.ts                   this phone's push subscription and the service worker
     segments.ts                       walking / stay / vehicle / underground, and what's happening now
     segments.test.ts                  node --test
+    stats.ts                          an asset's walks day by day, for the Stats card + tests
     matching.ts                       which walks to snap for Snap to paths
     snap.ts                           keeps the matched line where the fixes lie along it + tests
     parks.ts                          parks from the map's tiles, and whether a point is in one + tests

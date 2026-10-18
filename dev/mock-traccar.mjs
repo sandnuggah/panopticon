@@ -7,6 +7,8 @@
 // Event forwarding, for alerts: FORWARD_URL=http://localhost:3001/hooks/traccar-events and
 // FORWARD_HEADER='Authorization: Bearer <TRACCAR_EVENTS_SECRET>' post live events there, as
 // Traccar's event.forward.url and event.forward.header do. DELAY_MS=800 makes it a slow Traccar.
+// HISTORY_HOURS=720 gives Betty a month of walks for the Stats card (6 hours by default), with
+// a rest day now and then.
 // Assets: Betty (photo, lives at Home and goes for a walk round Södermalm every three hours; the
 // mock starts just after she's back), Sixten (at daycare since a walk there) and Bamse (offline, no
 // position). Places: Home (Betty's) and Daycare (Sixten's). Only the endpoints panopticon uses,
@@ -21,6 +23,8 @@ const PORT = Number(process.env.PORT ?? 8082)
 const STEP_MS = Number(process.env.STEP_MS ?? 5000)
 /** A slow Traccar, for trying loading screens: every API request waits this long (ms), position history three times as long. */
 const DELAY_MS = Number(process.env.DELAY_MS ?? 0)
+/** How far back Betty's history goes, in hours. */
+const HISTORY_HOURS = Number(process.env.HISTORY_HOURS ?? 6)
 
 const users = [
   { id: 1, name: 'Adam', email: 'pet@example.com', password: 'secret', readonly: false, deviceReadonly: false, deviceLimit: -1 },
@@ -281,7 +285,7 @@ function wander([lat, lon], n, metres) {
 function bettyAt(time) {
   const n = Math.floor(time / STEP_MS)
   let seconds = ((((time - cycleStart) % CYCLE_MS) + CYCLE_MS) % CYCLE_MS) / 1000
-  if (seconds * 1000 >= WALK_MS) return { at: wander(HOME, n, 10), walking: false }
+  if (seconds * 1000 >= WALK_MS || restDay(time)) return { at: wander(HOME, n, 10), walking: false }
   for (const leg of walkLegs) {
     if (seconds < leg.seconds) {
       const along = seconds / leg.seconds
@@ -294,10 +298,15 @@ function bettyAt(time) {
   }
   return { at: wander(HOME, n, 10), walking: false }
 }
-// Six hours back, so the arrivals list has the walk before this one too.
+/** A day she stays in, every ninth day before yesterday, so the Stats card's streak has an end. */
+function restDay(time) {
+  const daysAgo = Math.floor((start - time) / 86_400_000)
+  return daysAgo >= 2 && new Date(time).getDate() % 9 === 0
+}
+// Six hours back (HISTORY_HOURS), so the arrivals list has the walk before this one too.
 {
   let lastReport = -Infinity
-  for (let t = start - 6 * 3600_000; t <= start; t += STEP_MS) {
+  for (let t = start - HISTORY_HOURS * 3600_000; t <= start; t += STEP_MS) {
     const { at, walking } = bettyAt(t)
     if (!walking && t - lastReport < STILL_MS) continue
     history.get(30).push(report(30, t, ...at))

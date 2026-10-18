@@ -148,6 +148,15 @@ export function LiveIcon() {
 }
 
 /** A box with an arrow out of it, the usual share symbol. */
+/** Three bars, for Stats. */
+export function StatsIcon() {
+  return (
+    <svg className="mr-1.5 size-4" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3 14V9M8 14V3M13 14V6.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function ShareIcon() {
   return (
     <svg className="mr-1.5 size-4" viewBox="0 0 16 16" aria-hidden="true">
