@@ -52,6 +52,23 @@ and cleared out now and then.
 - [x] Checked the link preview: sharing `/welcome` shows the picture and description (2026-10-18)
 - [x] A loading screen with progress for the map: the page goes out at once and the assets, places and map options stream in; the screen shows each step (assets, places, map, trails) with when it was done, so a slow load shows where the time goes, and fades out once the map has drawn (a "Loading trails" note waits for slow trails). Released as `:67`; the Map step counts only the base map's tiles in `:68` (2026-10-14)
 - [x] Watched the loading screen on the phone: it shows its progress, and the slow loads came from the connection (Tailscale through an exit node), not the app (2026-10-18)
+- [x] The selected asset is centred in the part of the map that's visible: above the details card on a phone, beside the side panels on a wide screen, above the bottom bar and the live link page's panel. A followed asset glides along as a card opens and closes. Released as `:73` (2026-10-18)
+- [ ] Check `:73` on the phone: opening an asset's details lifts it above the card (in two steps when the arrivals list loads), closing brings it back down, and a dragged map stays put
+
+## Stats
+
+- [ ] Stats per asset, worked out from its own Traccar history (in the app, nothing sent anywhere: not analytics in the tracking sense). Ideas, to pick from:
+  - **Distance:** today, this week, this month, from the walks only (not rides); a weekly bar chart; compared with last week ("12% more than last week")
+  - **Walks:** how many, the longest (distance and time), the average, the usual times of day (a morning and an evening walk), the furthest from Home
+  - **Pee stops:** short stops on a walk (the sniff stops the map already joins into the walk, under 5 minutes), counted per walk and per day; a "favourite spot" where they bunch up across days. Only a guess from stops, so worded loosely ("stops")
+  - **Streaks:** days in a row with at least one walk (or over a distance, say 3 km); the longest streak so far and the current one
+  - **Time:** at Home, at each place, out on walks, riding; the longest time away from Home
+  - **Places and paths:** the most visited place, new streets or parks this week (walked along for the first time), how much of the neighbourhood has been covered (a heatmap)
+  - **Speed:** the fastest stretch on foot (a zoomie), average walking pace
+  - **Trips:** rides by vehicle and underground, and how far
+  - **Tracker:** battery per day, how long a charge lasts, time without GPS or contact
+  - Where: a Stats row on the asset's details card, opening a card of its own; Traccar's reports (`/api/reports/summary`, `/api/reports/trips`, `/api/reports/stops`) can do the heavy lifting for longer periods than the trail loads, but the walk and stop rules are the app's own (segments.ts), so check which gives believable numbers
+  - Accuracy: GPS jitter adds distance while still; count only walks (moves between stays), snapped where Snap to paths has them
 
 ## Trackers
 
