@@ -46,16 +46,23 @@ and cleared out now and then.
 - [x] Retook the front page's screenshots on the Bright map: Betty just home from a 50-minute walk round Södermalm (along real streets, from Valhalla's walking router, snapped with Snap to paths), the stays as dots, her arrivals and departures, the Home place editor and Settings, light and dark (2026-10-11, committed `b2bf7cf`, released with `:63`). The mock now has Betty walk from Home every three hours (`HOME_SINCE` sets where in it the mock starts) and Sixten at daycare. Retake them when the UI changes (iOS Simulator; `xcrun simctl status_bar … override --time` to the real time, since the arrivals list shows real times)
 - [x] On wide screens, the cards are side panels (like Apple Maps' sidebar on a Mac): an asset's details and Share on the left, Settings, its pages and the place editor on the right; the place picker's circle centres in the map beside the editor. Released as `:60` (2026-10-11)
 - [x] A new app icon: a folded paper map with a red paper-cutout pin on the app's green (front page style, RAL colours); source in dev/icon-full.svg. Released as `:59` (2026-10-11)
-- [ ] Re-add Panopticon to the iPhone's Home Screen to get the new icon (iOS keeps the old one)
+- [x] Re-added Panopticon to the iPhone's Home Screen: the new icon shows (2026-10-18)
 - [x] "Update available · Reload" at the top right of the map when a newer release is running: each build has an ID, the live stream sends the server's, a page from an older build shows the notice after its stream reconnects. Released as `:49` (2026-10-10); first visible when `:50` is deployed
 - [x] Link previews for the front page: sharing `/welcome` shows the paper-map scene with the title (public/og-image.png, 1200 × 630, made from dev/og-image.html), the description and the title, with the picture's full address from the reverse proxy's forwarded host and scheme (Caddy and Traefik pass them as they are; nginx needs `proxy_set_header Host $host`). Released as `:66` (2026-10-14)
-- [ ] Check the link preview once `:66` is deployed: paste the `/welcome` address into Messages or Slack (`curl -s https://<domain>/welcome | grep -o 'og:image" content="[^"]*"'` shows the picture's address)
+- [x] Checked the link preview: sharing `/welcome` shows the picture and description (2026-10-18)
 - [x] A loading screen with progress for the map: the page goes out at once and the assets, places and map options stream in; the screen shows each step (assets, places, map, trails) with when it was done, so a slow load shows where the time goes, and fades out once the map has drawn (a "Loading trails" note waits for slow trails). Released as `:67`; the Map step counts only the base map's tiles in `:68` (2026-10-14)
-- [ ] Watch the loading screen's times on the phone when the app is slow, and fix the step that takes the time (Traccar's answers for assets and places, the map code and tiles, or trail history)
+- [x] Watched the loading screen on the phone: it shows its progress, and the slow loads came from the connection (Tailscale through an exit node), not the app (2026-10-18)
+
+## Trackers
+
+- [x] Ordered an MT710 (2026-10-18), so the questions for Mictrack about the MT710L are moot
+- [ ] When the MT710 arrives: add it to Traccar (its `tlt2h` protocol, by the earlier research), and check what it reports: battery level (for the low-battery alert), accuracy (for the trail), how often it sends fixes while walking and while still
+- [ ] Show the MT710's place (such as Home) instead of "No recent contact" while its home mode keeps it quiet
+- [ ] No offline alert while the MT710's home mode keeps it quiet: it sends nothing at home, so Traccar marks it offline after 10 minutes each time it comes home. Skip the offline alert (and the Offline status) while its last position is inside a place, or at least inside one where home mode is set up
+- [ ] Set up home mode on the MT710: `MODE,8,<password>,T` (T = 10–60 s between reports when out), then `DEF,R` at home with a GPS fix, which saves the 3 strongest Wi-Fi networks and a 30–300 m zone. `DEF,R` only works sent from the server: try it as a custom command from Traccar (untested); with power saving on the mobile network it only arrives when the tracker next wakes
+- [ ] Try Snap to paths, stays and spikes on its walks: it reports differently from the ST-904L, so the dog tunings may need adjusting (see Asset types above)
 
 ## Later / maybe
 
 - [ ] Try Traccar's position filters for the ST-904L: `filter.maxSpeed` ≈ 27 (knots), `coordinates.filter` with `coordinates.minError` 15–25 m
-- [ ] Email Mictrack: EU distributor or VAT-included shipping, MT710L CE approval date, and whether the MT710L uses the MT710's `tlt2h` protocol
-- [ ] If an MT710 arrives: show its place (such as Home) instead of "No recent contact" while its home mode keeps it quiet
 - [ ] Smooth the trail where it isn't snapped (a dog running on the grass): gentle curves through the fixes instead of straight lines, so it reads as a run. A matter of taste: the curves suggest a path the fixes don't really show
