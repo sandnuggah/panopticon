@@ -1,3 +1,5 @@
+import { DEFAULT_TRAIL_PROFILE, type TrailProfile } from './segments.ts'
+
 // What the tracker itself is doing, for the Tracker section of an asset's page: whether it's
 // connected, has a GPS fix, has signal and battery, and how often it reports. Built on the server
 // from Traccar's device, its latest position and an hour of history (see tracker.server.ts);
@@ -34,4 +36,30 @@ export const SIGNAL_LABELS: Record<SignalLevel, string> = {
   fair: 'Fair',
   good: 'Good',
   excellent: 'Excellent',
+}
+
+/**
+ * The kinds of tracker panopticon tells apart, by the protocol their positions come in (see
+ * trackers.server.ts): SinoTrack (h02), a phone running Traccar Client (osmand), and the rest.
+ */
+export type TrackerKind = 'sinotrack' | 'phone' | 'standard'
+
+/**
+ * How the trail reads each kind of tracker's reports. SinoTrack's were tuned on an ST-904L's real
+ * trips and walks (see segments.ts); the others start the same, until there's real data from one.
+ */
+export const TRAIL_PROFILES: Record<TrackerKind, TrailProfile> = {
+  sinotrack: DEFAULT_TRAIL_PROFILE,
+  phone: DEFAULT_TRAIL_PROFILE,
+  standard: DEFAULT_TRAIL_PROFILE,
+}
+
+/** Each asset's kind of tracker, by id, for the trail. */
+export function trackersOf(assets: { id: number; tracker?: TrackerKind }[]): Record<number, TrackerKind | undefined> {
+  return Object.fromEntries(assets.map((asset) => [asset.id, asset.tracker]))
+}
+
+/** The trail settings for an asset's tracker; the standard ones when it hasn't reported. */
+export function trailProfile(kind: TrackerKind | undefined): TrailProfile {
+  return TRAIL_PROFILES[kind ?? 'standard']
 }

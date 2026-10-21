@@ -2,7 +2,8 @@ import type { GeoJSONSource, MapLibreMap } from 'maplibre-gl'
 import { stayHopKey, walkKey } from '../../lib/matching'
 import { trailPlaces, type Place } from '../../lib/places'
 import { classifyTrail, latestOutingStart, stayDots, type LatLon, type TrailPiece } from '../../lib/segments'
-import type { TrailPoint, Trails } from '../../lib/trail'
+import { trailProfile, type TrackerKind } from '../../lib/tracker'
+import type { Trails } from '../../lib/trail'
 
 // The trail on the map, drawn by what the asset was doing (see segments.ts): walking as a line, or
 // as paw prints (Appearance → Paw prints); rides through their fixes, dashed, and dotted where they
@@ -22,10 +23,16 @@ const HOPS_PER_PIECE = 3
 
 /**
  * Shows these trails, snapping walks to paths where Snap to paths has them (see useSnappedWalks), with
- * each asset's stays at its places as one dot there.
+ * each asset's stays at its places as one dot there, read as its kind of tracker reports (`trackers`).
  */
-export function setTrails(map: MapLibreMap, trails: Trails, snappedWalks: Record<string, LatLon[]>, places: Place[]) {
-  const features = toTrailFeatures(trails, snappedWalks, places)
+export function setTrails(
+  map: MapLibreMap,
+  trails: Trails,
+  snappedWalks: Record<string, LatLon[]>,
+  places: Place[],
+  trackers: Record<number, TrackerKind | undefined>,
+) {
+  const features = toTrailFeatures(trails, snappedWalks, places, trackers)
   void map.getSource<GeoJSONSource>(TRAILS)?.setData(features.trail)
   void map.getSource<GeoJSONSource>(PAWS)?.setData(features.paws)
 }
@@ -47,7 +54,7 @@ export function recolourTrails(map: MapLibreMap) {
 /** Adds the trail layers, empty; again after each style load, since a new style drops them. */
 export function addTrailLayers(map: MapLibreMap) {
   const color = trailColor(map)
-  const empty = toTrailFeatures({}, {}, [])
+  const empty = toTrailFeatures({}, {}, [], {})
   const kind = (value: string) => ['==', ['get', 'kind'], value] as ['==', ['get', string], string]
   const lineLayout = { 'line-cap': 'round', 'line-join': 'round' } as const
   map.addSource(TRAILS, { type: 'geojson', data: empty.trail })
@@ -140,13 +147,19 @@ type TrailFeature = TrailData['features'][number]
  * GeoJSON for the trail layers. `paws` holds the walking only, in longer pieces than `trail`:
  * paw prints are spaced 44 px apart, so short pieces would show none.
  */
-function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>, places: Place[]): { trail: TrailData; paws: TrailData } {
+function toTrailFeatures(
+  trails: Trails,
+  snappedWalks: Record<string, LatLon[]>,
+  places: Place[],
+  trackers: Record<number, TrackerKind | undefined>,
+): { trail: TrailData; paws: TrailData } {
   const trail: TrailFeature[] = []
   const paws: TrailFeature[] = []
   for (const [id, points] of Object.entries(trails)) {
     const fixes = points.filter((point) => point.valid)
     if (fixes.length === 0) continue
-    const pieces = classifyTrail(points, { showWandering: true, places: trailPlaces(places, Number(id)) })
+    const profile = trailProfile(trackers[Number(id)])
+    const pieces = classifyTrail(points, { showWandering: true, places: trailPlaces(places, Number(id)), profile })
     // The latest outing from 0.55 at its start to 0.95 at its newest point; older ones from 0.12 to 0.25.
     const [oldest, newest] = [fixes[0]!.time, fixes.at(-1)!.time]
     const outing = latestOutingStart(pieces) ?? oldest

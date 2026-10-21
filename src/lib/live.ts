@@ -1,5 +1,6 @@
 import type { Asset, AssetBattery, AssetLocation } from './asset'
 import { visitsBetween, type PlaceVisit } from './places'
+import type { TrackerKind } from './tracker'
 
 // Messages the /live stream sends (as a JSON array per SSE message) and how the browser applies them.
 
@@ -24,6 +25,8 @@ export type LiveUpdate =
       cell?: number
       /** The places this position is inside. */
       placeIds: number[]
+      /** What kind of tracker sent it (see trackers.server.ts). */
+      tracker?: TrackerKind
     }
 
 /**
@@ -57,6 +60,7 @@ export function applyUpdates(assets: Asset[], updates: LiveUpdate[]): { assets: 
       if (current.location && Date.parse(update.location.fixTime) < Date.parse(current.location.fixTime)) continue
       // A position without battery keeps the last known value.
       replacement = { ...current, location: update.location, battery: update.battery ?? current.battery, placeIds: update.placeIds }
+      if (update.tracker) replacement.tracker = update.tracker
       visits.push(...visitsBetween(current.id, current.placeIds, update.placeIds, update.location.fixTime))
     }
     next = replacement ? next.map((asset, i) => (i === index ? replacement : asset)) : next.filter((_, i) => i !== index)

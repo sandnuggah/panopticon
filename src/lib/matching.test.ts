@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { matchableWalks, stayHopKey, walkKey } from './matching.ts'
+import { DEFAULT_TRAIL_PROFILE } from './segments.ts'
 import type { TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
@@ -48,5 +49,20 @@ describe('matchableWalks', () => {
       [stayHopKey(home, park)],
     )
     assert.ok(walks[0]!.points.every((point) => point.anchor))
+  })
+
+  test("a fix the tracker's gap after the one before is marked: nobody saw the way there", () => {
+    // Steps of 30 s, then 3 minutes (6 steps) without a fix.
+    const move: TrailPiece = { kind: 'move', points: [fix(0, 0, 0), fix(40, 0, 1), fix(80, 0, 2), fix(200, 0, 8), fix(240, 0, 9)] }
+    const walks = matchableWalks([move])
+    assert.deepEqual(
+      walks[0]!.points.map((point) => !!point.gap),
+      [false, false, false, true, false],
+    )
+    const slower = { ...DEFAULT_TRAIL_PROFILE, gapMs: 10 * 60 * 1000 }
+    assert.ok(
+      matchableWalks([move], () => false, slower)[0]!.points.every((point) => !point.gap),
+      'not for a tracker that reports less often',
+    )
   })
 })

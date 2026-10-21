@@ -4,8 +4,9 @@ import type { TrailPoint } from './trail'
 // vehicle, or travelling underground. It uses only the tracker's own reports (speed between GPS
 // fixes, gaps without a fix, and cell tower changes), so it works anywhere without map data.
 // Thresholds were tuned on real SinoTrack ST-904L trips: by metro across Stockholm, and a weekend
-// with car rides in the country and a train into the city; see ARCHITECTURE.md. This module has
-// no runtime imports, so Node can run its tests directly.
+// with car rides in the country and a train into the city; see ARCHITECTURE.md. Those that depend on
+// the tracker (how it reports, how far its fixes wander) are a TrailProfile, per kind of tracker (see
+// lib/tracker.ts). This module has no runtime imports, so Node can run its tests directly.
 
 /** Averaging this fast between two fixes, it can't be a dog on foot. */
 const VEHICLE_KMH = 20
@@ -59,6 +60,36 @@ const SPIKE_SHORTCUT = 0.6
 const SPIKE_MAX_MS = 3 * 60 * 1000
 /** Live activity only counts while reports are this fresh. */
 const ACTIVITY_MAX_AGE_MS = 3 * 60 * 1000
+/** Fixes this far apart in time have a leg between them that nobody saw (see snap.ts). */
+const GAP_MS = 2 * 60 * 1000
+
+/**
+ * How the trail reads one kind of tracker's reports (see TRAIL_PROFILES in lib/tracker.ts): the
+ * thresholds above that depend on how it reports and how far its fixes wander.
+ */
+export type TrailProfile = {
+  /** SILENT_MS */
+  silentMs: number
+  /** STAY_MAX_METERS */
+  stayMeters: number
+  /** SPIKE_MIN_METERS, SPIKE_MAX_MS */
+  spikeMeters: number
+  spikeMs: number
+  /** ACTIVITY_MAX_AGE_MS */
+  freshMs: number
+  /** GAP_MS */
+  gapMs: number
+}
+
+/** The thresholds as tuned on a SinoTrack ST-904L. */
+export const DEFAULT_TRAIL_PROFILE: TrailProfile = {
+  silentMs: SILENT_MS,
+  stayMeters: STAY_MAX_METERS,
+  spikeMeters: SPIKE_MIN_METERS,
+  spikeMs: SPIKE_MAX_MS,
+  freshMs: ACTIVITY_MAX_AGE_MS,
+  gapMs: GAP_MS,
+}
 /** Underground right now: this long without a fix while switching between this many cell sites. */
 const UNDERGROUND_MIN_MS = 60 * 1000
 const UNDERGROUND_MIN_SITES = 3
@@ -158,20 +189,24 @@ type Hop = { from: TrailPoint; to: TrailPoint; kind: HopKind }
  * Pottering about one place (a yard, a park) is one stay, so "Here since" holds; `showWandering`, for
  * drawing, keeps the walking about as moves between its stops, and only joins stops across blips.
  * `places`, for drawing: the asset's places, where stays and the pottering about between them are one
- * stay at the place's middle (see joinAtPlaces).
+ * stay at the place's middle (see joinAtPlaces). `profile`: the tracker's (see TrailProfile).
  */
 export function classifyTrail(
   points: TrailPoint[],
-  { showWandering = false, places = [] }: { showWandering?: boolean; places?: TrailPlace[] } = {},
+  {
+    showWandering = false,
+    places = [],
+    profile = DEFAULT_TRAIL_PROFILE,
+  }: { showWandering?: boolean; places?: TrailPlace[]; profile?: TrailProfile } = {},
 ): TrailPiece[] {
-  const hops = toHops(withoutSpikes(points))
+  const hops = toHops(withoutSpikes(points, profile), profile)
   if (hops.length === 0) {
     const fixes = points.filter((point) => point.valid)
     return fixes.length > 0 ? [toStay(fixes)] : []
   }
   const pieces: TrailPiece[] = []
   for (const stretch of toStretches(hops)) {
-    if (stretch.kind === 'walk') pieces.push(...splitWalk(stretch.points, showWandering, places))
+    if (stretch.kind === 'walk') pieces.push(...splitWalk(stretch.points, showWandering, places, profile))
     else if (stretch.kind !== 'gap') {
       pieces.push({ kind: stretch.kind, from: stretch.points[0]!, to: stretch.points.at(-1)!, legs: stretch.legs })
     }
@@ -184,10 +219,10 @@ export function classifyTrail(
  * reports), and since when. `began` is false when the stay goes back to the first point given,
  * so it may have begun earlier.
  */
-export function currentStay(points: TrailPoint[], now: number): Stay | null {
+export function currentStay(points: TrailPoint[], now: number, profile = DEFAULT_TRAIL_PROFILE): Stay | null {
   const latest = points.at(-1)
-  if (!latest || now - latest.time > ACTIVITY_MAX_AGE_MS) return null
-  const last = classifyTrail(points).at(-1)
+  if (!latest || now - latest.time > profile.freshMs) return null
+  const last = classifyTrail(points, { profile }).at(-1)
   if (last?.kind !== 'stay') return null
   const firstFix = points.find((point) => point.valid)!
   return { since: last.from, began: last.from > firstFix.time }
@@ -197,9 +232,9 @@ export function currentStay(points: TrailPoint[], now: number): Stay | null {
  * What the asset is doing right now, if it's riding: from the latest reports, as of `now`. A ride
  * that ended moments ago still counts, since that's usually the vehicle stopping at a station.
  */
-export function currentActivity(points: TrailPoint[], now: number): Activity | null {
+export function currentActivity(points: TrailPoint[], now: number, profile = DEFAULT_TRAIL_PROFILE): Activity | null {
   const latest = points.at(-1)
-  if (!latest || now - latest.time > ACTIVITY_MAX_AGE_MS) return null
+  if (!latest || now - latest.time > profile.freshMs) return null
 
   // Underground now: reports keep coming without a fix while the tracker moves between cell sites.
   // (Indoors the tracker also loses its fix, but stays with the same site.)
@@ -209,7 +244,7 @@ export function currentActivity(points: TrailPoint[], now: number): Activity | n
     if (cellSites([points[lastFix], ...withoutFix]) >= UNDERGROUND_MIN_SITES) return 'underground'
   }
 
-  const pieces = classifyTrail(points)
+  const pieces = classifyTrail(points, { profile })
   for (let i = pieces.length - 1; i >= 0; i--) {
     const piece = pieces[i]!
     // Anything longer than a station stop since the ride means it's over.
@@ -225,25 +260,25 @@ export function currentActivity(points: TrailPoint[], now: number): Activity | n
 }
 
 /** The points without GPS spikes (see SPIKE_MIN_METERS). */
-function withoutSpikes(points: TrailPoint[]): TrailPoint[] {
+function withoutSpikes(points: TrailPoint[], profile: TrailProfile): TrailPoint[] {
   const fixes = points.filter((point) => point.valid)
   const spikes = new Set<TrailPoint>()
   let before: TrailPoint | undefined
   fixes.forEach((fix, index) => {
     const after = fixes[index + 1]
-    if (before && after && isSpike(before, fix, after)) spikes.add(fix)
+    if (before && after && isSpike(before, fix, after, profile)) spikes.add(fix)
     else before = fix
   })
   return spikes.size > 0 ? points.filter((point) => !spikes.has(point)) : points
 }
 
-function isSpike(before: TrailPoint, fix: TrailPoint, after: TrailPoint): boolean {
-  if (after.time - before.time > SPIKE_MAX_MS) return false
+function isSpike(before: TrailPoint, fix: TrailPoint, after: TrailPoint, profile: TrailProfile): boolean {
+  if (after.time - before.time > profile.spikeMs) return false
   const [out, back] = [distance(before, fix), distance(fix, after)]
-  return out >= SPIKE_MIN_METERS && back >= SPIKE_MIN_METERS && distance(before, after) <= SPIKE_SHORTCUT * (out + back)
+  return out >= profile.spikeMeters && back >= profile.spikeMeters && distance(before, after) <= SPIKE_SHORTCUT * (out + back)
 }
 
-function toHops(points: TrailPoint[]): Hop[] {
+function toHops(points: TrailPoint[], profile: TrailProfile): Hop[] {
   const hops: Hop[] = []
   let from: TrailPoint | undefined
   let gap: TrailPoint[] = []
@@ -261,9 +296,9 @@ function toHops(points: TrailPoint[]): Hop[] {
       const meters = distance(from, point)
       const kmh = (meters / ((point.time - from.time) / 1000)) * 3.6
       let kind: HopKind = 'walk'
-      if (silence > SILENT_MS) {
+      if (silence > profile.silentMs) {
         // Silent: still in the same place (walking, so a stay), a ride if it got there fast, or unknown.
-        if (meters > STAY_MAX_METERS) kind = kmh >= VEHICLE_KMH ? 'vehicle' : 'gap'
+        if (meters > profile.stayMeters) kind = kmh >= VEHICLE_KMH ? 'vehicle' : 'gap'
       } else if (kmh >= VEHICLE_KMH && meters >= VEHICLE_MIN_METERS) kind = gap.length > 0 ? 'underground' : 'vehicle'
       else if (gap.length > 0 && meters >= GAP_MIN_METERS && kmh >= GAP_MIN_KMH) kind = 'underground'
       hops.push({ from, to: point, kind })
@@ -342,18 +377,18 @@ type Part = { stay: boolean; points: TrailPoint[]; place?: TrailPlace }
  * Splits walking into moves between stays. A move's ends touch the stays around it. Stays in one
  * place with only local wandering between them (a yard, a park) become one; see mergePlaces.
  */
-function splitWalk(points: TrailPoint[], showWandering: boolean, places: TrailPlace[]): TrailPiece[] {
+function splitWalk(points: TrailPoint[], showWandering: boolean, places: TrailPlace[], profile: TrailProfile): TrailPiece[] {
   const parts: Part[] = []
   let move: TrailPoint[] = []
   let i = 0
   while (i < points.length) {
     let j = i
-    while (j + 1 < points.length && distance(points[i]!, points[j + 1]!) <= STAY_MAX_METERS) j++
+    while (j + 1 < points.length && distance(points[i]!, points[j + 1]!) <= profile.stayMeters) j++
     if (points[j]!.time - points[i]!.time >= STAY_MIN_MS) {
       // The middle of the fixes it began with, kept as it is: a middle that moved with each new fix
       // would follow a slow walk away.
       const middle = centre(points.slice(i, j + 1))
-      while (j + 1 < points.length && distance(middle, points[j + 1]!) <= STAY_MAX_METERS) j++
+      while (j + 1 < points.length && distance(middle, points[j + 1]!) <= profile.stayMeters) j++
       move.push(points[i]!)
       if (move.length > 1) parts.push({ stay: false, points: move })
       parts.push({ stay: true, points: points.slice(i, j + 1) })

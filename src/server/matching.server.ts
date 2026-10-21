@@ -25,7 +25,9 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
   const url = env().mapMatchingUrl
   if (!url) return null
   const key = points
-    .map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}${point.park ? 'p' : ''}${point.anchor ? 'a' : ''}`)
+    .map(
+      (point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}${point.park ? 'p' : ''}${point.anchor ? 'a' : ''}${point.gap ? 'g' : ''}`,
+    )
     .join(';')
   if (cache.has(key)) return cache.get(key)!
 

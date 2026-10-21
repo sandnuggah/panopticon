@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ClientOnly, createFileRoute, isRedirect, redirect, useRouter } from '@tanstack/react-router'
 import { AssetDetailsCard } from '../components/AssetDetailsCard'
 import { LiveIndicator } from '../components/LiveIndicator'
@@ -12,6 +12,7 @@ import { parseSettingsView, SettingsCard, type SettingsView } from '../component
 import type { Asset } from '../lib/asset'
 import type { Park } from '../lib/parks'
 import { visitSentence, type Place, type PlaceVisit } from '../lib/places'
+import { trackersOf } from '../lib/tracker'
 import type { LatLon } from '../lib/segments'
 import type { GoTo, Inset } from '../components/map/PlacePicker'
 import { useSettings } from '../lib/settings'
@@ -251,7 +252,9 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   }, [trailsLoaded])
   // Parks in the map's tiles (null until the map is ready), where walks are snapped more strictly.
   const [parks, setParks] = useState<Park[] | null>(null)
-  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths, parks, places)
+  const trackerKey = assets.map((asset) => `${asset.id}:${asset.tracker ?? ''}`).join(' ')
+  const trackers = useMemo(() => trackersOf(assets), [trackerKey])
+  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths, parks, places, trackers)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
 

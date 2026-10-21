@@ -5,9 +5,10 @@
 
 /**
  * `park`: the fix is in a park, where a path nearby says less (see parks.ts). `anchor`: not a fix but
- * the stay the walk starts or ends at (see matching.ts). `time` in ms, for gaps between fixes.
+ * the stay the walk starts or ends at. `gap`: the way here from the fix before, a while before for this
+ * tracker, nobody saw (both from matchableWalks in matching.ts).
  */
-export type Point = { lat: number; lon: number; park?: boolean; anchor?: boolean; time?: number }
+export type Point = { lat: number; lon: number; park?: boolean; anchor?: boolean; gap?: boolean }
 
 /** A fix this close to the matched line was on a street or path... */
 const ON_PATH_METERS = 20
@@ -30,11 +31,10 @@ const DETOUR_FACTOR = 1.5
 const DETOUR_METERS = 20
 /**
  * Legs nobody saw: between a stay and the first or last fix (the tracker asleep, or waking up on the
- * way), and between fixes at least UNSEEN_MS apart. The way is a guess there, and the way along paths
- * is a better one than straight across (a bridge, a building, a slope in between), so these follow the
+ * way), and across a gap between fixes (`gap`). The way is a guess there, and the way along paths is a
+ * better one than straight across (a bridge, a building, a slope in between), so these follow the
  * line, or a route (see drawWalk), unless it's longer than UNSEEN_FACTOR times as far plus UNSEEN_METERS.
  */
-const UNSEEN_MS = 2 * 60 * 1000
 const UNSEEN_FACTOR = 4
 const UNSEEN_METERS = 50
 
@@ -102,7 +102,7 @@ export function drawWalk(points: Point[], line: Point[], strays: ReadonlySet<num
     let last = i
     row.slice(1).forEach((k, index) => {
       if (index < row.length - 2 && behind(feet![k]!, feet![last]!)) return
-      const way = lineBetween(line, feet![last]!, feet![k]!, along[k]! - along[last]!, isUnseen(points[last]!, points[k]!))
+      const way = lineBetween(line, feet![last]!, feet![k]!, along[k]! - along[last]!, isUnseen(points, last, k))
       for (const point of way) emit(point, point === feet![last]!.point ? last : point === feet![k]!.point ? k : -1)
       last = k
     })
@@ -113,7 +113,7 @@ export function drawWalk(points: Point[], line: Point[], strays: ReadonlySet<num
   const unseen: number[] = []
   for (let k = 0; k + 1 < drawn.length; k++) {
     const [a, b] = [source[k]!, source[k + 1]!]
-    if (a >= 0 && b >= 0 && isUnseen(points[a]!, points[b]!) && metres(drawn[k]!, drawn[k + 1]!) >= MIN_ROUTE_METERS) unseen.push(k)
+    if (a >= 0 && b >= 0 && isUnseen(points, a, b) && metres(drawn[k]!, drawn[k + 1]!) >= MIN_ROUTE_METERS) unseen.push(k)
   }
   return { points: drawn, snapped: snapped.some(Boolean), unseen }
 }
@@ -188,8 +188,11 @@ function tooLong(went: number, unseen: boolean): number {
   return unseen ? went * UNSEEN_FACTOR + UNSEEN_METERS : went * DETOUR_FACTOR + DETOUR_METERS
 }
 
-function isUnseen(a: Point, b: Point): boolean {
-  return !!a.anchor || !!b.anchor || (a.time !== undefined && b.time !== undefined && Math.abs(b.time - a.time) >= UNSEEN_MS)
+/** Whether nobody saw the way from one point to a later one: a stay at either end, or a gap on the way. */
+function isUnseen(points: Point[], from: number, to: number): boolean {
+  if (points[from]!.anchor || points[to]!.anchor) return true
+  for (let k = from + 1; k <= to; k++) if (points[k]!.gap) return true
+  return false
 }
 
 /** Whether a route between two points is short enough to draw for a leg nobody saw (see UNSEEN_FACTOR). */

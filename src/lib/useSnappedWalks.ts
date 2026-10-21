@@ -3,6 +3,7 @@ import { matchWalks } from '../server/map.functions'
 import { MAX_WALKS_PER_REQUEST, matchableWalks } from './matching'
 import { isInPark, type Park } from './parks'
 import { trailPlaces, type Place } from './places'
+import { trailProfile, type TrackerKind } from './tracker'
 import { classifyTrail, type LatLon } from './segments'
 import type { Trails } from './trail'
 
@@ -13,9 +14,16 @@ const DEBOUNCE_MS = 1_000
  * Snap to paths: the walks on these trails snapped to streets and paths, by walk key (see
  * matching.ts). Walks the server can't snap closely enough are simply missing, and drawn as recorded.
  * `parks` (from the map, null until it's ready): fixes in them are snapped more strictly, so walks
- * wait for them. `places`: the walks are those the map draws, with stays at an asset's places as one.
+ * wait for them. `places`, `trackers`: the walks are those the map draws, with stays at an asset's
+ * places as one, read as its kind of tracker reports.
  */
-export function useSnappedWalks(trails: Trails, enabled: boolean, parks: Park[] | null, places: Place[]): Record<string, LatLon[]> {
+export function useSnappedWalks(
+  trails: Trails,
+  enabled: boolean,
+  parks: Park[] | null,
+  places: Place[],
+  trackers: Record<number, TrackerKind | undefined>,
+): Record<string, LatLon[]> {
   // null: asked, and it can't be snapped.
   const [results, setResults] = useState<Record<string, LatLon[] | null>>({})
   const asked = useRef(new Set<string>())
@@ -23,13 +31,13 @@ export function useSnappedWalks(trails: Trails, enabled: boolean, parks: Park[] 
   const walks = useMemo(
     () =>
       enabled && parks
-        ? Object.entries(trails).flatMap(([id, points]) =>
-            matchableWalks(classifyTrail(points, { showWandering: true, places: trailPlaces(places, Number(id)) }), (point) =>
-              isInPark(point, parks),
-            ),
-          )
+        ? Object.entries(trails).flatMap(([id, points]) => {
+            const profile = trailProfile(trackers[Number(id)])
+            const pieces = classifyTrail(points, { showWandering: true, places: trailPlaces(places, Number(id)), profile })
+            return matchableWalks(pieces, (point) => isInPark(point, parks), profile)
+          })
         : [],
-    [trails, enabled, parks, places],
+    [trails, enabled, parks, places, trackers],
   )
 
   useEffect(() => {

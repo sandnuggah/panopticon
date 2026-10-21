@@ -1,3 +1,5 @@
+import type { TrackerKind } from './tracker'
+
 export type AssetLocation = {
   lat: number
   lon: number
@@ -30,6 +32,8 @@ export type Asset = {
   imageUrl?: string
   /** The places (lib/places.ts) its latest position is inside. */
   placeIds: number[]
+  /** What kind of tracker it has, by its latest position (see trackers.server.ts); none before its first. */
+  tracker?: TrackerKind
 }
 
 /** First letter of the name, shown when there's no picture. */

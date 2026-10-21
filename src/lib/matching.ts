@@ -1,4 +1,4 @@
-import { distance, type LatLon, type TrailPiece } from './segments.ts'
+import { DEFAULT_TRAIL_PROFILE, distance, type LatLon, type TrailPiece, type TrailProfile } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
 // Snap to paths: walking stretches of the trail can be snapped to streets and paths by a
@@ -17,8 +17,11 @@ const STAY_HOP_METERS = 40
 export const MAX_WALKS_PER_REQUEST = 20
 export const MAX_POINTS_PER_WALK = 400
 
-/** `park`: in a park, where snapping is stricter (see snap.ts). `anchor`: the stay the walk starts or ends at, not a fix. */
-export type MatchablePoint = LatLon & { time: number; park?: boolean; anchor?: boolean }
+/**
+ * `park`: in a park, where snapping is stricter (see snap.ts). `anchor`: the stay the walk starts or
+ * ends at, not a fix. `gap`: after a gap in the tracker's fixes, so nobody saw the way here.
+ */
+export type MatchablePoint = LatLon & { time: number; park?: boolean; anchor?: boolean; gap?: boolean }
 
 /** Identifies a walk by its first and last fix and how many it has; it changes as the walk grows. */
 export function walkKey(points: TrailPoint[]): string {
@@ -35,11 +38,13 @@ export function stayHopKey(from: { to: number }, to: { from: number }): string {
  * walk must get somewhere from where it began (out and back counts) and have at least 3 points. A
  * walk from or to a stay starts or ends at the stay's middle, where the map draws it from (its dot),
  * marked as an anchor: leaving home then follows the street from the door, not a straight line to
- * the first fix outside, which comes once the tracker wakes (see drawWalk in snap.ts).
+ * the first fix outside, which comes once the tracker wakes (see drawWalk in snap.ts). A fix at least
+ * the tracker's `gapMs` after the one before is marked as after a gap, for the same reason.
  */
 export function matchableWalks(
   pieces: TrailPiece[],
   inPark: (point: LatLon) => boolean = () => false,
+  profile: TrailProfile = DEFAULT_TRAIL_PROFILE,
 ): { key: string; points: MatchablePoint[] }[] {
   const walks: { key: string; points: MatchablePoint[] }[] = []
   pieces.forEach((piece, index) => {
@@ -61,9 +66,12 @@ export function matchableWalks(
     for (const point of piece.points.slice(1)) if (distance(kept.at(-1)!, point) >= JITTER_METERS) kept.push(point)
     if (kept.at(-1) !== piece.points.at(-1)) kept.push(piece.points.at(-1)!)
     // Room for the two stays' middles within the limit.
-    const points: MatchablePoint[] = kept
-      .slice(-(MAX_POINTS_PER_WALK - 2))
-      .map(({ lat, lon, time }) => (inPark({ lat, lon }) ? { lat, lon, time, park: true } : { lat, lon, time }))
+    const points: MatchablePoint[] = kept.slice(-(MAX_POINTS_PER_WALK - 2)).map(({ lat, lon, time }, index, all) => {
+      const point: MatchablePoint = { lat, lon, time }
+      if (inPark({ lat, lon })) point.park = true
+      if (index > 0 && time - all[index - 1]!.time >= profile.gapMs) point.gap = true
+      return point
+    })
     if (from) points.unshift({ ...from, time: points[0]!.time - 1000, anchor: true })
     if (to) points.push({ ...to, time: points.at(-1)!.time + 1000, anchor: true })
     if (points.length < 3) return

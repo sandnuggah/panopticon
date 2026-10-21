@@ -1,6 +1,8 @@
 import type { LatLon } from '../lib/segments'
 import { dayStats, type Day, type DayStats } from '../lib/stats'
+import { trailProfile } from '../lib/tracker'
 import { toTrailPoint } from './assets.server'
+import { adapterFor } from './trackers.server'
 import { getDevice, getPositionHistory } from './traccar.server'
 
 // The Stats card's numbers, a day at a time: each day's positions from Traccar, worked out with the
@@ -35,9 +37,12 @@ export async function loadDayStats(token: string, assetId: number, days: Day[], 
         continue
       }
       const positions = await getPositionHistory(token, assetId, new Date(day.from), new Date(day.to))
+      // Read as its kind of tracker reports (see trackers.server.ts).
+      const profile = trailProfile(adapterFor(positions.find((position) => position.protocol)?.protocol).kind)
       const stats = dayStats(
         positions.map(toTrailPoint).sort((a, b) => a.time - b.time),
         home,
+        profile,
       )
       results[index] = stats
       if (day.to + SETTLED_MS <= Date.now()) {

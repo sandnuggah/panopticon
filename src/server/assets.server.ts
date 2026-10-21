@@ -2,6 +2,7 @@ import type { Asset, AssetLocation } from '../lib/asset'
 import type { LiveUpdate } from '../lib/live'
 import type { TrailPoint, Trails } from '../lib/trail'
 import { assetImageVersion } from './images.server'
+import { adapterFor, readPosition } from './trackers.server'
 import {
   getDevices,
   getLatestPositions,
@@ -42,16 +43,18 @@ export async function loadTrails(token: string, assetIds: number[], minutes: num
 }
 
 export function toAsset(device: TraccarDevice, position: TraccarPosition | undefined): Asset {
-  return {
+  const asset: Asset = {
     id: device.id,
     name: device.name,
     status: device.status,
     lastUpdate: device.lastUpdate,
     location: position ? toLocation(position) : null,
-    battery: position ? readBattery(position.attributes) : undefined,
+    battery: position ? readPosition(position).battery : undefined,
     imageUrl: imageUrl(device),
     placeIds: position?.geofenceIds ?? [],
   }
+  if (position) asset.tracker = adapterFor(position.protocol).kind
+  return asset
 }
 
 export function toDeviceUpdate(device: TraccarDevice): LiveUpdate {
@@ -78,11 +81,12 @@ export function toPositionUpdate(position: TraccarPosition): LiveUpdate {
     kind: 'position',
     id: position.deviceId,
     location: toLocation(position),
-    battery: readBattery(position.attributes),
+    battery: readPosition(position).battery,
     valid: position.valid,
     placeIds: position.geofenceIds,
+    tracker: adapterFor(position.protocol).kind,
   }
-  const cell = readCell(position)
+  const cell = readPosition(position).cell
   if (cell !== undefined) update.cell = cell
   return update
 }
@@ -94,33 +98,17 @@ export function toTrailPoint(position: TraccarPosition): TrailPoint {
     time: Date.parse(position.fixTime),
     valid: position.valid,
   }
-  const cell = readCell(position)
+  // The serving cell tower: evidence of travel without GPS (see segments.ts).
+  const cell = readPosition(position).cell
   if (cell !== undefined) point.cell = cell
   return point
-}
-
-/**
- * The serving cell tower. Traccar's `network` has it for many protocols; SinoTrack's h02 instead
- * sends it unnamed after the status field, where io1–io4 are country, operator, area and cell.
- */
-function readCell(position: TraccarPosition): number | undefined {
-  if (position.cellId !== null) return position.cellId
-  if (position.protocol !== 'h02') return undefined
-  const cell = Number(position.attributes.io4)
-  return Number.isInteger(cell) && cell > 0 ? cell : undefined
 }
 
 function toLocation(position: TraccarPosition): AssetLocation {
   return {
     lat: position.latitude,
     lon: position.longitude,
-    accuracy: position.accuracy > 0 ? position.accuracy : undefined,
+    accuracy: readPosition(position).accuracy,
     fixTime: position.fixTime,
   }
-}
-
-function readBattery(attributes: Record<string, unknown>): Asset['battery'] {
-  const percent = typeof attributes.batteryLevel === 'number' ? attributes.batteryLevel : undefined
-  const volts = typeof attributes.battery === 'number' ? attributes.battery : undefined
-  return percent === undefined && volts === undefined ? undefined : { percent, volts }
 }

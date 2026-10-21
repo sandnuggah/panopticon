@@ -7,6 +7,7 @@ import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
 import type { PlaceVisit } from './places'
 import { currentActivity, currentStay, type Activity, type Stay } from './segments'
+import { trackersOf, trailProfile } from './tracker'
 import { HISTORY_MIN_MINUTES, extendTrails, pruneTrails, trailMinutes, trailStart, type TrailLength, type Trails } from './trail'
 import { useNow } from './useNow'
 
@@ -160,23 +161,27 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null,
     return start === null ? {} : pruneTrails(trails, start)
   }, [trails, trail, now])
 
+  // Read as each asset's kind of tracker reports.
+  const trackerKey = assets.map((asset) => `${asset.id}:${asset.tracker ?? ''}`).join(' ')
+  const trackers = useMemo(() => trackersOf(assets), [trackerKey])
+
   const activities = useMemo(() => {
     const result: Record<number, Activity> = {}
     for (const [id, points] of Object.entries(trails)) {
-      const activity = currentActivity(points, now)
+      const activity = currentActivity(points, now, trailProfile(trackers[Number(id)]))
       if (activity) result[Number(id)] = activity
     }
     return result
-  }, [trails, now])
+  }, [trails, now, trackers])
 
   const stays = useMemo(() => {
     const result: Record<number, Stay> = {}
     for (const [id, points] of Object.entries(trails)) {
-      const stay = currentStay(points, now)
+      const stay = currentStay(points, now, trailProfile(trackers[Number(id)]))
       if (stay) result[Number(id)] = stay
     }
     return result
-  }, [trails, now])
+  }, [trails, now, trackers])
 
   return { assets, trails: visibleTrails, trailsLoaded, activities, stays, status, updateAvailable }
 }

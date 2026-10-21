@@ -101,10 +101,9 @@ describe('snapAlong', () => {
   })
 
   test('a leg nobody saw follows the line further than a detour would', () => {
-    // The same line out to a street and back, but three minutes without a fix before the fix after it.
+    // The same line out to a street and back, but a gap in the fixes before the fix after it.
     const detour = [at(0, 0), at(50, 0), at(65, -35), at(80, 0), at(150, 0)]
-    const timed = (point: Point, seconds: number): Point => ({ ...point, time: seconds * 1000 })
-    const walk = [timed(at(10, 2), 0), timed(at(30, -3), 30), timed(at(50, 1), 60), timed(at(95, 2), 240), timed(at(120, -1), 270)]
+    const walk = [at(10, 2), at(30, -3), at(50, 1), { ...at(95, 2), gap: true }, at(120, -1)]
     assert.deepEqual(snapAlong(walk, detour)!.map(metres), [
       [10, 0],
       [50, 0],
@@ -118,22 +117,15 @@ describe('snapAlong', () => {
 describe('drawWalk', () => {
   const home: Point = { ...at(0, -40), anchor: true }
 
-  test('from a stay to the first fix, and between fixes minutes apart, are legs nobody saw', () => {
-    const fixes: Point[] = [
-      { ...at(10, 2), time: 0 },
-      { ...at(30, -3), time: 30_000 },
-      { ...at(90, 5), time: 210_000 },
-    ]
+  test('from a stay to the first fix, and across a gap in the fixes, are legs nobody saw', () => {
+    const fixes: Point[] = [at(10, 2), at(30, -3), { ...at(90, 5), gap: true }]
     const walk = drawWalk([home, ...fixes], [])
     assert.equal(walk.snapped, false)
     assert.deepEqual(walk.unseen, [0, 2])
   })
 
   test('a leg nobody saw too short for a route is drawn straight', () => {
-    const fixes: Point[] = [
-      { ...at(10, 2), time: 0 },
-      { ...at(15, 2), time: 300_000 },
-    ]
+    const fixes: Point[] = [at(10, 2), { ...at(15, 2), gap: true }]
     assert.deepEqual(drawWalk(fixes, []).unseen, [])
   })
 

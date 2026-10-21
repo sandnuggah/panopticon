@@ -1,4 +1,4 @@
-import { classifyTrail, distance, type LatLon } from './segments.ts'
+import { classifyTrail, DEFAULT_TRAIL_PROFILE, distance, type LatLon, type TrailProfile } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
 // Stats for an asset (the Stats card): its walks day by day, worked out with the map's own rules
@@ -44,9 +44,9 @@ export type Period = 'today' | 'week' | 'month'
  * The walks in one day's points: moves between stays (as the map draws them, short stops part of
  * the walk) that get at least 75 m from where they started, without rides.
  */
-export function dayStats(points: TrailPoint[], home: LatLon | null): DayStats {
+export function dayStats(points: TrailPoint[], home: LatLon | null, profile: TrailProfile = DEFAULT_TRAIL_PROFILE): DayStats {
   const stats = { ...NO_WALKS, fixes: points.filter((point) => point.valid).length }
-  for (const piece of classifyTrail(points, { showWandering: true })) {
+  for (const piece of classifyTrail(points, { showWandering: true, profile })) {
     if (piece.kind !== 'move') continue
     const fixes = piece.points
     if (!fixes.some((fix) => distance(fixes[0]!, fix) >= MIN_WALK_METERS)) continue
