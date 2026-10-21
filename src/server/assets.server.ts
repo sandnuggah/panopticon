@@ -77,30 +77,33 @@ export function imageUrl(device: TraccarDevice): string | undefined {
 }
 
 export function toPositionUpdate(position: TraccarPosition): LiveUpdate {
+  const reading = readPosition(position)
   const update: LiveUpdate = {
     kind: 'position',
     id: position.deviceId,
     location: toLocation(position),
-    battery: readPosition(position).battery,
+    battery: reading.battery,
     valid: position.valid,
     placeIds: position.geofenceIds,
     tracker: adapterFor(position.protocol).kind,
   }
-  const cell = readPosition(position).cell
-  if (cell !== undefined) update.cell = cell
+  if (reading.cell !== undefined) update.cell = reading.cell
+  if (reading.satellites !== undefined) update.satellites = reading.satellites
   return update
 }
 
 export function toTrailPoint(position: TraccarPosition): TrailPoint {
+  const reading = readPosition(position)
   const point: TrailPoint = {
     lat: position.latitude,
     lon: position.longitude,
     time: Date.parse(position.fixTime),
     valid: position.valid,
   }
-  // The serving cell tower: evidence of travel without GPS (see segments.ts).
-  const cell = readPosition(position).cell
-  if (cell !== undefined) point.cell = cell
+  // The serving cell tower: evidence of travel without GPS; how good the fix is (see segments.ts).
+  if (reading.cell !== undefined) point.cell = reading.cell
+  if (reading.satellites !== undefined) point.satellites = reading.satellites
+  if (reading.accuracy !== undefined) point.accuracy = reading.accuracy
   return point
 }
 

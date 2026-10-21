@@ -23,6 +23,8 @@ export type LiveUpdate =
       valid: boolean
       /** The cell tower serving the tracker, when it reports one. */
       cell?: number
+      /** Satellites used for the fix, when the tracker reports them. */
+      satellites?: number
       /** The places this position is inside. */
       placeIds: number[]
       /** What kind of tracker sent it (see trackers.server.ts). */

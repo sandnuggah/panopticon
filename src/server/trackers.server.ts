@@ -22,6 +22,9 @@ export type Reading = {
   battery?: { percent?: number; volts?: number }
 }
 
+/** More satellites than any receiver tracks at once. */
+const MAX_SATELLITES = 64
+
 type Adapter = { kind: TrackerKind; protocols: string[]; read: (position: TraccarPosition) => Reading }
 
 const ADAPTERS: Adapter[] = [
@@ -39,7 +42,7 @@ const ADAPTERS: Adapter[] = [
     read: (position) => {
       const reading = standardReading(position)
       const attributes = position.attributes
-      reading.satellites ??= numberAttribute(attributes.io5)
+      reading.satellites ??= satelliteCount(attributes.io5)
       if (reading.cell === undefined) {
         const cell = numberAttribute(attributes.io4)
         if (cell !== undefined && Number.isInteger(cell) && cell > 0) reading.cell = cell
@@ -78,7 +81,7 @@ function standardReading(position: TraccarPosition): Reading {
   const attributes = position.attributes
   const reading: Reading = {}
   if (position.accuracy > 0) reading.accuracy = position.accuracy
-  const satellites = numberAttribute(attributes.sat)
+  const satellites = satelliteCount(attributes.sat)
   if (satellites !== undefined) reading.satellites = satellites
   if (position.cellId !== null) reading.cell = position.cellId
   if (position.cellNetwork) reading.network = { ...position.cellNetwork }
@@ -95,6 +98,12 @@ function standardReading(position: TraccarPosition): Reading {
 function dropEmpty(reading: Reading): Reading {
   if (reading.battery && reading.battery.percent === undefined && reading.battery.volts === undefined) delete reading.battery
   return reading
+}
+
+/** A count of satellites, or undefined for a value no receiver gives (an ST-904L once sent about 9×10¹⁹). */
+function satelliteCount(value: unknown): number | undefined {
+  const count = numberAttribute(value)
+  return count !== undefined && Number.isInteger(count) && count >= 0 && count <= MAX_SATELLITES ? count : undefined
 }
 
 /** Traccar stores h02's extra values as text; standard attributes are numbers. */

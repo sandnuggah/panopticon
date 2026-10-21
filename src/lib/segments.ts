@@ -62,6 +62,12 @@ const SPIKE_MAX_MS = 3 * 60 * 1000
 const ACTIVITY_MAX_AGE_MS = 3 * 60 * 1000
 /** Fixes this far apart in time have a leg between them that nobody saw (see snap.ts). */
 const GAP_MS = 2 * 60 * 1000
+/**
+ * A fix with fewer satellites than this is weak. Measured on a week of an ST-904L's walks: from 10
+ * satellites up, 90% of fixes lie within 7–14 m of the line between their neighbours; below, 20–48 m,
+ * and 16 of the week's 18 hops of 60 m or more within walks started or ended at one.
+ */
+const WEAK_SATELLITES = 10
 
 /**
  * How the trail reads one kind of tracker's reports (see TRAIL_PROFILES in lib/tracker.ts): the
@@ -79,6 +85,9 @@ export type TrailProfile = {
   freshMs: number
   /** GAP_MS */
   gapMs: number
+  /** A fix is weak (see isWeak) with fewer satellites than this, or said to be off by more than this many metres. */
+  weakSatellites?: number
+  weakAccuracyMeters?: number
 }
 
 /** The thresholds as tuned on a SinoTrack ST-904L. */
@@ -89,6 +98,17 @@ export const DEFAULT_TRAIL_PROFILE: TrailProfile = {
   spikeMs: SPIKE_MAX_MS,
   freshMs: ACTIVITY_MAX_AGE_MS,
   gapMs: GAP_MS,
+  weakSatellites: WEAK_SATELLITES,
+}
+
+/**
+ * Whether a fix is weak: GPS barely had it (indoors, among buildings), so it may be tens of metres off,
+ * and where it is can't be trusted to say which way the asset went (see matchableWalks). It stays on
+ * the trail: weak fixes come in runs, so leaving them out leaves the same jump.
+ */
+export function isWeak(point: TrailPoint, profile: TrailProfile): boolean {
+  if (profile.weakSatellites !== undefined && point.satellites !== undefined && point.satellites < profile.weakSatellites) return true
+  return profile.weakAccuracyMeters !== undefined && point.accuracy !== undefined && point.accuracy > profile.weakAccuracyMeters
 }
 /** Underground right now: this long without a fix while switching between this many cell sites. */
 const UNDERGROUND_MIN_MS = 60 * 1000

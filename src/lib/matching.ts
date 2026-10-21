@@ -1,4 +1,4 @@
-import { DEFAULT_TRAIL_PROFILE, distance, type LatLon, type TrailPiece, type TrailProfile } from './segments.ts'
+import { DEFAULT_TRAIL_PROFILE, distance, isWeak, type LatLon, type TrailPiece, type TrailProfile } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
 // Snap to paths: walking stretches of the trail can be snapped to streets and paths by a
@@ -12,6 +12,8 @@ const JITTER_METERS = 15
 const MIN_WALK_METERS = 75
 /** Two stays next to each other this far apart are separate dots, with a hop between them that nobody saw. */
 const STAY_HOP_METERS = 40
+/** A hop this long to or from a weak fix (see isWeak) is one nobody saw: either end may be tens of metres off. */
+const WEAK_HOP_METERS = 60
 
 /** At most this many walks per request, each at most this many points. */
 export const MAX_WALKS_PER_REQUEST = 20
@@ -19,9 +21,9 @@ export const MAX_POINTS_PER_WALK = 400
 
 /**
  * `park`: in a park, where snapping is stricter (see snap.ts). `anchor`: the stay the walk starts or
- * ends at, not a fix. `gap`: after a gap in the tracker's fixes, so nobody saw the way here.
+ * ends at, not a fix. `unseen`: nobody saw the way here from the fix before (see matchableWalks).
  */
-export type MatchablePoint = LatLon & { time: number; park?: boolean; anchor?: boolean; gap?: boolean }
+export type MatchablePoint = LatLon & { time: number; park?: boolean; anchor?: boolean; unseen?: boolean }
 
 /** Identifies a walk by its first and last fix and how many it has; it changes as the walk grows. */
 export function walkKey(points: TrailPoint[]): string {
@@ -38,8 +40,9 @@ export function stayHopKey(from: { to: number }, to: { from: number }): string {
  * walk must get somewhere from where it began (out and back counts) and have at least 3 points. A
  * walk from or to a stay starts or ends at the stay's middle, where the map draws it from (its dot),
  * marked as an anchor: leaving home then follows the street from the door, not a straight line to
- * the first fix outside, which comes once the tracker wakes (see drawWalk in snap.ts). A fix at least
- * the tracker's `gapMs` after the one before is marked as after a gap, for the same reason.
+ * the first fix outside, which comes once the tracker wakes (see drawWalk in snap.ts). For the same
+ * reason a fix is marked `unseen` when it comes at least the tracker's `gapMs` after the one before, or
+ * WEAK_HOP_METERS or more from it when either is weak.
  */
 export function matchableWalks(
   pieces: TrailPiece[],
@@ -66,10 +69,13 @@ export function matchableWalks(
     for (const point of piece.points.slice(1)) if (distance(kept.at(-1)!, point) >= JITTER_METERS) kept.push(point)
     if (kept.at(-1) !== piece.points.at(-1)) kept.push(piece.points.at(-1)!)
     // Room for the two stays' middles within the limit.
-    const points: MatchablePoint[] = kept.slice(-(MAX_POINTS_PER_WALK - 2)).map(({ lat, lon, time }, index, all) => {
+    const points: MatchablePoint[] = kept.slice(-(MAX_POINTS_PER_WALK - 2)).map((fix, index, all) => {
+      const { lat, lon, time } = fix
       const point: MatchablePoint = { lat, lon, time }
       if (inPark({ lat, lon })) point.park = true
-      if (index > 0 && time - all[index - 1]!.time >= profile.gapMs) point.gap = true
+      const before = all[index - 1]
+      const weakHop = before && distance(before, fix) >= WEAK_HOP_METERS && (isWeak(before, profile) || isWeak(fix, profile))
+      if (before && (time - before.time >= profile.gapMs || weakHop)) point.unseen = true
       return point
     })
     if (from) points.unshift({ ...from, time: points[0]!.time - 1000, anchor: true })

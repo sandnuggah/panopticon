@@ -56,13 +56,34 @@ describe('matchableWalks', () => {
     const move: TrailPiece = { kind: 'move', points: [fix(0, 0, 0), fix(40, 0, 1), fix(80, 0, 2), fix(200, 0, 8), fix(240, 0, 9)] }
     const walks = matchableWalks([move])
     assert.deepEqual(
-      walks[0]!.points.map((point) => !!point.gap),
+      walks[0]!.points.map((point) => !!point.unseen),
       [false, false, false, true, false],
     )
     const slower = { ...DEFAULT_TRAIL_PROFILE, gapMs: 10 * 60 * 1000 }
     assert.ok(
-      matchableWalks([move], () => false, slower)[0]!.points.every((point) => !point.gap),
+      matchableWalks([move], () => false, slower)[0]!.points.every((point) => !point.unseen),
       'not for a tracker that reports less often',
+    )
+  })
+
+  test('a long hop to or from a weak fix is marked: either end may be tens of metres off', () => {
+    const weak = (point: TrailPoint): TrailPoint => ({ ...point, satellites: 6 })
+    const strong = (point: TrailPoint): TrailPoint => ({ ...point, satellites: 18 })
+    // 30 s apart: 30 m strong, 80 m to a weak fix, 80 m between strong fixes, 40 m to a weak one.
+    const move: TrailPiece = {
+      kind: 'move',
+      points: [
+        strong(fix(0, 0, 0)),
+        strong(fix(30, 0, 1)),
+        weak(fix(110, 0, 2)),
+        strong(fix(190, 0, 3)),
+        strong(fix(270, 0, 4)),
+        weak(fix(310, 0, 5)),
+      ],
+    }
+    assert.deepEqual(
+      matchableWalks([move])[0]!.points.map((point) => !!point.unseen),
+      [false, false, true, true, false, false],
     )
   })
 })

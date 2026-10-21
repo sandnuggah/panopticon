@@ -58,4 +58,9 @@ describe('tracker adapters', () => {
     const other = position('gt06', { cellId: 4242, cellNetwork: { mcc: 240, mnc: 7 } }, { io5: '19', battery: 4.1 })
     assert.deepEqual(readPosition(other), { cell: 4242, network: { mcc: 240, mnc: 7 }, battery: { volts: 4.1 } })
   })
+
+  test('a satellite count no receiver gives is left out', () => {
+    assert.equal(readPosition(position('h02', {}, { io5: '89460140260226400000' })).satellites, undefined)
+    assert.equal(readPosition(position('osmand', {}, { sat: -1 })).satellites, undefined)
+  })
 })

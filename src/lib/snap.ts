@@ -5,10 +5,10 @@
 
 /**
  * `park`: the fix is in a park, where a path nearby says less (see parks.ts). `anchor`: not a fix but
- * the stay the walk starts or ends at. `gap`: the way here from the fix before, a while before for this
- * tracker, nobody saw (both from matchableWalks in matching.ts).
+ * the stay the walk starts or ends at. `unseen`: nobody saw the way here from the fix before (a gap in
+ * the fixes, or a long hop to or from a weak one; both from matchableWalks in matching.ts).
  */
-export type Point = { lat: number; lon: number; park?: boolean; anchor?: boolean; gap?: boolean }
+export type Point = { lat: number; lon: number; park?: boolean; anchor?: boolean; unseen?: boolean }
 
 /** A fix this close to the matched line was on a street or path... */
 const ON_PATH_METERS = 20
@@ -31,7 +31,7 @@ const DETOUR_FACTOR = 1.5
 const DETOUR_METERS = 20
 /**
  * Legs nobody saw: between a stay and the first or last fix (the tracker asleep, or waking up on the
- * way), and across a gap between fixes (`gap`). The way is a guess there, and the way along paths is a
+ * way), and to a fix marked `unseen`. The way is a guess there, and the way along paths is a
  * better one than straight across (a bridge, a building, a slope in between), so these follow the
  * line, or a route (see drawWalk), unless it's longer than UNSEEN_FACTOR times as far plus UNSEEN_METERS.
  */
@@ -188,10 +188,10 @@ function tooLong(went: number, unseen: boolean): number {
   return unseen ? went * UNSEEN_FACTOR + UNSEEN_METERS : went * DETOUR_FACTOR + DETOUR_METERS
 }
 
-/** Whether nobody saw the way from one point to a later one: a stay at either end, or a gap on the way. */
+/** Whether nobody saw the way from one point to a later one: a stay at either end, or an unseen leg on the way. */
 function isUnseen(points: Point[], from: number, to: number): boolean {
   if (points[from]!.anchor || points[to]!.anchor) return true
-  for (let k = from + 1; k <= to; k++) if (points[k]!.gap) return true
+  for (let k = from + 1; k <= to; k++) if (points[k]!.unseen) return true
   return false
 }
 

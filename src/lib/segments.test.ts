@@ -4,7 +4,9 @@ import {
   classifyTrail,
   currentActivity,
   currentStay,
+  DEFAULT_TRAIL_PROFILE,
   distance,
+  isWeak,
   latestOutingStart,
   stayDots,
   type LatLon,
@@ -385,6 +387,22 @@ describe('places', () => {
     assert.equal(dots.length, 1)
     assert.deepEqual(dotOf, [0, 0])
     assert.deepEqual(dots[0]!.center, at(0))
+  })
+})
+
+describe('isWeak', () => {
+  const at = { lat: START.lat, lon: START.lon, time: START.time, valid: true }
+
+  test('an ST-904L fix with fewer than 10 satellites', () => {
+    assert.equal(isWeak({ ...at, satellites: 9 }, DEFAULT_TRAIL_PROFILE), true)
+    assert.equal(isWeak({ ...at, satellites: 10 }, DEFAULT_TRAIL_PROFILE), false)
+    assert.equal(isWeak(at, DEFAULT_TRAIL_PROFILE), false, 'nothing said: not weak')
+  })
+
+  test('by accuracy, for a tracker that says how far off its fixes may be', () => {
+    const byAccuracy = { ...DEFAULT_TRAIL_PROFILE, weakSatellites: undefined, weakAccuracyMeters: 50 }
+    assert.equal(isWeak({ ...at, accuracy: 65 }, byAccuracy), true)
+    assert.equal(isWeak({ ...at, accuracy: 12, satellites: 4 }, byAccuracy), false)
   })
 })
 

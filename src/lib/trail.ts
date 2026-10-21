@@ -12,6 +12,9 @@ export type TrailPoint = {
   valid: boolean
   /** The cell tower serving the tracker, when it reports one. */
   cell?: number
+  /** How good the fix is, when the tracker says: satellites used, or how far off it may be (metres). See isWeak in segments.ts. */
+  satellites?: number
+  accuracy?: number
 }
 
 /** Oldest point first, per asset id. */
@@ -73,6 +76,8 @@ export function extendTrails(trails: Trails, updates: LiveUpdate[], since: numbe
     if (last && time <= last.time) continue
     const point: TrailPoint = { lat: update.location.lat, lon: update.location.lon, time, valid: update.valid }
     if (update.cell !== undefined) point.cell = update.cell
+    if (update.satellites !== undefined) point.satellites = update.satellites
+    if (update.location.accuracy !== undefined) point.accuracy = update.location.accuracy
     next = { ...next, [update.id]: [...trail.filter((p) => p.time >= since), point] }
   }
   return next
