@@ -13,6 +13,7 @@ import { withToken } from './session.server'
 export const getMapOptions = createServerFn({ method: 'GET' }).handler(() => ({
   ...mapStylesFor(env().mapStyleUrl),
   canSnapToPaths: env().mapMatchingUrl !== undefined,
+  canSearchAddresses: env().geocoderUrl !== undefined,
 }))
 
 /** Snaps walks to streets and paths; null for each walk that can't be snapped closely enough. */

@@ -13,6 +13,44 @@ export type Place = {
   area: PlaceArea
   /** The assets it applies to (linked to it in Traccar). */
   assetIds: number[]
+  /** Its street address, as given in the editor ("Bohusgatan 12, Stockholm"). */
+  address?: string
+  /**
+   * Where you come and go, on a street (see wayIn.server.ts): walks to and from the place start
+   * there, and its dot on the trail is drawn there. Without one, the place's middle.
+   */
+  wayIn?: LatLon
+}
+
+// A place's address and way in are kept with its geofence in Traccar, as attributes.
+export const ADDRESS_ATTRIBUTE = 'address'
+export const WAY_IN_ATTRIBUTE = 'wayIn'
+
+/** A way in as a geofence attribute: latitude first, as Traccar's areas are, to 6 decimals. */
+export function wayInAttribute(point: LatLon): string {
+  return `${point.lat.toFixed(6)} ${point.lon.toFixed(6)}`
+}
+
+/** A way in from a geofence attribute, or undefined when it's missing or not one. */
+export function parseWayIn(value: unknown): LatLon | undefined {
+  if (typeof value !== 'string') return undefined
+  const match = new RegExp(String.raw`^\s*${NUMBER}\s+${NUMBER}\s*$`).exec(value)
+  if (!match) return undefined
+  const point = { lat: Number(match[1]), lon: Number(match[2]) }
+  return validLatLon(point) ? point : undefined
+}
+
+/**
+ * The street in an address, to find the way in on: its first part, without house numbers
+ * ("Bohusgatan 12, 116 67 Stockholm" and "12 Main Street, Springfield" give "Bohusgatan" and "Main
+ * Street"). Null when there's no street in it.
+ */
+export function streetOf(address: string): string | null {
+  const street = (address.split(',')[0] ?? '')
+    .split(/\s+/)
+    .filter((word) => word && !/\d/.test(word))
+    .join(' ')
+  return street || null
 }
 
 /** An asset arriving at or leaving a place, from Traccar's events or seen live. */
@@ -69,11 +107,14 @@ export function placeCenter(area: PlaceArea): LatLon {
   return { lat: (Math.min(...lats) + Math.max(...lats)) / 2, lon: (Math.min(...lons) + Math.max(...lons)) / 2 }
 }
 
-/** An asset's places as its trail uses them: stays in them are drawn as one dot at the place's middle (see segments.ts). */
+/**
+ * An asset's places as its trail uses them: stays in them are drawn as one dot at the place's way in,
+ * or its middle (see segments.ts).
+ */
 export function trailPlaces(places: Place[], assetId: number): TrailPlace[] {
   return places
     .filter((place) => place.assetIds.includes(assetId))
-    .map(({ area }) => ({ center: placeCenter(area), within: (point, margin) => withinArea(area, point, margin) }))
+    .map(({ area, wayIn }) => ({ center: wayIn ?? placeCenter(area), within: (point, margin) => withinArea(area, point, margin) }))
 }
 
 /** Whether a point is inside the area, or at most `margin` metres outside it. */

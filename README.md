@@ -121,6 +121,17 @@ party. Without it the switch is greyed out.
 
 To refresh the map data every few months, delete `./valhalla/valhalla_tiles.tar` and restart Valhalla.
 
+With Valhalla, a place's address (Settings → Places) also gives it a way in on its street, where
+walks to and from it start.
+
+## Finding places by address (optional)
+
+With `GEOCODER_URL` set to a [Nominatim](https://nominatim.org) server, the place editor can find an
+address and move the circle there. Only what's typed into the search goes to it. Run your own (it's
+a big download for a whole country), or use a public one whose terms allow it; the public
+`https://nominatim.openstreetmap.org` allows light use like this, and it sees the addresses you
+search for. Without it, you place the circle by hand, and the address is still used for the way in.
+
 ## Alerts (optional)
 
 Settings → Alerts sends notifications to a phone or computer when an asset leaves or arrives at one of its

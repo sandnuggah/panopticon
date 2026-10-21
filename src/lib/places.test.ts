@@ -4,12 +4,15 @@ import {
   circleWkt,
   durationLabel,
   parseArea,
+  parseWayIn,
   placeCenter,
   radiusLabel,
+  streetOf,
   trailPlaces,
   visitRows,
   visitSentence,
   visitsBetween,
+  wayInAttribute,
   withinArea,
   type Place,
 } from './places.ts'
@@ -132,5 +135,34 @@ describe('trailPlaces', () => {
     assert.equal(mine.length, 1)
     assert.deepEqual(mine[0]!.center, { lat: 59.3, lon: 18.07 })
     assert.equal(mine[0]!.within({ lat: 59.3006, lon: 18.07 }, 25), true)
+  })
+
+  test("a place's way in, where it has one, is its dot", () => {
+    const home: Place = {
+      id: 1,
+      name: 'Home',
+      area: parseArea('CIRCLE (59.3 18.07, 50)')!,
+      assetIds: [30],
+      wayIn: { lat: 59.3003, lon: 18.0702 },
+    }
+    assert.deepEqual(trailPlaces([home], 30)[0]!.center, { lat: 59.3003, lon: 18.0702 })
+  })
+})
+
+describe('address and way in', () => {
+  test('a way in is kept as latitude and longitude, and read back', () => {
+    const attribute = wayInAttribute({ lat: 59.30661234, lon: 18.0804 })
+    assert.equal(attribute, '59.306612 18.080400')
+    assert.deepEqual(parseWayIn(attribute), { lat: 59.306612, lon: 18.0804 })
+    assert.equal(parseWayIn('somewhere'), undefined)
+    assert.equal(parseWayIn('91 18'), undefined)
+    assert.equal(parseWayIn(undefined), undefined)
+  })
+
+  test('the street in an address, without house numbers', () => {
+    assert.equal(streetOf('Bohusgatan 12, 116 67 Stockholm'), 'Bohusgatan')
+    assert.equal(streetOf('12 Main Street, Springfield'), 'Main Street')
+    assert.equal(streetOf('Rue de la Paix 4b'), 'Rue de la Paix')
+    assert.equal(streetOf('116 67, Stockholm'), null)
   })
 })

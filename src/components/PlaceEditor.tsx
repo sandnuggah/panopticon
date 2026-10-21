@@ -2,10 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { BlockFooter, BlockTitle, Button, Dialog, DialogButton, List, ListButton, ListInput, ListItem, Range, Toggle } from 'konsta/react'
 import { editErrorMessage } from '../lib/editErrors'
-import { PLACE_RADII, radiusLabel, type Place } from '../lib/places'
+import { PLACE_RADII, placeCenter, radiusLabel, type Place } from '../lib/places'
 import type { LatLon } from '../lib/segments'
 import { getManagedAssets } from '../server/manage.functions'
-import { deletePlace, savePlaceChange } from '../server/places.functions'
+import { getAddress } from '../server/map.functions'
+import { deletePlace, findAddresses, savePlaceChange } from '../server/places.functions'
+import type { FoundAddress } from '../server/geocode.server'
 import type { EditResult } from '../server/manage.server'
 import type { Inset } from './map/PlacePicker'
 import { CARD_BG, CloseButton, moveFocus, ROWS, SIDE_PANEL_ABOVE_ZOOM, sidePanel } from './cards'
@@ -22,16 +24,24 @@ type Props = {
   center: LatLon | null
   /** How much of the map the card covers, so the map can keep the circle in the rest (see PlacePicker). */
   onInset: (inset: Inset) => void
+  /** Whether the server can find addresses (GEOCODER_URL). */
+  canSearch: boolean
+  /** Moves the map, and so the circle, to a point: an address found. */
+  onGoTo: (point: LatLon) => void
   /** Back to the list of places, after saving, removing or cancelling. */
   onClose: () => void
 }
 
+/** Waits this long after the map stops before looking up the address at the circle. */
+const ADDRESS_DEBOUNCE_MS = 600
+
 /**
  * Adding or changing a place, in a card at the bottom of the map screen while the map above it
- * places the circle (PlacePicker): its name, size, and which assets it's for. Polygons drawn in
- * Traccar can be renamed and given to assets, but their shape is changed in Traccar.
+ * places the circle (PlacePicker): its name, address, size, and which assets it's for. The address
+ * is filled in from where the circle is, until it's edited, and can be searched for. Polygons drawn
+ * in Traccar can be renamed, given an address and given to assets, but their shape is changed in Traccar.
  */
-export function PlaceEditor({ place, radius, onRadiusChange, center, onInset, onClose }: Props) {
+export function PlaceEditor({ place, radius, onRadiusChange, center, onInset, canSearch, onGoTo, onClose }: Props) {
   const router = useRouter()
   const card = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
@@ -42,6 +52,30 @@ export function PlaceEditor({ place, radius, onRadiusChange, center, onInset, on
   const [status, setStatus] = useState<{ kind: 'idle' | 'busy' } | { kind: 'error'; message: string }>({ kind: 'idle' })
   const [confirming, setConfirming] = useState(false)
   const circle = place === null || place.area.kind === 'circle'
+  const [address, setAddress] = useState(place?.address ?? '')
+  // Once typed or chosen, the address stays put; until then it follows the circle.
+  const [addressChosen, setAddressChosen] = useState(place?.address !== undefined)
+  // The address chosen from a search, and where it was found, for its way in.
+  const [found, setFound] = useState<FoundAddress | null>(null)
+  const [results, setResults] = useState<FoundAddress[] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const lookAt = circle ? center : place ? placeCenter(place.area) : null
+
+  useEffect(() => {
+    if (addressChosen || !lookAt) return
+    let cancelled = false
+    const timer = setTimeout(() => {
+      getAddress({ data: lookAt })
+        .then((found) => {
+          if (!cancelled && found) setAddress(found)
+        })
+        .catch(() => {})
+    }, ADDRESS_DEBOUNCE_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [addressChosen, lookAt?.lat, lookAt?.lon])
 
   useEffect(() => {
     moveFocus(closeButton.current)
@@ -115,9 +149,37 @@ export function PlaceEditor({ place, radius, onRadiusChange, center, onInset, on
           name: trimmed,
           circle: circle && center ? { center, radius } : null,
           assetIds: assetIds ?? [],
+          address: address.trim() || null,
+          found: found && found.label === address.trim() ? found.point : null,
         },
       }),
     )
+  }
+
+  async function search() {
+    const query = address.trim()
+    if (!query || searching) return
+    setSearching(true)
+    setResults(null)
+    try {
+      const found = await findAddresses({ data: { query, near: lookAt } })
+      if (found.length === 0) setStatus({ kind: 'error', message: `Couldn't find ${query}.` })
+      else if (found.length === 1) choose(found[0]!)
+      else setResults(found)
+    } catch {
+      setStatus({ kind: 'error', message: "Couldn't search for the address. Try again." })
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  function choose(result: FoundAddress) {
+    setAddress(result.label)
+    setAddressChosen(true)
+    setFound(result)
+    setResults(null)
+    setStatus({ kind: 'idle' })
+    if (circle) onGoTo(result.point)
   }
 
   const canEdit = managed?.access.canEdit === true
@@ -163,7 +225,32 @@ export function PlaceEditor({ place, radius, onRadiusChange, center, onInset, on
             disabled={!canEdit}
             onInput={(event: React.FormEvent<HTMLInputElement>) => setName(event.currentTarget.value)}
           />
+          <ListInput
+            label="Address"
+            value={address}
+            maxLength={200}
+            autoComplete="off"
+            placeholder="Street and number, town"
+            disabled={!canEdit}
+            onInput={(event: React.FormEvent<HTMLInputElement>) => {
+              setAddress(event.currentTarget.value)
+              setAddressChosen(true)
+              setResults(null)
+            }}
+            onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
+              if (event.key === 'Enter' && canSearch) void search()
+            }}
+          />
+          {canSearch && canEdit && (
+            <ListButton className={searching || !address.trim() ? 'opacity-50' : ''} onClick={() => void search()}>
+              {searching ? 'Finding…' : circle ? 'Find on the map' : 'Find'}
+            </ListButton>
+          )}
+          {results?.map((result) => (
+            <ListItem key={`${result.point.lat},${result.point.lon}`} link title={result.label} onClick={() => choose(result)} />
+          ))}
         </List>
+        <BlockFooter>Walks to and from the place start on the street in its address.</BlockFooter>
 
         {circle && (
           <>

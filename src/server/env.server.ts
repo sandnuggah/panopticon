@@ -9,6 +9,8 @@ type Env = {
   mapOrigins: string[]
   /** Valhalla for Snap to paths (MAP_MATCHING_URL); without it, the switch is greyed out. */
   mapMatchingUrl: string | undefined
+  /** A Nominatim server for finding places by address (GEOCODER_URL); without it, the place editor can't search. */
+  geocoderUrl: string | undefined
   /**
    * What Traccar sends with forwarded events (TRACCAR_EVENTS_SECRET, as `Authorization: Bearer …`),
    * so only it can trigger alerts; without it, alerts aren't offered (see alerts.server.ts).
@@ -35,6 +37,7 @@ export function env(): Env {
       mapStyleUrl,
       mapOrigins: [new URL(mapStyleUrl).origin, ...readMapExtraOrigins()],
       mapMatchingUrl: readUrl('MAP_MATCHING_URL', false),
+      geocoderUrl: readUrl('GEOCODER_URL', false),
       eventsSecret: readEventsSecret(),
       signInMethods: readSignInMethods(),
     }

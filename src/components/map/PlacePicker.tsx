@@ -6,6 +6,9 @@ import type { LatLon } from '../../lib/segments'
 /** The part of the map a card covers, in px. */
 export type Inset = { bottom: number; right: number }
 
+/** A point to move the map to (an address found), and when it was asked for, so the same point can be asked for again. */
+export type GoTo = { point: LatLon; at: number }
+
 export type PickerProps = {
   /** Where to start: the place's area, or null for a new one, which starts where the map is. */
   start: PlaceArea | null
@@ -18,6 +21,8 @@ export type PickerProps = {
    * screen, where it's a side panel. The circle sits in the middle of the rest.
    */
   inset: Inset
+  /** Moves the map, and so the circle, there. */
+  goTo: GoTo | null
   /** The middle of the visible map, where the circle is, after each move. */
   onCenter: (center: LatLon) => void
 }
@@ -39,6 +44,7 @@ export function PlacePicker({
   startKey,
   radius,
   inset,
+  goTo,
   onCenter,
 }: PickerProps & { map: { current: MapLibreMap | null }; theme: string }) {
   const [view, setView] = useState<{ lat: number; zoom: number; width: number; height: number } | null>(null)
@@ -102,6 +108,12 @@ export function PlacePicker({
     const zoom = Math.log2((40_075_016.686 * Math.cos((center.lat * Math.PI) / 180)) / (512 * ((radiusRef.current * 2) / (visible * 0.6))))
     m.jumpTo({ center: [center.lon, center.lat], zoom: Math.min(zoom, 18), padding })
   }, [map, startKey, inset.bottom, inset.right])
+
+  useEffect(() => {
+    const m = map.current
+    if (!m || !goTo) return
+    m.easeTo({ center: [goTo.point.lon, goTo.point.lat], padding: { top: 0, left: 0, ...insetRef.current }, duration: 600 })
+  }, [map, goTo?.at])
 
   if (radius === null || !view) return null
   const size = (radius * 2) / metresPerPixel(view.lat, view.zoom)

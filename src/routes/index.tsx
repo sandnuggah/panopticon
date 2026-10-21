@@ -13,7 +13,7 @@ import type { Asset } from '../lib/asset'
 import type { Park } from '../lib/parks'
 import { visitSentence, type Place, type PlaceVisit } from '../lib/places'
 import type { LatLon } from '../lib/segments'
-import type { Inset } from '../components/map/PlacePicker'
+import type { GoTo, Inset } from '../components/map/PlacePicker'
 import { useSettings } from '../lib/settings'
 import { useAddress } from '../lib/useAddress'
 import { useLiveAssets } from '../lib/useLiveAssets'
@@ -271,18 +271,20 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   const editing = editedPlace !== undefined
   const placeKey = String(editedPlace)
   const place = editedPlace === 'new' ? null : places.find((candidate) => candidate.id === editedPlace)
-  const [pick, setPick] = useState<{ key: string; radius: number; center: LatLon | null; inset: Inset }>({
+  const [pick, setPick] = useState<{ key: string; radius: number; center: LatLon | null; inset: Inset; goTo: GoTo | null }>({
     key: '',
     radius: 100,
     center: null,
     inset: { bottom: 0, right: 0 },
+    goTo: null,
   })
   // Each place opened starts from its own circle (state reset during render: React's derived-state pattern).
   if (editing && place !== undefined && pick.key !== placeKey) {
-    setPick({ key: placeKey, radius: place?.area.kind === 'circle' ? place.area.radius : 100, center: null, inset: pick.inset })
+    setPick({ key: placeKey, radius: place?.area.kind === 'circle' ? place.area.radius : 100, center: null, inset: pick.inset, goTo: null })
   }
   const setRadius = useCallback((radius: number) => setPick((current) => ({ ...current, radius })), [])
   const setCenter = useCallback((center: LatLon) => setPick((current) => ({ ...current, center })), [])
+  const goTo = useCallback((point: LatLon) => setPick((current) => ({ ...current, goTo: { point, at: Date.now() } })), [])
   const setInset = useCallback(
     (inset: Inset) =>
       setPick((current) =>
@@ -378,6 +380,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
                       startKey: placeKey,
                       radius: place === null || place.area.kind === 'circle' ? pick.radius : null,
                       inset: pick.inset,
+                      goTo: pick.goTo,
                       onCenter: setCenter,
                     }
                   : null
@@ -438,6 +441,8 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
           onRadiusChange={setRadius}
           center={pick.center}
           onInset={setInset}
+          canSearch={loaderData.mapOptions.canSearchAddresses}
+          onGoTo={goTo}
           onClose={closePlace}
         />
       )}

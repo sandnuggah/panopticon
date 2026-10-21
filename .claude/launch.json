@@ -19,6 +19,7 @@
       "runtimeArgs": [
         "TRACCAR_URL=http://127.0.0.1:8082",
         "MAP_MATCHING_URL=http://127.0.0.1:8002",
+        "GEOCODER_URL=http://127.0.0.1:8082",
         "TRACCAR_EVENTS_SECRET=mock-only-events-secret-not-for-real-use",
         "/etc/profiles/per-user/adam/bin/mise",
         "exec",
@@ -38,6 +39,7 @@
       "runtimeArgs": [
         "TRACCAR_URL=http://127.0.0.1:8082",
         "MAP_MATCHING_URL=http://127.0.0.1:8002",
+        "GEOCODER_URL=http://127.0.0.1:8082",
         "PORT=3002",
         "SESSION_SECRET=mock-only-session-secret-not-for-real-use-0123456789",
         "/etc/profiles/per-user/adam/bin/mise",

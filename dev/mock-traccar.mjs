@@ -13,6 +13,8 @@
 // mock starts just after she's back), Sixten (at daycare since a walk there) and Bamse (offline, no
 // position). Places: Home (Betty's) and Daycare (Sixten's). Only the endpoints panopticon uses,
 // roughly as Traccar answers them. The front page's screenshots are taken against this (README).
+// It also answers address searches as a Nominatim server would (`GET /search`, made-up addresses near
+// the places), for GEOCODER_URL=http://127.0.0.1:8082.
 
 import crypto from 'node:crypto'
 import http from 'node:http'
@@ -78,6 +80,13 @@ const geofences = [
   { id: 2, name: 'Home', description: null, area: 'CIRCLE (59.3132 18.0785, 50)', calendarId: 0, attributes: {} },
 ]
 let nextGeofenceId = 3
+
+/** Made-up addresses near the places, for address searches (GET /search). */
+const ADDRESSES = [
+  { road: 'Åsögatan', house_number: '140', postcode: '116 24', city: 'Stockholm', lat: 59.31318, lon: 18.07866 },
+  { road: 'Åsögatan', house_number: '142', postcode: '116 24', city: 'Stockholm', lat: 59.31322, lon: 18.07905 },
+  { road: 'Lidingövägen', house_number: '75', postcode: '115 41', city: 'Stockholm', lat: 59.35752, lon: 18.09098 },
+]
 /** Device-geofence links, as "deviceId:geofenceId". */
 const links = new Set(['30:2', '10:1'])
 const events = []
@@ -422,6 +431,28 @@ const server = http.createServer(async (req, res) => {
   const key = `${req.method} ${url.pathname}`
   console.log(new Date().toISOString().slice(11, 19), key, url.search.slice(0, 60))
   if (DELAY_MS > 0) await new Promise((resolve) => setTimeout(resolve, url.searchParams.has('from') ? DELAY_MS * 3 : DELAY_MS))
+
+  if (key === 'GET /search') {
+    // Every word asked for, anywhere in the address.
+    const words = (url.searchParams.get('q') ?? '')
+      .toLowerCase()
+      .split(/[\s,]+/)
+      .filter(Boolean)
+    const found = ADDRESSES.filter((address) => {
+      const text = `${address.road} ${address.house_number} ${address.postcode} ${address.city}`.toLowerCase()
+      return words.length > 0 && words.every((word) => text.includes(word))
+    })
+    return json(
+      res,
+      200,
+      found.map(({ lat, lon, ...address }) => ({
+        lat: String(lat),
+        lon: String(lon),
+        display_name: `${address.house_number}, ${address.road}, ${address.city}`,
+        address,
+      })),
+    )
+  }
 
   if (key === 'GET /api/server') {
     return json(res, 200, { id: 1, registration: false, readonly: false, deviceReadonly: false, openIdEnabled: true, openIdForce: false })

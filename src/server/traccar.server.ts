@@ -57,7 +57,11 @@ export type TraccarGeofence = {
   name: string
   /** WKT, latitude first (see lib/places.ts). */
   area: string
+  attributes: Record<string, unknown>
 }
+
+/** Attributes to set on a geofence, or null to remove; others are kept. */
+export type GeofenceAttributes = Record<string, string | null>
 
 /** An event Traccar recorded, such as a device entering a geofence. */
 export type TraccarEvent = {
@@ -327,18 +331,36 @@ export async function getGeofences(token: string, deviceId?: number): Promise<Tr
 }
 
 /** Adds a geofence. Traccar gives the creating user access to it. */
-export async function createGeofence(token: string, name: string, area: string): Promise<TraccarGeofence> {
-  const response = await request('/api/geofences', { method: 'POST', token, json: { name, area, attributes: {} } })
+export async function createGeofence(
+  token: string,
+  name: string,
+  area: string,
+  attributes: GeofenceAttributes = {},
+): Promise<TraccarGeofence> {
+  const json = { name, area, attributes: Object.fromEntries(Object.entries(attributes).filter(([, value]) => value !== null)) }
+  const response = await request('/api/geofences', { method: 'POST', token, json })
   await ensureOk(response, 'POST /api/geofences')
   return parseGeofence(await response.json())
 }
 
 /** Renames a geofence and, unless `area` is null, changes its area, keeping the rest of its record (see updateDevice). */
-export async function updateGeofence(token: string, id: number, name: string, area: string | null): Promise<TraccarGeofence> {
+export async function updateGeofence(
+  token: string,
+  id: number,
+  name: string,
+  area: string | null,
+  attributes: GeofenceAttributes = {},
+): Promise<TraccarGeofence> {
   const geofence = await getJson(`/api/geofences/${id}`, token)
   if (!isObject(geofence) || geofence.id !== id) throw unexpected('geofence is not an object')
   geofence.name = name
   if (area !== null) geofence.area = area
+  const kept: Record<string, unknown> = isObject(geofence.attributes) ? { ...geofence.attributes } : {}
+  for (const [key, value] of Object.entries(attributes)) {
+    if (value === null) delete kept[key]
+    else kept[key] = value
+  }
+  geofence.attributes = kept
   const response = await request(`/api/geofences/${id}`, { method: 'PUT', token, json: geofence })
   await ensureOk(response, `PUT /api/geofences/${id}`)
   return parseGeofence(await response.json())
@@ -510,6 +532,7 @@ function parseGeofence(value: unknown): TraccarGeofence {
     id: number(value, 'id', 'geofence'),
     name: optionalString(value, 'name', 'geofence') ?? '',
     area: optionalString(value, 'area', 'geofence') ?? '',
+    attributes: isObject(value.attributes) ? value.attributes : {},
   }
 }
 
