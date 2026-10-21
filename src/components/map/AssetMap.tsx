@@ -284,8 +284,8 @@ export default function AssetMap({
   useEffect(() => {
     const map = mapRef.current
     if (!styleLoaded || !map) return
-    setTrails(map, trails, snappedWalks)
-  }, [trails, snappedWalks, styleLoaded])
+    setTrails(map, trails, snappedWalks, places)
+  }, [trails, snappedWalks, places, styleLoaded])
 
   const editedPlaceId = picker?.placeId
   useEffect(() => {

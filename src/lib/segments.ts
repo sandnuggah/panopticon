@@ -47,6 +47,8 @@ const WANDER_METERS = 50
 const BLIP_FIXES = 2
 /** On the map, a stop shorter than this is part of the walk (a dog sniffing), not a dot of its own. */
 const SHORT_STOP_MS = 5 * 60 * 1000
+/** A move that never gets further than this outside a place (GPS wander, the garden) is pottering about there. */
+const PLACE_WANDER_METERS = 25
 /**
  * A lone fix at least this far from the fixes either side of it, all within SPIKE_MAX_MS, while
  * those two are much closer to each other (at most SPIKE_SHORTCUT of the way through it), went out
@@ -63,11 +65,17 @@ const UNDERGROUND_MIN_SITES = 3
 
 export type LatLon = { lat: number; lon: number }
 
+/**
+ * One of the asset's places (Home, Daycare), for drawing: stays inside it are one dot at `center`.
+ * `within` says whether a point is inside it, or at most `margin` metres outside.
+ */
+export type TrailPlace = { center: LatLon; within: (point: LatLon, margin: number) => boolean }
+
 export type TrailPiece =
   /** On foot: the GPS fixes in order. */
   | { kind: 'move'; points: TrailPoint[] }
-  /** In one place for a while: where, and roughly how big an area. */
-  | { kind: 'stay'; center: LatLon; radius: number; from: number; to: number }
+  /** In one place for a while: where, and roughly how big an area. `atPlace`: at one of the asset's places, at its middle. */
+  | { kind: 'stay'; center: LatLon; radius: number; from: number; to: number; atPlace?: boolean }
   /**
    * Riding: from the last fix before to the first fix after, through the fixes on the way. Each
    * leg is with GPS or without (underground, drawn straight). The ride is what it was for most of
@@ -105,14 +113,17 @@ export type StayDot = { center: LatLon; to: number; ms: number }
 
 /**
  * Stays as dots on the map. A stay this close to a longer one's dot (back at the same place later,
- * home on two days) joins it, whenever it was; the dot is at the longest stay of its group and fades by
- * the latest. Returns the dots and, for each stay, the index of its dot, so the walks can run to it.
- * This is only for drawing: the trail keeps each visit, so "Here since" is the current one.
+ * home on two days) joins it, whenever it was; the dot is at the longest stay of its group, or at one of
+ * the asset's places, and fades by the latest. Returns the dots and, for each stay, the index of its
+ * dot, so the walks can run to it. This is only for drawing: the trail keeps each visit, so "Here
+ * since" is the current one.
  */
-export function stayDots(stays: { center: LatLon; from: number; to: number }[]): { dots: StayDot[]; dotOf: number[] } {
+export function stayDots(stays: { center: LatLon; from: number; to: number; atPlace?: boolean }[]): { dots: StayDot[]; dotOf: number[] } {
   const dots: StayDot[] = []
   const dotOf: number[] = []
-  const longestFirst = stays.map((_, index) => index).sort((a, b) => stays[b]!.to - stays[b]!.from - (stays[a]!.to - stays[a]!.from))
+  const length = (index: number) => stays[index]!.to - stays[index]!.from
+  const rank = (index: number) => (stays[index]!.atPlace ? 1 : 0)
+  const longestFirst = stays.map((_, index) => index).sort((a, b) => rank(b) - rank(a) || length(b) - length(a))
   for (const index of longestFirst) {
     const stay = stays[index]!
     const near = dots.findIndex((dot) => distance(dot.center, stay.center) <= STAY_DOT_JOIN_METERS)
@@ -146,8 +157,13 @@ type Hop = { from: TrailPoint; to: TrailPoint; kind: HopKind }
  * The trail as pieces, oldest first. Reports without a fix only count as evidence, never as positions.
  * Pottering about one place (a yard, a park) is one stay, so "Here since" holds; `showWandering`, for
  * drawing, keeps the walking about as moves between its stops, and only joins stops across blips.
+ * `places`, for drawing: the asset's places, where stays and the pottering about between them are one
+ * stay at the place's middle (see joinAtPlaces).
  */
-export function classifyTrail(points: TrailPoint[], { showWandering = false } = {}): TrailPiece[] {
+export function classifyTrail(
+  points: TrailPoint[],
+  { showWandering = false, places = [] }: { showWandering?: boolean; places?: TrailPlace[] } = {},
+): TrailPiece[] {
   const hops = toHops(withoutSpikes(points))
   if (hops.length === 0) {
     const fixes = points.filter((point) => point.valid)
@@ -155,7 +171,7 @@ export function classifyTrail(points: TrailPoint[], { showWandering = false } = 
   }
   const pieces: TrailPiece[] = []
   for (const stretch of toStretches(hops)) {
-    if (stretch.kind === 'walk') pieces.push(...splitWalk(stretch.points, showWandering))
+    if (stretch.kind === 'walk') pieces.push(...splitWalk(stretch.points, showWandering, places))
     else if (stretch.kind !== 'gap') {
       pieces.push({ kind: stretch.kind, from: stretch.points[0]!, to: stretch.points.at(-1)!, legs: stretch.legs })
     }
@@ -319,13 +335,14 @@ function toStretches(hops: Hop[]): Stretch[] {
   return stretches
 }
 
-type Part = { stay: boolean; points: TrailPoint[] }
+/** `place`: a stay at one of the asset's places (see joinAtPlaces). */
+type Part = { stay: boolean; points: TrailPoint[]; place?: TrailPlace }
 
 /**
  * Splits walking into moves between stays. A move's ends touch the stays around it. Stays in one
  * place with only local wandering between them (a yard, a park) become one; see mergePlaces.
  */
-function splitWalk(points: TrailPoint[], showWandering: boolean): TrailPiece[] {
+function splitWalk(points: TrailPoint[], showWandering: boolean, places: TrailPlace[]): TrailPiece[] {
   const parts: Part[] = []
   let move: TrailPoint[] = []
   let i = 0
@@ -349,10 +366,41 @@ function splitWalk(points: TrailPoint[], showWandering: boolean): TrailPiece[] {
   }
   if (move.length > 1) parts.push({ stay: false, points: move })
 
-  const merged = mergePlaces(parts, showWandering)
+  const merged = joinAtPlaces(mergePlaces(parts, showWandering), places)
   return (showWandering ? joinShortStops(merged) : merged).map((part) =>
-    part.stay ? toStay(part.points) : { kind: 'move', points: part.points },
+    part.stay ? toStay(part.points, part.place) : { kind: 'move', points: part.points },
   )
+}
+
+/**
+ * For drawing: stays inside one of the asset's places (Home) become one, with the moves next to them
+ * that never got more than PLACE_WANDER_METERS out of it (indoor GPS wander, the garden), and it's
+ * drawn at the place's middle, so home is one dot however the fixes wander. A walk out stays a walk.
+ */
+function joinAtPlaces(parts: Part[], places: TrailPlace[]): Part[] {
+  if (places.length === 0) return parts
+  const tagged = parts.map((part) => {
+    if (!part.stay) return part
+    const middle = centre(part.points)
+    const place = places.find((candidate) => candidate.within(middle, 0))
+    return place ? { ...part, place } : part
+  })
+  // A move next to a stay at a place, that stayed about it, is part of that stay.
+  const placeOf = tagged.map((part, index) => {
+    if (part.stay) return part.place
+    const neighbours = [tagged[index - 1], tagged[index + 1]]
+    return neighbours.find((other) => other?.place && part.points.every((point) => other.place!.within(point, PLACE_WANDER_METERS)))?.place
+  })
+  const joined: Part[] = []
+  tagged.forEach((part, index) => {
+    const place = placeOf[index]
+    const last = joined.at(-1)
+    if (place && last?.place === place) {
+      // Neighbouring parts share their end point.
+      last.points = [...last.points, ...part.points.slice(last.points.at(-1) === part.points[0] ? 1 : 0)]
+    } else joined.push(place ? { stay: true, points: [...part.points], place } : part)
+  })
+  return joined
 }
 
 /**
@@ -362,7 +410,8 @@ function splitWalk(points: TrailPoint[], showWandering: boolean): TrailPiece[] {
 function joinShortStops(parts: Part[]): Part[] {
   const joined: Part[] = []
   for (const part of parts) {
-    const short = part.stay && part.points.at(-1)!.time - part.points[0]!.time < SHORT_STOP_MS
+    // A stop at one of the asset's places is a stop there, however short: walks home end at its dot.
+    const short = part.stay && !part.place && part.points.at(-1)!.time - part.points[0]!.time < SHORT_STOP_MS
     const asMove = short ? { stay: false, points: part.points } : part
     const last = joined.at(-1)
     // Neighbouring parts share their end point.
@@ -427,12 +476,16 @@ function centre(points: TrailPoint[]): LatLon {
   }
 }
 
-/** Where a stay was, and how big an area: 90% of the fixes lie within the radius, so one stray fix doesn't blow it up. */
-function toStay(points: TrailPoint[]): StayPiece {
+/**
+ * Where a stay was, and how big an area: 90% of the fixes lie within the radius, so one stray fix
+ * doesn't blow it up. At one of the asset's places, it's at the place's middle.
+ */
+function toStay(points: TrailPoint[], place?: TrailPlace): StayPiece {
   const center = centre(points)
   const distances = points.map((point) => distance(center, point)).sort((a, b) => a - b)
   const radius = Math.max(STAY_MIN_RADIUS_METERS, distances[Math.ceil(distances.length * 0.9) - 1]!)
-  return { kind: 'stay', center, radius, from: points[0]!.time, to: points.at(-1)!.time }
+  const stay: StayPiece = { kind: 'stay', center, radius, from: points[0]!.time, to: points.at(-1)!.time }
+  return place ? { ...stay, center: place.center, atPlace: true } : stay
 }
 
 /**

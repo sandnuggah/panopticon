@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { classifyTrail, currentActivity, currentStay, latestOutingStart, stayDots, type TrailPiece } from './segments.ts'
+import {
+  classifyTrail,
+  currentActivity,
+  currentStay,
+  distance,
+  latestOutingStart,
+  stayDots,
+  type LatLon,
+  type TrailPiece,
+  type TrailPlace,
+} from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
 // A made-up trip in the shape of real SinoTrack data: a report every 30 s, GPS lost underground,
@@ -321,6 +331,60 @@ describe('stayDots', () => {
     const { dots, dotOf } = stayDots(stays(new Trip().stay(10).walk(10).stay(10).points))
     assert.equal(dots.length, 2)
     assert.deepEqual(dotOf, [0, 1])
+  })
+})
+
+describe('places', () => {
+  const at = (east: number, north = 0): LatLon => ({
+    lat: START.lat + north / METERS_PER_DEGREE_LAT,
+    lon: START.lon + east / METERS_PER_DEGREE_LON,
+  })
+  /** A 50 m circle, like Home. */
+  const circle = (center: LatLon, radius = 50): TrailPlace => ({
+    center,
+    within: (point, margin) => distance(center, point) <= radius + margin,
+  })
+  const stays = (pieces: TrailPiece[]) => pieces.filter((piece): piece is Extract<TrailPiece, { kind: 'stay' }> => piece.kind === 'stay')
+
+  test("stays at a place, with the wandering between them, are one stay at the place's middle", () => {
+    // Indoors the fixes settle in two spots 50 m apart, as at Kofi's home, with hops between them.
+    const points = new Trip().stay(20).walk(0.5, 6).stay(15).walk(0.5, -6).stay(20).points
+    const before = classifyTrail(points, { showWandering: true })
+    assert.deepEqual(kinds(before), ['stay', 'move', 'stay', 'move', 'stay'])
+    const home = circle(at(25))
+    const after = classifyTrail(points, { showWandering: true, places: [home] })
+    assert.deepEqual(kinds(after), ['stay'])
+    assert.deepEqual(stays(after)[0]!.center, home.center)
+    assert.equal(stays(after)[0]!.atPlace, true)
+    assert.equal(stays(after)[0]!.from, points[0]!.time)
+    assert.equal(stays(after)[0]!.to, points.at(-1)!.time)
+  })
+
+  test('a walk out of the place is still a walk, from its dot', () => {
+    const home = circle(at(0))
+    const pieces = classifyTrail(new Trip().stay(20).walk(10).stay(10).points, { showWandering: true, places: [home] })
+    assert.deepEqual(kinds(pieces), ['stay', 'move', 'stay'])
+    assert.deepEqual(stays(pieces)[0]!.center, home.center)
+    assert.equal(stays(pieces)[1]!.atPlace, undefined)
+  })
+
+  test('a stop at a place is a stop there, however short', () => {
+    // Walks east for 10 minutes (about 670 m), then 3 minutes at home: the walk ends at its dot.
+    const trip = new Trip().walk(10).stay(3)
+    const home = circle(trip.points.at(-1)!)
+    assert.deepEqual(kinds(classifyTrail(trip.points, { showWandering: true })), ['move'])
+    assert.deepEqual(kinds(classifyTrail(trip.points, { showWandering: true, places: [home] })), ['move', 'stay'])
+  })
+
+  test("a place's dot takes in a longer stay nearby", () => {
+    const hour = 60 * 60 * 1000
+    const { dots, dotOf } = stayDots([
+      { center: at(0), from: 0, to: hour / 6, atPlace: true },
+      { center: at(30), from: hour, to: 2 * hour },
+    ])
+    assert.equal(dots.length, 1)
+    assert.deepEqual(dotOf, [0, 0])
+    assert.deepEqual(dots[0]!.center, at(0))
   })
 })
 

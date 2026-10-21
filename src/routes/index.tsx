@@ -251,7 +251,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   }, [trailsLoaded])
   // Parks in the map's tiles (null until the map is ready), where walks are snapped more strictly.
   const [parks, setParks] = useState<Park[] | null>(null)
-  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths, parks)
+  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths, parks, places)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
 

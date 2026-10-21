@@ -1,8 +1,8 @@
-import type { LatLon } from './segments'
+import { distance, type LatLon, type TrailPlace } from './segments.ts'
 
 // Places: areas like Home or Daycare, kept in Traccar as geofences (see places.server.ts). Traccar
 // works out which of an asset's places each position is inside (`geofenceIds`), and records arriving
-// and leaving as events. No runtime imports, so Node can run the tests directly.
+// and leaving as events. No runtime imports beyond segments.ts, so Node can run the tests directly.
 
 /** A circle (what panopticon draws), or a polygon drawn in Traccar's own UI. */
 export type PlaceArea = { kind: 'circle'; center: LatLon; radius: number } | { kind: 'polygon'; ring: LatLon[] }
@@ -67,6 +67,42 @@ export function placeCenter(area: PlaceArea): LatLon {
   const lats = area.ring.map((point) => point.lat)
   const lons = area.ring.map((point) => point.lon)
   return { lat: (Math.min(...lats) + Math.max(...lats)) / 2, lon: (Math.min(...lons) + Math.max(...lons)) / 2 }
+}
+
+/** An asset's places as its trail uses them: stays in them are drawn as one dot at the place's middle (see segments.ts). */
+export function trailPlaces(places: Place[], assetId: number): TrailPlace[] {
+  return places
+    .filter((place) => place.assetIds.includes(assetId))
+    .map(({ area }) => ({ center: placeCenter(area), within: (point, margin) => withinArea(area, point, margin) }))
+}
+
+/** Whether a point is inside the area, or at most `margin` metres outside it. */
+export function withinArea(area: PlaceArea, point: LatLon, margin: number): boolean {
+  if (area.kind === 'circle') return distance(area.center, point) <= area.radius + margin
+  if (inRing(point, area.ring)) return true
+  return margin > 0 && area.ring.some((a, index) => metresToSegment(point, a, area.ring[(index + 1) % area.ring.length]!) <= margin)
+}
+
+function inRing(point: LatLon, ring: LatLon[]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [a, b] = [ring[i]!, ring[j]!]
+    if (a.lat > point.lat !== b.lat > point.lat && point.lon < ((b.lon - a.lon) * (point.lat - a.lat)) / (b.lat - a.lat) + a.lon) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
+/** How far a point is from the segment a–b, in metres (flat: places are small). */
+function metresToSegment(point: LatLon, a: LatLon, b: LatLon): number {
+  const metresPerDegreeLon = Math.cos((point.lat * Math.PI) / 180) * 111_320
+  const xy = (q: LatLon) => [(q.lon - point.lon) * metresPerDegreeLon, (q.lat - point.lat) * 110_540] as const
+  const [ax, ay] = xy(a)
+  const [bx, by] = xy(b)
+  const [dx, dy] = [bx - ax, by - ay]
+  const t = dx || dy ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy))) : 0
+  return Math.hypot(ax + t * dx, ay + t * dy)
 }
 
 /** The arrivals and departures that a change of an asset's places means: one per place left or entered. */

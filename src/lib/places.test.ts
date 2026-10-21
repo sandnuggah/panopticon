@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { circleWkt, durationLabel, parseArea, placeCenter, radiusLabel, visitRows, visitSentence, visitsBetween } from './places.ts'
+import {
+  circleWkt,
+  durationLabel,
+  parseArea,
+  placeCenter,
+  radiusLabel,
+  trailPlaces,
+  visitRows,
+  visitSentence,
+  visitsBetween,
+  withinArea,
+  type Place,
+} from './places.ts'
 
 describe('parseArea', () => {
   test("a circle: latitude first, radius in metres, as Traccar's own UI writes it", () => {
@@ -89,5 +101,36 @@ describe('places', () => {
     assert.equal(radiusLabel(75), '75 m')
     assert.equal(radiusLabel(1500), '1.5 km')
     assert.equal(radiusLabel(2000), '2 km')
+  })
+})
+
+describe('withinArea', () => {
+  // About 11 m per 0.0001° of latitude.
+  test('a circle, and a margin around it', () => {
+    const area = parseArea('CIRCLE (59.3 18.07, 50)')!
+    assert.equal(withinArea(area, { lat: 59.3004, lon: 18.07 }, 0), true)
+    assert.equal(withinArea(area, { lat: 59.3006, lon: 18.07 }, 0), false)
+    assert.equal(withinArea(area, { lat: 59.3006, lon: 18.07 }, 25), true)
+  })
+
+  test('a polygon, and a margin around it', () => {
+    const area = parseArea('POLYGON ((59.3 18.07, 59.301 18.07, 59.301 18.072, 59.3 18.072, 59.3 18.07))')!
+    assert.equal(withinArea(area, { lat: 59.3005, lon: 18.071 }, 0), true)
+    assert.equal(withinArea(area, { lat: 59.3012, lon: 18.071 }, 0), false)
+    assert.equal(withinArea(area, { lat: 59.3012, lon: 18.071 }, 25), true)
+    assert.equal(withinArea(area, { lat: 59.3015, lon: 18.071 }, 25), false)
+  })
+})
+
+describe('trailPlaces', () => {
+  test("only the asset's own places, at their middles", () => {
+    const places: Place[] = [
+      { id: 1, name: 'Home', area: parseArea('CIRCLE (59.3 18.07, 50)')!, assetIds: [30] },
+      { id: 2, name: 'Daycare', area: parseArea('CIRCLE (59.35 18.09, 120)')!, assetIds: [10] },
+    ]
+    const mine = trailPlaces(places, 30)
+    assert.equal(mine.length, 1)
+    assert.deepEqual(mine[0]!.center, { lat: 59.3, lon: 18.07 })
+    assert.equal(mine[0]!.within({ lat: 59.3006, lon: 18.07 }, 25), true)
   })
 })
