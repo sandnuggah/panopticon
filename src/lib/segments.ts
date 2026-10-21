@@ -46,6 +46,12 @@ const PLACE_GAP_METERS = 25
 const WANDER_METERS = 50
 /** A move of at most this many fixes between two stays in one place is a blip (GPS noise), not wandering. */
 const BLIP_FIXES = 2
+/**
+ * "Here since" holds after a stay until this many fixes are more than WANDER_METERS outside it: the
+ * asset has left. One fix out, or pottering about nearby, was making it drop out and come back with the
+ * same time once the asset settled again (44 times in a week of Kofi's, nearly all on walks in parks).
+ */
+const LEFT_FIXES = 2
 /** On the map, a stop shorter than this is part of the walk (a dog sniffing), not a dot of its own. */
 const SHORT_STOP_MS = 5 * 60 * 1000
 /** A move that never gets further than this outside a place (GPS wander, the garden) is pottering about there. */
@@ -246,16 +252,23 @@ export function classifyTrail(
 /**
  * Whether the asset is staying in one place right now (the trail ends in a stay, with recent
  * reports, or a tracker that stops reporting when still has been quiet since; see QUIET_MS), and
- * since when. At one of its `places`, wandering about it is part of the stay (see joinAtPlaces).
- * `began` is false when the stay goes back to the first point given, so it may have begun earlier.
+ * since when. At one of its `places`, wandering about it is part of the stay (see joinAtPlaces), and
+ * it holds until the asset has clearly left (see LEFT_FIXES). `began` is false when the stay goes back to the first point given, so it may have begun earlier.
  */
 export function currentStay(points: TrailPoint[], now: number, profile = DEFAULT_TRAIL_PROFILE, places: TrailPlace[] = []): Stay | null {
   const latest = points.at(-1)
   if (!latest || now - latest.time > (profile.quietMs ?? profile.freshMs)) return null
-  const last = classifyTrail(points, { profile, places }).at(-1)
-  if (last?.kind !== 'stay') return null
+  const pieces = classifyTrail(points, { profile, places })
+  const [before, last] = [pieces.at(-2), pieces.at(-1)]
+  let stay = last?.kind === 'stay' ? last : null
+  // Not left yet: a move since the stay that hasn't got clearly away from it (see LEFT_FIXES).
+  if (last?.kind === 'move' && before?.kind === 'stay') {
+    const away = last.points.slice(1).filter((point) => !withinStay(before, [point], WANDER_METERS))
+    if (away.length < LEFT_FIXES) stay = before
+  }
+  if (!stay) return null
   const firstFix = points.find((point) => point.valid)!
-  return { since: last.from, began: last.from > firstFix.time }
+  return { since: stay.from, began: stay.from > firstFix.time }
 }
 
 /**

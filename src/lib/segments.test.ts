@@ -532,6 +532,18 @@ describe('currentStay', () => {
     assert.equal(currentStay(moving.points, moving.now + 60 * 60_000), null)
   })
 
+  test('it holds until the asset has clearly left: two fixes over 50 m outside the stay', () => {
+    // Sniffing about: one fix 60 m off, then nearby again.
+    const sniffing = new Trip().stay(10).extra(30, 60)
+    const since = currentStay(new Trip().stay(10).points, sniffing.now)!.since
+    assert.equal(currentStay(sniffing.points, sniffing.now)?.since, since)
+    // Walking away, a fix every 30 s, 33 m apart: it holds while near, then clears.
+    const leaving = new Trip().stay(10).walk(1)
+    assert.equal(currentStay(leaving.points, leaving.now)?.since, since, 'not clearly away yet')
+    const gone = new Trip().stay(10).walk(4)
+    assert.equal(currentStay(gone.points, gone.now), null)
+  })
+
   test("at one of the asset's places, wandering about it doesn't end the stay", () => {
     // Indoors the fixes settle in two spots 50 m apart, with hops between them.
     const home = new Trip().stay(20).walk(0.5, 6).stay(15).walk(0.5, -6).stay(20)
