@@ -39,14 +39,17 @@ const UNSEEN_FACTOR = 4
 const UNSEEN_METERS = 50
 
 /**
- * A fix or two in a row more than ON_PATH_METERS off the line, each this close to a way (which the
- * line then doesn't take), jumped there: GPS error onto a street below a bridge or the other side of a
- * wall, which the matcher, keeping the walk connected, didn't believe. They're left out (see
- * strayCandidates), park or not. Off the line and away from every way is the grass: kept. More in a
- * row, the matcher may be the one that's wrong: kept.
+ * A fix or two in a row more than ON_PATH_METERS off the line jumped there, GPS error the matcher,
+ * keeping the walk connected, didn't believe, when each is either this close to a way (which the line
+ * then doesn't take: a street below a bridge, the other side of a wall), or, outside a park, farther
+ * than STRAY_FAR_METERS from any (a courtyard, a block, water: on a week of Kofi's, fixes in the
+ * courtyards north of Home 26–40 m from a way, in the canal 33 m). They're left out (see strayed).
+ * In a park, away from every way is the grass: kept. More in a row, the matcher may be the one that's
+ * wrong: kept.
  */
 const STRAY_FIXES = 2
-export const STRAY_NEAR_WAY_METERS = 10
+const STRAY_NEAR_WAY_METERS = 10
+const STRAY_FAR_METERS = 25
 /** A leg nobody saw shorter than this is drawn straight: a route says no more. */
 const MIN_ROUTE_METERS = 20
 
@@ -54,10 +57,11 @@ const MIN_ROUTE_METERS = 20
 type Foot = { segment: number; t: number; point: Point; off: number }
 
 /**
- * A walk as drawn, from drawWalk. `snapped`: some of it follows the line. `unseen`: the legs still
- * straight across where nobody saw the way, by the index in `points` of each leg's start, for a route.
+ * A walk as drawn, from drawWalk. `snapped`: some of it follows the line. `strayed`: some fixes were
+ * left out. `unseen`: the legs still straight across where nobody saw the way, by the index in
+ * `points` of each leg's start, for a route.
  */
-export type DrawnWalk = { points: Point[]; snapped: boolean; unseen: number[] }
+export type DrawnWalk = { points: Point[]; snapped: boolean; strayed: boolean; unseen: number[] }
 
 /**
  * The walk as drawn: the matched line along the stretches where at least MIN_RUN fixes in a row lie
@@ -115,7 +119,7 @@ export function drawWalk(points: Point[], line: Point[], strays: ReadonlySet<num
     const [a, b] = [source[k]!, source[k + 1]!]
     if (a >= 0 && b >= 0 && isUnseen(points, a, b) && metres(drawn[k]!, drawn[k + 1]!) >= MIN_ROUTE_METERS) unseen.push(k)
   }
-  return { points: drawn, snapped: snapped.some(Boolean), unseen }
+  return { points: drawn, snapped: snapped.some(Boolean), strayed: strays.size > 0, unseen }
 }
 
 /** The walk as drawn (see drawWalk), or null when no stretch of it is snapped, so it's drawn as recorded. */
@@ -126,8 +130,8 @@ export function snapAlong(points: Point[], line: Point[]): Point[] | null {
 
 /**
  * The fixes that may have strayed (see STRAY_FIXES), in groups: a fix or two in a row off the line
- * (stays aside). A group strays if each of its fixes is near a way, which only Valhalla knows
- * (matching.server.ts).
+ * (stays aside). Whether they did depends on how far each is from a way, which only Valhalla knows
+ * (see strayed, and matching.server.ts).
  */
 export function strayCandidates(points: Point[], line: Point[]): number[][] {
   const feet = feetOnLine(points, line)
@@ -141,6 +145,12 @@ export function strayCandidates(points: Point[], line: Point[]): number[][] {
     i = Math.max(j, i + 1)
   }
   return groups
+}
+
+/** The fixes that strayed, of strayCandidates' groups, by how far each is from the nearest way (metres). */
+export function strayed(points: Point[], groups: number[][], fromWay: (index: number) => number): Set<number> {
+  const astray = (index: number) => fromWay(index) <= STRAY_NEAR_WAY_METERS || (fromWay(index) > STRAY_FAR_METERS && !points[index]!.park)
+  return new Set(groups.filter((group) => group.every(astray)).flat())
 }
 
 /** Each point's foot on the line, no earlier than the last fix that was on it; null without a line. */

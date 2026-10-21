@@ -234,7 +234,9 @@ function toTrailFeatures(
  * snapped line has no times, so they're spread evenly between the walk's first and last fix, for fading.
  */
 function alongPaths(points: (LatLon & { time: number })[], snapped: LatLon[] | undefined): (LatLon & { time: number })[] {
-  if (!snapped || snapped.length < 2) return points
+  // A line of one point (a walk of strays, left out but for a stay at its end) is nothing to draw.
+  if (!snapped || snapped.length === 0) return points
+  if (snapped.length === 1) return [{ ...snapped[0]!, time: points.at(-1)!.time }]
   const [from, to] = [points[0]!.time, points.at(-1)!.time]
   return snapped.map((point, index) => ({
     ...point,

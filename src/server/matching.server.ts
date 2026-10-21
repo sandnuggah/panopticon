@@ -1,7 +1,7 @@
 import type { MatchablePoint } from '../lib/matching'
 import type { LatLon } from '../lib/segments'
 import { distance } from '../lib/segments'
-import { drawWalk, routeFits, STRAY_NEAR_WAY_METERS, strayCandidates, type DrawnWalk, type Point } from '../lib/snap'
+import { drawWalk, routeFits, strayCandidates, strayed, type DrawnWalk, type Point } from '../lib/snap'
 import { env } from './env.server'
 
 // Snaps walks to streets and paths with Valhalla's map matching (`trace_route`, pedestrian costing),
@@ -74,7 +74,7 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
   return result
 }
 
-/** The fixes that strayed (see strayCandidates in snap.ts): groups whose every fix is near a way, by `locate`. */
+/** The fixes that strayed (see strayCandidates in snap.ts), by how far each is from the nearest way, from `locate`. */
 async function strays(url: string, points: MatchablePoint[], line: LatLon[]): Promise<Set<number>> {
   const groups = strayCandidates(points, line)
   const candidates = groups.flat()
@@ -91,14 +91,16 @@ async function strays(url: string, points: MatchablePoint[], line: LatLon[]): Pr
   if (!response.ok) return new Set()
   type Located = { edges?: { correlated_lat: number; correlated_lon: number }[] | null }
   const located = (await response.json()) as Located[]
-  const nearWay = new Set(
-    candidates.filter((index, k) =>
-      (located[k]?.edges ?? []).some(
-        (edge) => distance(points[index]!, { lat: edge.correlated_lat, lon: edge.correlated_lon }) <= STRAY_NEAR_WAY_METERS,
+  // No way found at all is as far as can be.
+  const fromWay = new Map(
+    candidates.map((index, k) => [
+      index,
+      Math.min(
+        ...(located[k]?.edges ?? []).map((edge) => distance(points[index]!, { lat: edge.correlated_lat, lon: edge.correlated_lon })),
       ),
-    ),
+    ]),
   )
-  return new Set(groups.filter((group) => group.every((index) => nearWay.has(index))).flat())
+  return strayed(points, groups, (index) => fromWay.get(index) ?? Infinity)
 }
 
 /**
@@ -107,7 +109,8 @@ async function strays(url: string, points: MatchablePoint[], line: LatLon[]): Pr
  */
 async function routeUnseen(url: string, walk: DrawnWalk): Promise<LatLon[] | null> {
   const routes = await Promise.all(walk.unseen.map((k) => walkingRoute(url, walk.points[k]!, walk.points[k + 1]!)))
-  if (!walk.snapped && routes.every((route) => route === null)) return null
+  // Nothing changed: drawn as recorded. With fixes left out, though, it's drawn without them.
+  if (!walk.snapped && !walk.strayed && routes.every((route) => route === null)) return null
   const result: LatLon[] = []
   walk.points.forEach((point, k) => {
     result.push({ lat: point.lat, lon: point.lon })

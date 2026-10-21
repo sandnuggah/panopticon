@@ -6,7 +6,7 @@ import type { Asset } from './asset'
 import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
 import { trailPlaces, type Place, type PlaceVisit } from './places'
-import { currentActivity, currentStay, type Activity, type Stay } from './segments'
+import { currentActivity, currentStay, lastConfirmedFix, type Activity, type Stay } from './segments'
 import { trackersOf, trailProfile } from './tracker'
 import { HISTORY_MIN_MINUTES, extendTrails, pruneTrails, trailMinutes, trailStart, type TrailLength, type Trails } from './trail'
 import { useNow } from './useNow'
@@ -188,5 +188,20 @@ export function useLiveAssets(
     return result
   }, [trails, now, trackers, places])
 
-  return { assets, trails: visibleTrails, trailsLoaded, activities, stays, status, updateAvailable }
+  // Each asset where its trail can trust it to be: at its latest fix, unless GPS has yet to confirm
+  // that one (see lastConfirmedFix), with when it last reported all the same.
+  const shownAssets = useMemo(
+    () =>
+      assets.map((asset) => {
+        const points = trails[asset.id]
+        const latest = points?.findLast((point) => point.valid)
+        if (!asset.location || !latest || latest.time !== Date.parse(asset.location.fixTime)) return asset
+        const confirmed = lastConfirmedFix(points!, trailProfile(asset.tracker))
+        if (!confirmed || confirmed === latest) return asset
+        return { ...asset, location: { ...asset.location, lat: confirmed.lat, lon: confirmed.lon, accuracy: undefined } }
+      }),
+    [assets, trails],
+  )
+
+  return { assets: shownAssets, trails: visibleTrails, trailsLoaded, activities, stays, status, updateAvailable }
 }

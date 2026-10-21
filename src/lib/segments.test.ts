@@ -7,6 +7,7 @@ import {
   DEFAULT_TRAIL_PROFILE,
   distance,
   isWeak,
+  lastConfirmedFix,
   latestOutingStart,
   stayDots,
   type LatLon,
@@ -272,6 +273,21 @@ describe('classifyTrail', () => {
     assert.ok(!drawn.includes(points[5]!))
   })
 
+  test('a weak fix out and back is left out with its neighbours minutes apart, a good one only within 3', () => {
+    // 3.5 minutes between the fixes either side, indoors without a fix; the middle one 95 m out.
+    const at = (north: number, step: number, satellites: number): TrailPoint => ({
+      lat: START.lat + north / METERS_PER_DEGREE_LAT,
+      lon: START.lon,
+      time: START.time + step * 30_000,
+      valid: true,
+      satellites,
+    })
+    const drawn = (points: TrailPoint[]) =>
+      classifyTrail(points).some((piece) => piece.kind === 'move' && piece.points.includes(points[1]!))
+    assert.equal(drawn([at(0, 0, 6), at(-95, 6, 6), at(5, 7, 6)]), false)
+    assert.equal(drawn([at(0, 0, 18), at(-95, 6, 18), at(5, 7, 18)]), true)
+  })
+
   test('turning a corner keeps the fix at the corner', () => {
     // 45 m between fixes, east and then north.
     const at = (east: number, north: number, step: number): TrailPoint => ({
@@ -403,6 +419,45 @@ describe('isWeak', () => {
     const byAccuracy = { ...DEFAULT_TRAIL_PROFILE, weakSatellites: undefined, weakAccuracyMeters: 50 }
     assert.equal(isWeak({ ...at, accuracy: 65 }, byAccuracy), true)
     assert.equal(isWeak({ ...at, accuracy: 12, satellites: 4 }, byAccuracy), false)
+  })
+})
+
+describe('unconfirmed fixes', () => {
+  // Metres north of the start, at a step of 30 s, with so many satellites.
+  const at = (north: number, step: number, satellites: number): TrailPoint => ({
+    lat: START.lat + north / METERS_PER_DEGREE_LAT,
+    lon: START.lon,
+    time: START.time + step * 30_000,
+    valid: true,
+    satellites,
+  })
+  const home = [at(0, 0, 18), at(3, 1, 18), at(-2, 2, 18), at(1, 3, 18), at(0, 4, 18)]
+  /** Whether the trail goes anywhere over 100 m from home: a move through such a fix, or a stay there. */
+  const away = (points: TrailPoint[]) =>
+    classifyTrail(points).some((piece) =>
+      piece.kind === 'move'
+        ? piece.points.some((point) => distance(home[0]!, point) > 100)
+        : piece.kind === 'stay' && distance(home[0]!, piece.center) > 100,
+    )
+
+  test('weak fixes far off after a gap, back home without a good fix: left out, and not where the asset is', () => {
+    // 3 minutes without a fix, then 320 m away with 4–7 satellites, then home again after a long sleep.
+    const canal = [at(-320, 10, 7), at(-330, 11, 4), at(-330, 12, 4)]
+    const points = [...home, ...canal, at(5, 400, 6)]
+    assert.equal(away(points), false)
+    assert.equal(lastConfirmedFix([...home, ...canal]), home.at(-1), 'not confirmed yet: where it last was')
+  })
+
+  test('a good fix near them confirms them', () => {
+    const arriving = [at(150, 10, 6), at(155, 11, 12)]
+    assert.equal(lastConfirmedFix([...home, ...arriving]), arriving[1])
+    assert.equal(away([...home, ...arriving]), true)
+  })
+
+  test('good fixes after a gap, or weak ones close by, are never in doubt', () => {
+    assert.equal(lastConfirmedFix([...home, at(-320, 10, 14)])?.satellites, 14)
+    const near = at(60, 10, 5)
+    assert.equal(lastConfirmedFix([...home, near]), near)
   })
 })
 

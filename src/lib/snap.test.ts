@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { drawWalk, routeFits, snapAlong, strayCandidates, type Point } from './snap.ts'
+import { drawWalk, routeFits, snapAlong, strayCandidates, strayed, type Point } from './snap.ts'
 
 // Positions in metres east/north of a start point; the matched line is a path going east, then north.
 const START = { lat: 59.31, lon: 18.07 }
@@ -151,6 +151,19 @@ describe('drawWalk', () => {
       [180, 0],
     ])
     assert.deepEqual(drawn.unseen, [0], 'from the stay to the line: a route')
+    assert.equal(drawn.strayed, true, 'drawn without it, even where nothing else changes')
+    assert.equal(drawWalk(walk, PATH).strayed, false)
+  })
+
+  test('a fix strays near another way, or far from any outside a park; between, or on the grass in a park, it stays', () => {
+    const walk: Point[] = [at(10, 2), at(40, -3), at(70, -40), at(100, 3), at(130, -45), at(160, 2), at(190, -40), at(220, 2)]
+    const groups = [[2], [4], [6]]
+    const metres = (fromWay: number[]) => (index: number) => fromWay[index] ?? 0
+    // 5 m from a street below; 30 m out in a courtyard; 18 m off: anything.
+    assert.deepEqual([...strayed(walk, groups, metres([0, 0, 5, 0, 30, 0, 18, 0]))], [2, 4])
+    const inPark = walk.map((point) => ({ ...point, park: true }))
+    assert.deepEqual([...strayed(inPark, groups, metres([0, 0, 5, 0, 30, 0, 18, 0]))], [2], 'a lawn in a park')
+    assert.deepEqual([...strayed(walk, [[4, 5]], metres([0, 0, 0, 0, 30, 18]))], [], 'only when each of them did')
   })
 
   test('three fixes off the line in a row are no strays', () => {

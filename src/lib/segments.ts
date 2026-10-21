@@ -60,10 +60,24 @@ const PLACE_WANDER_METERS = 25
  * A lone fix at least this far from the fixes either side of it, all within SPIKE_MAX_MS, while
  * those two are much closer to each other (at most SPIKE_SHORTCUT of the way through it), went out
  * and straight back: GPS jumping among buildings or trees, not a trip down the street. It's left out.
+ * A weak fix (see isWeak) may have its neighbours further apart, up to the tracker's silence
+ * (SILENT_MS): indoors there are minutes without a fix around it. On a week of Kofi's that was one
+ * fix, 96 m out from the courtyard behind home into the next block's and 123 m back, over 3.5 minutes.
  */
 const SPIKE_MIN_METERS = 40
 const SPIKE_SHORTCUT = 0.6
 const SPIKE_MAX_MS = 3 * 60 * 1000
+/**
+ * A weak fix (see isWeak) after a gap in the fixes (the tracker's `gapMs`), at least this far from
+ * the fix before the gap, is provisional, and so are the weak fixes after it that stay that far: GPS
+ * finding itself again, as when an ST-904L at home put Kofi in the canal 320 m away (6 fixes, 4–7
+ * satellites, the same position five times), then slept for 2.7 hours and woke up at home. A good fix
+ * within CONFIRM_METERS of them confirms them; a fix back near where it was, a good one elsewhere, or
+ * none yet leaves them out. On a week of Kofi's: that, 5 weak fixes of a doubtful run one morning,
+ * and one arrival home, confirmed 30 s later.
+ */
+const UNCONFIRMED_METERS = 100
+const CONFIRM_METERS = 50
 /** Live activity only counts while reports are this fresh. */
 const ACTIVITY_MAX_AGE_MS = 3 * 60 * 1000
 /**
@@ -234,7 +248,7 @@ export function classifyTrail(
     profile = DEFAULT_TRAIL_PROFILE,
   }: { showWandering?: boolean; places?: TrailPlace[]; profile?: TrailProfile } = {},
 ): TrailPiece[] {
-  const hops = toHops(withoutSpikes(points, profile), profile)
+  const hops = toHops(withoutSpikes(withoutUnconfirmed(points, profile), profile), profile)
   if (hops.length === 0) {
     const fixes = points.filter((point) => point.valid)
     return fixes.length > 0 ? [toStay(fixes)] : []
@@ -302,6 +316,40 @@ export function currentActivity(points: TrailPoint[], now: number, profile = DEF
   return null
 }
 
+/**
+ * The asset's latest fix that can be trusted (see UNCONFIRMED_METERS), for where to show it: not one
+ * GPS has yet to confirm.
+ */
+export function lastConfirmedFix(points: TrailPoint[], profile = DEFAULT_TRAIL_PROFILE): TrailPoint | undefined {
+  return withoutUnconfirmed(points, profile).findLast((point) => point.valid)
+}
+
+/** The points without fixes GPS didn't confirm (see UNCONFIRMED_METERS). */
+function withoutUnconfirmed(points: TrailPoint[], profile: TrailProfile): TrailPoint[] {
+  const unconfirmed = new Set<TrailPoint>()
+  let trusted: TrailPoint | undefined
+  let previous: TrailPoint | undefined
+  let provisional: TrailPoint[] = []
+  for (const fix of points) {
+    if (!fix.valid) continue
+    const weak = isWeak(fix, profile)
+    if (provisional.length > 0) {
+      if (weak && distance(trusted!, fix) >= UNCONFIRMED_METERS) provisional.push(fix)
+      else {
+        if (weak || distance(provisional.at(-1)!, fix) > CONFIRM_METERS) for (const point of provisional) unconfirmed.add(point)
+        provisional = []
+        trusted = fix
+      }
+    } else if (trusted && previous && fix.time - previous.time >= profile.gapMs && weak && distance(trusted, fix) >= UNCONFIRMED_METERS) {
+      provisional = [fix]
+    } else trusted = fix
+    previous = fix
+  }
+  // Not confirmed yet: left out until a good fix is.
+  for (const point of provisional) unconfirmed.add(point)
+  return unconfirmed.size > 0 ? points.filter((point) => !unconfirmed.has(point)) : points
+}
+
 /** The points without GPS spikes (see SPIKE_MIN_METERS). */
 function withoutSpikes(points: TrailPoint[], profile: TrailProfile): TrailPoint[] {
   const fixes = points.filter((point) => point.valid)
@@ -316,7 +364,7 @@ function withoutSpikes(points: TrailPoint[], profile: TrailProfile): TrailPoint[
 }
 
 function isSpike(before: TrailPoint, fix: TrailPoint, after: TrailPoint, profile: TrailProfile): boolean {
-  if (after.time - before.time > profile.spikeMs) return false
+  if (after.time - before.time > (isWeak(fix, profile) ? profile.silentMs : profile.spikeMs)) return false
   const [out, back] = [distance(before, fix), distance(fix, after)]
   return out >= profile.spikeMeters && back >= profile.spikeMeters && distance(before, after) <= SPIKE_SHORTCUT * (out + back)
 }
