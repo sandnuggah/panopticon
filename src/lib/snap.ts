@@ -3,8 +3,11 @@
 // the whole walk from Valhalla (matching.server.ts); this keeps the parts of it the fixes agree with.
 // No runtime imports, so Node can run the tests directly.
 
-/** `park`: the fix is in a park, where a path nearby says less (see parks.ts). */
-export type Point = { lat: number; lon: number; park?: boolean }
+/**
+ * `park`: the fix is in a park, where a path nearby says less (see parks.ts). `anchor`: not a fix but
+ * the stay the walk starts or ends at (see matching.ts). `time` in ms, for gaps between fixes.
+ */
+export type Point = { lat: number; lon: number; park?: boolean; anchor?: boolean; time?: number }
 
 /** A fix this close to the matched line was on a street or path... */
 const ON_PATH_METERS = 20
@@ -25,6 +28,15 @@ const TIE_METERS = 5
  */
 const DETOUR_FACTOR = 1.5
 const DETOUR_METERS = 20
+/**
+ * Legs nobody saw: between a stay and the first or last fix (the tracker asleep, or waking up on the
+ * way), and between fixes at least UNSEEN_MS apart. The way is a guess there, and the way along paths
+ * is a better one than straight across (a bridge, a building, a slope in between), so these follow the
+ * line, or a route (see unseenLegs), unless it's longer than UNSEEN_FACTOR times as far plus UNSEEN_METERS.
+ */
+const UNSEEN_MS = 2 * 60 * 1000
+const UNSEEN_FACTOR = 4
+const UNSEEN_METERS = 50
 
 /** Where a fix lands on the line: after which vertex, how far along that segment, and how far off. */
 type Foot = { segment: number; t: number; point: Point; off: number }
@@ -64,7 +76,8 @@ export function snapAlong(points: Point[], line: Point[]): Point[] | null {
       for (let k = i + 1; k < j; k++) {
         went += metres(points[k - 1]!, points[k]!)
         if (k < j - 1 && behind(feet[k]!, feet[last]!)) continue
-        for (const point of lineBetween(line, feet[last]!, feet[k]!, went)) if (point !== result.at(-1)) result.push(point)
+        const unseen = isUnseen(points[last]!, points[k]!)
+        for (const point of lineBetween(line, feet[last]!, feet[k]!, went, unseen)) if (point !== result.at(-1)) result.push(point)
         went = 0
         last = k
       }
@@ -81,15 +94,45 @@ export function snapAlong(points: Point[], line: Point[]): Point[] | null {
 
 /**
  * The way from one fix's foot to a later one's, `went` metres on by the fixes: the line's vertices
- * between them, or the two feet where the line goes back or detours (see DETOUR_FACTOR), to be
- * joined straight.
+ * between them, or the two feet where the line goes back or detours (see DETOUR_FACTOR; for a leg
+ * nobody saw, UNSEEN_FACTOR), to be joined straight.
  */
-function lineBetween(line: Point[], start: Foot, end: Foot, went: number): Point[] {
+function lineBetween(line: Point[], start: Foot, end: Foot, went: number, unseen: boolean): Point[] {
   if (behind(end, start)) return [start.point, end.point]
   const vertices = line.slice(start.segment + 1, end.segment + 1)
   const way = [start.point, ...vertices, end.point]
   const length = way.slice(1).reduce((sum, point, index) => sum + metres(way[index]!, point), 0)
-  return length > went * DETOUR_FACTOR + DETOUR_METERS ? [start.point, end.point] : vertices
+  return length > tooLong(went, unseen) ? [start.point, end.point] : vertices
+}
+
+/** How long a way between two points `went` metres apart may be before it's a detour. */
+function tooLong(went: number, unseen: boolean): number {
+  return unseen ? went * UNSEEN_FACTOR + UNSEEN_METERS : went * DETOUR_FACTOR + DETOUR_METERS
+}
+
+function isUnseen(a: Point, b: Point): boolean {
+  return !!a.anchor || !!b.anchor || (a.time !== undefined && b.time !== undefined && Math.abs(b.time - a.time) >= UNSEEN_MS)
+}
+
+/**
+ * The legs of a drawn walk (from snapAlong, or the points as recorded) still straight across where
+ * nobody saw the way: from or to an anchor drawn as it is, or between two fixes drawn as recorded at
+ * least UNSEEN_MS apart. As indexes into `drawn`, of each leg's start.
+ */
+export function unseenLegs(points: Point[], drawn: Point[]): number[] {
+  const given = new Set(points)
+  const legs: number[] = []
+  for (let k = 0; k + 1 < drawn.length; k++) {
+    const [a, b] = [drawn[k]!, drawn[k + 1]!]
+    const anchored = (a.anchor && given.has(a)) || (b.anchor && given.has(b))
+    if (anchored || (given.has(a) && given.has(b) && isUnseen(a, b))) legs.push(k)
+  }
+  return legs
+}
+
+/** Whether a route between two points is short enough to draw for a leg nobody saw (see UNSEEN_FACTOR). */
+export function routeFits(a: Point, b: Point, routeMetres: number): boolean {
+  return routeMetres <= tooLong(metres(a, b), true)
 }
 
 function behind(foot: Foot, than: Foot): boolean {

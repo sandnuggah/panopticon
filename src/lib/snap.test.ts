@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { snapAlong, type Point } from './snap.ts'
+import { routeFits, snapAlong, unseenLegs, type Point } from './snap.ts'
 
 // Positions in metres east/north of a start point; the matched line is a path going east, then north.
 const START = { lat: 59.31, lon: 18.07 }
@@ -98,5 +98,42 @@ describe('snapAlong', () => {
       [80, 0],
       [120, 0],
     ])
+  })
+
+  test('a leg nobody saw follows the line further than a detour would', () => {
+    // The same line out to a street and back, but three minutes without a fix before the fix after it.
+    const detour = [at(0, 0), at(50, 0), at(65, -35), at(80, 0), at(150, 0)]
+    const timed = (point: Point, seconds: number): Point => ({ ...point, time: seconds * 1000 })
+    const walk = [timed(at(10, 2), 0), timed(at(30, -3), 30), timed(at(50, 1), 60), timed(at(95, 2), 240), timed(at(120, -1), 270)]
+    assert.deepEqual(snapAlong(walk, detour)!.map(metres), [
+      [10, 0],
+      [50, 0],
+      [65, -35],
+      [80, 0],
+      [120, 0],
+    ])
+  })
+})
+
+describe('unseenLegs', () => {
+  test('from a stay to the first fix, and between fixes minutes apart, drawn straight', () => {
+    const home: Point = { ...at(0, -40), anchor: true }
+    const fixes: Point[] = [
+      { ...at(10, 2), time: 0 },
+      { ...at(30, -3), time: 30_000 },
+      { ...at(90, 5), time: 210_000 },
+    ]
+    assert.deepEqual(unseenLegs([home, ...fixes], [home, ...fixes]), [0, 2])
+  })
+
+  test('a stay that was snapped onto the line is no leg nobody saw', () => {
+    const home: Point = { ...at(0, -5), anchor: true }
+    const walk = [home, at(40, 3), at(80, -2), at(120, 4)]
+    assert.deepEqual(unseenLegs(walk, snapAlong(walk, PATH)!), [])
+  })
+
+  test('a route fits up to 4 times as far plus 50 m', () => {
+    assert.equal(routeFits(at(0, 0), at(100, 0), 440), true)
+    assert.equal(routeFits(at(0, 0), at(100, 0), 460), false)
   })
 })

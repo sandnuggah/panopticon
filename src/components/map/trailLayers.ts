@@ -1,5 +1,5 @@
 import type { GeoJSONSource, MapLibreMap } from 'maplibre-gl'
-import { walkKey } from '../../lib/matching'
+import { stayHopKey, walkKey } from '../../lib/matching'
 import { trailPlaces, type Place } from '../../lib/places'
 import { classifyTrail, latestOutingStart, stayDots, type LatLon, type TrailPiece } from '../../lib/segments'
 import type { TrailPoint, Trails } from '../../lib/trail'
@@ -184,13 +184,16 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>,
         paws.push(line('move', walk, walk.at(-1)!.time))
       } else if (piece.kind === 'stay') {
         // Straight on from another stop, a few dozen metres off (pottering about a park): a line
-        // between their dots.
+        // between their dots, along the way Snap to paths routed, if it did.
         const [before, here] = [dotAt(index - 1), dotAt(index)!]
         if (before && before !== here) {
-          const walk = [
+          const hop = [
             { ...before.center, time: piece.from },
             { ...here.center, time: piece.from },
           ]
+          const routed = snappedWalks[stayHopKey(pieces[index - 1] as Extract<TrailPiece, { kind: 'stay' }>, piece)]
+          // From dot to dot, as walks are: a dot can be at another of its stays.
+          const walk = routed ? [hop[0]!, ...alongPaths(hop, routed), hop[1]!] : hop
           trail.push(line('move', walk, piece.from))
           paws.push(line('move', walk, piece.from))
         }
@@ -217,7 +220,7 @@ function toTrailFeatures(trails: Trails, snappedWalks: Record<string, LatLon[]>,
  * A walk as drawn: the snapped line when Snap to paths has one, else the fixes as recorded. The
  * snapped line has no times, so they're spread evenly between the walk's first and last fix, for fading.
  */
-function alongPaths(points: TrailPoint[], snapped: LatLon[] | undefined): (LatLon & { time: number })[] {
+function alongPaths(points: (LatLon & { time: number })[], snapped: LatLon[] | undefined): (LatLon & { time: number })[] {
   if (!snapped || snapped.length < 2) return points
   const [from, to] = [points[0]!.time, points.at(-1)!.time]
   return snapped.map((point, index) => ({

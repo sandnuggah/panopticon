@@ -1,12 +1,13 @@
 import type { MatchablePoint } from '../lib/matching'
 import type { LatLon } from '../lib/segments'
-import { snapAlong } from '../lib/snap'
+import { routeFits, snapAlong, unseenLegs, type Point } from '../lib/snap'
 import { env } from './env.server'
 
 // Snaps walks to streets and paths with Valhalla's map matching (`trace_route`, pedestrian costing),
 // at MAP_MATCHING_URL. Only this server talks to it; trail points never leave your own machines.
 // The matched line is kept only where the fixes lie along it, and the walk is drawn as recorded
-// elsewhere, such as a dog running about on the grass (`snapAlong`, lib/snap.ts).
+// elsewhere, such as a dog running about on the grass (`snapAlong`, lib/snap.ts). Legs nobody saw
+// (from a stay to the first fix, across long gaps) follow Valhalla's walking route (`route`).
 
 const TIMEOUT_MS = 5_000
 /** Snapped walks are kept in memory; a walk that grows gets a new key. */
@@ -14,11 +15,16 @@ const MAX_CACHED = 500
 
 const cache = new Map<string, LatLon[] | null>()
 
-/** The walk snapped to the street network where it went along it, or null when Valhalla can't or no part of it fits. */
+/**
+ * The walk snapped to the street network where it went along it, with the legs nobody saw routed, or
+ * null when Valhalla can't or none of it fits.
+ */
 export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | null> {
   const url = env().mapMatchingUrl
   if (!url) return null
-  const key = points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}${point.park ? 'p' : ''}`).join(';')
+  const key = points
+    .map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}${point.park ? 'p' : ''}${point.anchor ? 'a' : ''}`)
+    .join(';')
   if (cache.has(key)) return cache.get(key)!
 
   let result: LatLon[] | null = null
@@ -46,9 +52,12 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
       const line = trips
         .sort((a, b) => firstPoint(a) - firstPoint(b))
         .flatMap((trip) => (trip.legs ?? []).flatMap((leg) => (leg.shape ? decodePolyline6(leg.shape) : [])))
-      if (line.length >= 2) result = snapAlong(points, line)?.map(({ lat, lon }) => ({ lat, lon })) ?? null
-    } else if (response.status !== 400) {
-      // 400 means Valhalla found no match (e.g. points far from any path); anything else is worth a log line.
+      const snapped = line.length >= 2 ? snapAlong(points, line) : null
+      result = await routeUnseen(url, points, snapped)
+    } else if (response.status === 400) {
+      // No match (e.g. points far from any path): the legs nobody saw may still have a route.
+      result = await routeUnseen(url, points, null)
+    } else {
       console.warn(`Map matching failed with HTTP ${response.status}`)
     }
   } catch (error) {
@@ -59,6 +68,40 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
   if (cache.size >= MAX_CACHED) cache.delete(cache.keys().next().value!)
   cache.set(key, result)
   return result
+}
+
+/**
+ * The walk as drawn (snapped, or as recorded when `snapped` is null) with its legs nobody saw along
+ * Valhalla's walking route where one fits (see unseenLegs). Null when nothing was snapped or routed.
+ */
+async function routeUnseen(url: string, points: MatchablePoint[], snapped: Point[] | null): Promise<LatLon[] | null> {
+  const drawn = snapped ?? points
+  const legs = unseenLegs(points, drawn)
+  const routes = await Promise.all(legs.map((k) => walkingRoute(url, drawn[k]!, drawn[k + 1]!)))
+  if (!snapped && routes.every((route) => route === null)) return null
+  const result: LatLon[] = []
+  drawn.forEach((point, k) => {
+    result.push({ lat: point.lat, lon: point.lon })
+    const route = routes[legs.indexOf(k)]
+    if (route) result.push(...route)
+  })
+  return result
+}
+
+/** Valhalla's walking route between two points, if it fits a leg nobody saw (see routeFits in snap.ts). */
+async function walkingRoute(url: string, from: Point, to: Point): Promise<LatLon[] | null> {
+  const response = await fetch(`${url}/route`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locations: [from, to].map(({ lat, lon }) => ({ lat, lon })), costing: 'pedestrian' }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  })
+  // 400: no route (e.g. a point far from any path).
+  if (!response.ok) return null
+  const body = (await response.json()) as { trip?: { summary?: { length?: number }; legs?: { shape?: string }[] } }
+  const metres = (body.trip?.summary?.length ?? Infinity) * 1000
+  const shape = body.trip?.legs?.[0]?.shape
+  return shape && routeFits(from, to, metres) ? decodePolyline6(shape) : null
 }
 
 /** Valhalla's shapes are Google-style encoded polylines with 6 decimals. */
