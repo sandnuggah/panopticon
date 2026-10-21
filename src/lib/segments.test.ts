@@ -6,6 +6,7 @@ import {
   currentStay,
   DEFAULT_TRAIL_PROFILE,
   distance,
+  confirmedLocation,
   isWeak,
   lastConfirmedFix,
   latestOutingStart,
@@ -452,6 +453,14 @@ describe('unconfirmed fixes', () => {
     const arriving = [at(150, 10, 6), at(155, 11, 12)]
     assert.equal(lastConfirmedFix([...home, ...arriving]), arriving[1])
     assert.equal(away([...home, ...arriving]), true)
+  })
+
+  test('where to show the asset: at its last confirmed fix, as of its latest report', () => {
+    const canal = [at(-320, 10, 7), at(-330, 11, 4)]
+    const latest = { lat: canal[1]!.lat, lon: canal[1]!.lon, fixTime: new Date(canal[1]!.time).toISOString(), accuracy: 0 }
+    const shown = confirmedLocation(latest, [...home, ...canal])
+    assert.deepEqual([shown.lat, shown.lon, shown.fixTime, shown.accuracy], [home.at(-1)!.lat, home.at(-1)!.lon, latest.fixTime, undefined])
+    assert.equal(confirmedLocation(latest, home), latest, 'fixes not up to it yet: as it is')
   })
 
   test('good fixes after a gap, or weak ones close by, are never in doubt', () => {

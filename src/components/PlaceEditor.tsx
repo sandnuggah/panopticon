@@ -10,7 +10,7 @@ import { deletePlace, findAddresses, savePlaceChange } from '../server/places.fu
 import type { FoundAddress } from '../server/geocode.server'
 import type { EditResult } from '../server/manage.server'
 import type { Inset } from './map/PlacePicker'
-import { CARD_BG, CloseButton, moveFocus, ROWS, SIDE_PANEL_ABOVE_ZOOM, sidePanel } from './cards'
+import { CARD_BG, CloseButton, moveFocus, ROWS, SCROLLS, SIDE_PANEL_ABOVE_ZOOM, sidePanel } from './cards'
 
 type Managed = Awaited<ReturnType<typeof getManagedAssets>>
 
@@ -195,7 +195,7 @@ export function PlaceEditor({ place, radius, onRadiusChange, center, onInset, ca
     >
       <div
         ref={card}
-        className={`relative max-h-[50dvh] overflow-y-auto rounded-[40px] pt-4 pb-2 shadow-2xl ${SIDE_PANEL_ABOVE_ZOOM} ${CARD_BG}`}
+        className={`relative max-h-[50dvh] rounded-[40px] pt-4 pb-2 shadow-2xl ${SCROLLS} ${SIDE_PANEL_ABOVE_ZOOM} ${CARD_BG}`}
       >
         <div className="flex items-center gap-2 pl-5 pr-4">
           <h2 className="min-w-0 flex-1 text-xl font-bold break-words">{place ? place.name : 'New place'}</h2>
@@ -215,7 +215,7 @@ export function PlaceEditor({ place, radius, onRadiusChange, center, onInset, ca
           </p>
         )}
 
-        <List strong inset colors={ROWS} className="my-4!">
+        <List strong inset colors={ROWS} className="mt-4!">
           <ListInput
             label="Name"
             value={name}
@@ -268,6 +268,7 @@ export function PlaceEditor({ place, radius, onRadiusChange, center, onInset, ca
                     disabled={!canEdit}
                     aria-label="Size"
                     aria-valuetext={radiusLabel(PLACE_RADII[step]!)}
+                    style={{ '--range-at': step / (PLACE_RADII.length - 1) } as React.CSSProperties}
                     onChange={(event: React.ChangeEvent<HTMLInputElement>) => onRadiusChange(PLACE_RADII[Number(event.target.value)]!)}
                   />
                 }

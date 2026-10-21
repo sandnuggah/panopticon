@@ -19,6 +19,7 @@ import {
   moveFocus,
   pageCardClass,
   ROWS,
+  SCROLLS,
   SIDE_PANEL_MAX_HEIGHT,
   sidePanel,
   sidePanelClosed,
@@ -184,7 +185,7 @@ export function SettingsCard({
       >
         {/* As tall as the main list and the map credits under it, at any text size; it scrolls on short screens. */}
         <div
-          className={`relative max-h-[calc(100dvh-env(safe-area-inset-top)-96px)] overflow-y-auto rounded-[40px] pt-5 shadow-2xl ${SIDE_PANEL_MAX_HEIGHT} ${CARD_BG}`}
+          className={`relative max-h-[calc(100dvh-env(safe-area-inset-top)-96px)] rounded-[40px] pt-5 shadow-2xl ${SCROLLS} ${SIDE_PANEL_MAX_HEIGHT} ${CARD_BG}`}
         >
           <CloseButton ref={settingsClose} className="absolute right-4 top-4 z-10" onClick={onClose} />
           <MainView user={user} assetCount={assets.length} placeCount={places.length} attribution={attribution} onShow={onShow} />

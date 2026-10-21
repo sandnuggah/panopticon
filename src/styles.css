@@ -548,9 +548,61 @@ html.dark:has(.k-material) {
   pointer-events: none;
 }
 
+/* A place's centre: a map pin on a disc in the place's colour, with a white ring like the markers'. */
+.place-pin {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  background: var(--place);
+  color: #ffffff;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+
+.place-pin svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Hidden when the place is too small on screen (placeLayers.ts); display above would override it. */
+.place-pin[hidden] {
+  display: none;
+}
+
 /* --place is lighter on a night map, too light behind white text: iOS's dark-mode indigo instead. */
-.map-dark .place-label {
+.map-dark .place-label,
+.map-dark .place-pin {
   background: #5e5ce6;
+}
+
+/* Konsta's slider (the place size, PlaceEditor.tsx). It hides the input's own thumb under the one
+   it draws with one rule for every engine's thumb, which each browser drops whole for naming
+   another engine's pseudo-element: hidden here engine by engine, Konsta's sizes kept, so the thumb
+   is still grabbed where it's drawn. And it draws its thumb from the value's share of the width, so
+   at the far end it hangs off: --range-at (0–1, set where it's used) brings it back over the input's. */
+.k-range input::-webkit-slider-thumb {
+  appearance: none;
+  width: 2.375rem;
+  height: 1.5rem;
+  margin-top: -0.75rem;
+  border: none;
+  opacity: 0;
+}
+.k-range input::-moz-range-thumb {
+  width: 2.375rem;
+  height: 1.5rem;
+  border: none;
+  opacity: 0;
+}
+.k-range input::-webkit-slider-runnable-track {
+  appearance: none;
+  height: 1px;
+}
+.k-range > span:last-child {
+  margin-inline-start: calc(var(--range-at, 0) * -2.375rem);
 }
 
 /* The circle being placed (map/PlacePicker.tsx), in the middle of the map above the editor card. */
@@ -603,8 +655,9 @@ html.dark:has(.k-material) {
 }
 
 /* Map markers: maplibre DOM markers (see map/markers.ts). In px, like the map's own labels: the
-   map doesn't follow Dynamic Type. */
+   map doesn't follow Dynamic Type. Above the places' pins and names, an asset at home on its pin. */
 .marker {
+  z-index: 1;
   display: grid;
   justify-items: center;
   padding: 0;
@@ -664,8 +717,38 @@ html.dark:has(.k-material) {
   opacity: 0.7;
 }
 
+/* The pin of the place the asset is at, when that place is too small on screen to show its own
+   (map/markers.ts): at the top right of the dot, like an app's badge. */
+.marker-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  background: var(--place);
+  color: #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.marker-badge svg {
+  width: 10px;
+  height: 10px;
+}
+
+.marker-badge[hidden] {
+  display: none;
+}
+
+.map-dark .marker-badge {
+  background: #5e5ce6;
+}
+
 .marker-selected {
-  z-index: 1;
+  z-index: 2;
 }
 
 /* Same size as unselected; the ring alone marks the selection. */

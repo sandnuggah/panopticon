@@ -9,6 +9,13 @@ export const CARD_BG = 'ios:bg-ios-light-surface ios:dark:bg-[#1c1c1e] material:
 /** In dark mode a card's rows are a step lighter than the card, as in Apple Maps. */
 export const ROWS = { strongBgIos: 'bg-ios-light-surface-1 dark:bg-[#2c2c2e]' }
 
+/**
+ * A card that scrolls: a thin scrollbar on a clear track, inside its rounded corners. Phones overlay
+ * theirs anyway; a computer's otherwise takes a grey strip of its own along the card's edge.
+ */
+export const SCROLLS =
+  'overflow-y-auto [scrollbar-width:thin] [scrollbar-color:color-mix(in_srgb,currentColor_30%,transparent)_transparent]'
+
 /** Dims what's under a card; tapping it closes the card. */
 export function Backdrop({ shown, z, onClick }: { shown: boolean; z: string; onClick: () => void }) {
   return (

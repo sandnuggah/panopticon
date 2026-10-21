@@ -56,8 +56,11 @@ export function streetOf(address: string): string | null {
 /** An asset arriving at or leaving a place, from Traccar's events or seen live. */
 export type PlaceVisit = { assetId: number; placeId: number; arrived: boolean; time: string }
 
-/** The radii a circle can have, in metres: small enough for a garden, though GPS fixes wander 15–25 m. */
-export const PLACE_RADII = [50, 75, 100, 150, 200, 300, 500, 750, 1000, 1500, 2000]
+/**
+ * The radii a circle can have, in metres: 50 to 100 m in steps of 5, a home, a garden or a daycare.
+ * Not smaller: GPS fixes wander 15–25 m, so the asset would come and go while it sits still.
+ */
+export const PLACE_RADII = Array.from({ length: 11 }, (_, index) => 50 + index * 5)
 
 // Traccar's areas are WKT, latitude first: `CIRCLE (lat lon, radius)` (radius in metres, not
 // standard WKT) or `POLYGON ((lat lon, lat lon, ...))`, without holes. Other shapes (LINESTRING
@@ -115,6 +118,16 @@ export function trailPlaces(places: Place[], assetId: number): TrailPlace[] {
   return places
     .filter((place) => place.assetIds.includes(assetId))
     .map(({ area, wayIn }) => ({ center: wayIn ?? placeCenter(area), within: (point, margin) => withinArea(area, point, margin) }))
+}
+
+/**
+ * The asset's place a point is inside, for showing the asset at its centre: of several, the one whose
+ * centre is nearest.
+ */
+export function placeAt(places: Place[], assetId: number, point: LatLon): Place | undefined {
+  return places
+    .filter((place) => place.assetIds.includes(assetId) && withinArea(place.area, point, 0))
+    .sort((a, b) => distance(placeCenter(a.area), point) - distance(placeCenter(b.area), point))[0]
 }
 
 /** Whether a point is inside the area, or at most `margin` metres outside it. */

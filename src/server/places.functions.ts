@@ -6,7 +6,7 @@ import { withToken } from './session.server'
 
 // Traccar stores geofence names in a 128-character column.
 const MAX_NAME_LENGTH = 128
-/** Metres. The editor offers 50 m to 2 km (PLACE_RADII), but keeps a radius set in Traccar until it's moved. */
+/** Metres. The editor offers 50–100 m (PLACE_RADII), but keeps a radius set in Traccar until it's moved. */
 const MAX_RADIUS = 100_000
 const MAX_ADDRESS_LENGTH = 200
 

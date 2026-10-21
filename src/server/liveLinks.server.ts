@@ -1,16 +1,21 @@
 import type { Asset } from '../lib/asset'
 import type { LiveUpdate } from '../lib/live'
+import { confirmedLocation } from '../lib/segments'
 import type { SharedView } from '../lib/share'
+import { trailProfile, type TrackerKind } from '../lib/tracker'
+import { HISTORY_MIN_MINUTES, type TrailPoint } from '../lib/trail'
 import { lookUpAddress } from './address.server'
-import { toAsset, toDeviceUpdate, toPositionUpdate } from './assets.server'
+import { toAsset, toDeviceUpdate, toPositionUpdate, toTrailPoint } from './assets.server'
 import { env } from './env.server'
 import { imageResponse } from './images.server'
+import { adapterFor } from './trackers.server'
 import { connectUpstream, relay } from './live.server'
 import { sealLiveLink, unsealLiveLink, type LiveLinkData } from './liveLinkSeal.server'
 import {
   createToken,
   getDevice,
   getLatestPositions,
+  getPositionHistory,
   revokeToken,
   TraccarError,
   type TraccarDevice,
@@ -22,7 +27,9 @@ import {
 // and holds a Traccar token of the sharer's own, made for this link and expiring with it, so Traccar
 // enforces the expiry too. Stopping a link revokes that token. What a viewer gets is deliberately
 // less than the app shows: the asset's name, picture, position, status and address; never its
-// battery, trail, tracker ID, or anything about the sharer or their other assets.
+// battery, trail, tracker ID, or anything about the sharer or their other assets. The position is
+// where the app shows it too: the last fix GPS confirmed (see confirmedLocation in segments.ts),
+// judged here on the asset's recent fixes, which stay on the server.
 
 /** Creates a link to `assetId` lasting `hours`, capped at the sharer's own session. */
 export async function createLiveLink(
@@ -105,7 +112,8 @@ export async function sharedLiveResponse(request: Request, link: string): Promis
     // The socket gives no reason; a stopped link ends quietly, anything else is worth retrying.
     return (await stillShared()) ? new Response('Live updates are unavailable', { status: 502 }) : new Response(null, { status: 204 })
   }
-  return relay(request, socket, ({ devices, positions }) => toSharedUpdates(devices, positions, data.assetId, link), {
+  const fixes = await recentFixes(data, await latestPosition(data))
+  return relay(request, socket, ({ devices, positions }) => toSharedUpdates(devices, positions, data.assetId, link, fixes), {
     endAt: data.expiresAt,
     check: stillShared,
   })
@@ -122,17 +130,46 @@ function openLink(link: string): Opened {
 
 /** The asset as a viewer sees it, or null when the sharer can no longer see it either. */
 async function loadShared(data: LiveLinkData, link: string): Promise<Asset | null> {
-  const [device, positions] = await Promise.all([getDevice(data.token, data.assetId), getLatestPositions(data.token)])
+  const [device, latest] = await Promise.all([getDevice(data.token, data.assetId), latestPosition(data)])
   if (!device || device.disabled) return null
-  const asset = toAsset(
-    device,
-    positions.find((position) => position.deviceId === data.assetId),
-  )
-  return { ...asset, battery: undefined, imageUrl: sharedImageUrl(device, link), placeIds: [] }
+  const asset = toAsset(device, latest)
+  const fixes = await recentFixes(data, latest)
+  const location = asset.location && confirmedLocation(asset.location, fixes.points, trailProfile(fixes.tracker))
+  return { ...asset, location, battery: undefined, tracker: undefined, imageUrl: sharedImageUrl(device, link), placeIds: [] }
 }
 
-/** Only this asset's updates, with the same fields left out as on the page. */
-function toSharedUpdates(devices: TraccarDevice[], positions: TraccarPosition[], assetId: number, link: string): LiveUpdate[] {
+async function latestPosition(data: LiveLinkData): Promise<TraccarPosition | undefined> {
+  return (await getLatestPositions(data.token)).find((position) => position.deviceId === data.assetId)
+}
+
+/** The asset's recent fixes, to judge where to show it, and its kind of tracker; kept up to date while a page follows it. */
+type RecentFixes = { points: TrailPoint[]; tracker?: TrackerKind }
+
+/**
+ * The HISTORY_MIN_MINUTES before the asset's latest fix (a tracker asleep reports nothing for hours),
+ * as the app loads them. None when Traccar won't give them (reports disabled): then the latest as it is.
+ */
+async function recentFixes(data: LiveLinkData, latest: TraccarPosition | undefined): Promise<RecentFixes> {
+  const fixes: RecentFixes = { points: [], tracker: latest ? adapterFor(latest.protocol).kind : undefined }
+  if (!latest) return fixes
+  const to = new Date()
+  const from = new Date(Math.min(to.getTime(), Date.parse(latest.fixTime)) - HISTORY_MIN_MINUTES * 60 * 1000)
+  try {
+    fixes.points = (await getPositionHistory(data.token, data.assetId, from, to)).map(toTrailPoint).sort((a, b) => a.time - b.time)
+  } catch (error) {
+    if (error instanceof TraccarError && error.status === 401) throw error
+  }
+  return fixes
+}
+
+/** Only this asset's updates, with the same fields left out as on the page, at the position the app shows. */
+function toSharedUpdates(
+  devices: TraccarDevice[],
+  positions: TraccarPosition[],
+  assetId: number,
+  link: string,
+  fixes: RecentFixes,
+): LiveUpdate[] {
   const updates: LiveUpdate[] = []
   for (const device of devices) {
     if (device.id !== assetId) continue
@@ -142,8 +179,15 @@ function toSharedUpdates(devices: TraccarDevice[], positions: TraccarPosition[],
   for (const position of positions) {
     if (position.deviceId !== assetId) continue
     const update = toPositionUpdate(position)
-    if (update.kind === 'position')
-      updates.push({ kind: 'position', id: update.id, location: update.location, valid: update.valid, placeIds: [] })
+    if (update.kind !== 'position') continue
+    const point = toTrailPoint(position)
+    if (point.time > (fixes.points.at(-1)?.time ?? 0)) fixes.points.push(point)
+    fixes.tracker = update.tracker ?? fixes.tracker
+    // Only as far back as the app looks: a page left open for days keeps a few hours of fixes.
+    const since = point.time - 2 * HISTORY_MIN_MINUTES * 60 * 1000
+    if ((fixes.points[0]?.time ?? since) < since) fixes.points = fixes.points.filter((fix) => fix.time >= since)
+    const location = confirmedLocation(update.location, fixes.points, trailProfile(fixes.tracker))
+    updates.push({ kind: 'position', id: update.id, location, valid: update.valid, placeIds: [] })
   }
   return updates
 }

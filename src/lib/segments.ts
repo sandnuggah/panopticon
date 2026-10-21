@@ -324,6 +324,23 @@ export function lastConfirmedFix(points: TrailPoint[], profile = DEFAULT_TRAIL_P
   return withoutUnconfirmed(points, profile).findLast((point) => point.valid)
 }
 
+/**
+ * Where to show an asset whose latest location is `location`, with its recent fixes: there, unless GPS
+ * has yet to confirm it, then at the last confirmed fix, keeping when it last reported. As it is when
+ * the fixes don't end with that location (not loaded yet).
+ */
+export function confirmedLocation<L extends LatLon & { fixTime: string; accuracy?: number }>(
+  location: L,
+  points: TrailPoint[],
+  profile = DEFAULT_TRAIL_PROFILE,
+): L {
+  const latest = points.findLast((point) => point.valid)
+  if (!latest || latest.time !== Date.parse(location.fixTime)) return location
+  const confirmed = lastConfirmedFix(points, profile)
+  if (!confirmed || confirmed === latest) return location
+  return { ...location, lat: confirmed.lat, lon: confirmed.lon, accuracy: undefined }
+}
+
 /** The points without fixes GPS didn't confirm (see UNCONFIRMED_METERS). */
 function withoutUnconfirmed(points: TrailPoint[], profile: TrailProfile): TrailPoint[] {
   const unconfirmed = new Set<TrailPoint>()

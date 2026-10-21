@@ -5,8 +5,8 @@ import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
-import { trailPlaces, type Place, type PlaceVisit } from './places'
-import { currentActivity, currentStay, lastConfirmedFix, type Activity, type Stay } from './segments'
+import { placeAt, placeCenter, trailPlaces, type Place, type PlaceVisit } from './places'
+import { confirmedLocation, currentActivity, currentStay, type Activity, type Stay } from './segments'
 import { trackersOf, trailProfile } from './tracker'
 import { HISTORY_MIN_MINUTES, extendTrails, pruneTrails, trailMinutes, trailStart, type TrailLength, type Trails } from './trail'
 import { useNow } from './useNow'
@@ -189,18 +189,19 @@ export function useLiveAssets(
   }, [trails, now, trackers, places])
 
   // Each asset where its trail can trust it to be: at its latest fix, unless GPS has yet to confirm
-  // that one (see lastConfirmedFix), with when it last reported all the same.
+  // that one (see lastConfirmedFix); and at one of its places, at the place's centre, so it sits still
+  // there however its fixes wander indoors. With when it last reported all the same.
   const shownAssets = useMemo(
     () =>
       assets.map((asset) => {
+        if (!asset.location) return asset
         const points = trails[asset.id]
-        const latest = points?.findLast((point) => point.valid)
-        if (!asset.location || !latest || latest.time !== Date.parse(asset.location.fixTime)) return asset
-        const confirmed = lastConfirmedFix(points!, trailProfile(asset.tracker))
-        if (!confirmed || confirmed === latest) return asset
-        return { ...asset, location: { ...asset.location, lat: confirmed.lat, lon: confirmed.lon, accuracy: undefined } }
+        let location = points ? confirmedLocation(asset.location, points, trailProfile(asset.tracker)) : asset.location
+        const place = placeAt(places, asset.id, location)
+        if (place) location = { ...location, ...placeCenter(place.area), accuracy: undefined }
+        return location === asset.location ? asset : { ...asset, location }
       }),
-    [assets, trails],
+    [assets, trails, places],
   )
 
   return { assets: shownAssets, trails: visibleTrails, trailsLoaded, activities, stays, status, updateAvailable }

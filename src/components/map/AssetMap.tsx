@@ -18,7 +18,7 @@ import { addMyPositionLayer, createMyPositionDot, setAccuracyCircle } from './my
 import { circle } from './geometry'
 import { createMarkerElement, updateMarkerElement } from './markers'
 import { addTrailLayers, recolourTrails, setTrails, showPawPrints } from './trailLayers'
-import { addPlaceLayers, recolourPlaces, setPlaces } from './placeLayers'
+import { addPlaceLayers, recolourPlaces, setPlaces, showsPin } from './placeLayers'
 import { NO_COVER, type Cover } from '../cards'
 import { MapButtons } from './MapButtons'
 import { PlacePicker, type PickerProps } from './PlacePicker'
@@ -104,6 +104,8 @@ export default function AssetMap({
   const mapRef = useRef<MapLibreMap | null>(null)
   const markersRef = useRef(new Map<number, Marker>())
   const onMarkerTapRef = useRef((_id: number) => {})
+  /** Brings every marker up to date; again on each zoom, which decides the place badges (see markers.ts). */
+  const updateMarkersRef = useRef(() => {})
   const cameraPlacedRef = useRef(false)
   const [styleLoaded, setStyleLoaded] = useState(false)
   const now = useNow(30_000)
@@ -262,6 +264,8 @@ export default function AssetMap({
     }
 
     mapRef.current = map
+    // From the start: the first move to a place (the place editor's jump to it) can come before the tiles.
+    map.on('zoom', () => updateMarkersRef.current())
     const markers = markersRef.current
     return () => {
       markers.clear()
@@ -339,10 +343,6 @@ export default function AssetMap({
           .addTo(map)
         markers.set(asset.id, marker)
       }
-      updateMarkerElement(marker.getElement(), asset, {
-        stale: isStale(asset, now),
-        selected: asset.id === selectedId,
-      })
     }
     for (const [id, marker] of markers) {
       if (!located.has(id)) {
@@ -350,7 +350,17 @@ export default function AssetMap({
         markers.delete(id)
       }
     }
-  }, [assets, selectedId, now])
+    updateMarkersRef.current = () => {
+      for (const asset of assets) {
+        const marker = markers.get(asset.id)
+        if (!marker) continue
+        // At a place too small on screen to show its own pin: the asset wears it.
+        const atPlace = places.find((place) => asset.placeIds.includes(place.id) && !showsPin(map, place))?.name
+        updateMarkerElement(marker.getElement(), asset, { stale: isStale(asset, now), selected: asset.id === selectedId, atPlace })
+      }
+    }
+    updateMarkersRef.current()
+  }, [assets, selectedId, now, places])
 
   // First render: show the selected asset, or fit all assets. Afterwards: fly to each new selection.
   useEffect(() => {

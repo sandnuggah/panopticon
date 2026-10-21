@@ -5,6 +5,7 @@ import {
   durationLabel,
   parseArea,
   parseWayIn,
+  placeAt,
   placeCenter,
   radiusLabel,
   streetOf,
@@ -164,5 +165,18 @@ describe('address and way in', () => {
     assert.equal(streetOf('12 Main Street, Springfield'), 'Main Street')
     assert.equal(streetOf('Rue de la Paix 4b'), 'Rue de la Paix')
     assert.equal(streetOf('116 67, Stockholm'), null)
+  })
+})
+
+describe('placeAt', () => {
+  const home: Place = { id: 1, name: 'Home', area: parseArea('CIRCLE (59.3 18.07, 50)')!, assetIds: [30] }
+  const yard: Place = { id: 2, name: 'Yard', area: parseArea('CIRCLE (59.3004 18.07, 50)')!, assetIds: [30] }
+  const daycare: Place = { id: 3, name: 'Daycare', area: parseArea('CIRCLE (59.3 18.07, 100)')!, assetIds: [10] }
+
+  test("the asset's own place it's in; of two, the one whose centre is nearest", () => {
+    assert.equal(placeAt([home, yard, daycare], 30, { lat: 59.3001, lon: 18.07 })?.name, 'Home')
+    assert.equal(placeAt([home, yard, daycare], 30, { lat: 59.3003, lon: 18.07 })?.name, 'Yard')
+    assert.equal(placeAt([home, daycare], 30, { lat: 59.301, lon: 18.07 }), undefined, 'outside')
+    assert.equal(placeAt([daycare], 30, { lat: 59.3, lon: 18.07 }), undefined, 'not its place')
   })
 })

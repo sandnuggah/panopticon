@@ -1,18 +1,23 @@
 import { Marker, type GeoJSONSource, type MapLibreMap } from 'maplibre-gl'
-import type { Place } from '../../lib/places'
+import { placeCenter, type Place } from '../../lib/places'
 import { circle } from './geometry'
 
-// Places (lib/places.ts) on the map: a soft area with an outline in --place, under the trail, and
-// the name at its top edge, where it doesn't cover an asset at home. Names are DOM labels like the
-// markers' (styles.css .place-label): the map's own text needs fonts the style may not have.
+// Places (lib/places.ts) on the map: a soft area with an outline in --place, under the trail, a pin
+// at its centre, and the name at its top edge, where it doesn't cover an asset at home. The pin and
+// name are DOM markers like the assets' (styles.css .place-pin, .place-label), under them: the map's
+// own symbols need fonts and icons the style may not have.
 
 const PLACES = 'places'
 const PLACES_FILL = 'places-fill'
 const PLACES_OUTLINE = 'places-outline'
 
-/** Each map's name labels, by place id. */
+/** Each map's name labels and centre pins, by place id. */
 const labelsByMap = new WeakMap<MapLibreMap, Map<number, Marker>>()
-/** A label shows once its place is at least this big on screen (px across); smaller, it would sit on the markers. */
+const pinsByMap = new WeakMap<MapLibreMap, Map<number, Marker>>()
+/** The pin's map pin glyph, as PinIcon in icons.tsx; also the badge on an asset at a place (markers.ts). */
+export const PIN_PATH =
+  'M12 21.5s-6.5-6.2-6.5-11.5a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11.5-6.5 11.5ZM12 12.4a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8Z'
+/** A label and pin show once their place is at least this big on screen (px across); smaller, they would sit on the markers. */
 const LABEL_MIN_PX = 24
 
 /** Adds the place layers, empty; again after each style load, before the trail's so they sit under it. */
@@ -41,14 +46,18 @@ export function setPlaces(map: MapLibreMap, places: Place[], hiddenId: number | 
   })
 
   let labels = labelsByMap.get(map)
-  if (!labels) {
+  let pins = pinsByMap.get(map)
+  if (!labels || !pins) {
     labelsByMap.set(map, (labels = new Map()))
+    pinsByMap.set(map, (pins = new Map()))
     map.on('zoom', () => showLabelsBySize(map))
   }
-  for (const [id, label] of labels) {
-    if (shown.some((place) => place.id === id)) continue
-    label.remove()
-    labels.delete(id)
+  for (const markers of [labels, pins]) {
+    for (const [id, marker] of markers) {
+      if (shown.some((place) => place.id === id)) continue
+      marker.remove()
+      markers.delete(id)
+    }
   }
   for (const place of shown) {
     let label = labels.get(place.id)
@@ -61,17 +70,52 @@ export function setPlaces(map: MapLibreMap, places: Place[], hiddenId: number | 
     label.setLngLat(top(place))
     label.getElement().textContent = place.name
     label.getElement().dataset.size = String(size(place))
+
+    let pin = pins.get(place.id)
+    if (!pin) {
+      pin = new Marker({ element: pinElement() }).setLngLat(centre(place)).addTo(map)
+      pins.set(place.id, pin)
+    }
+    pin.setLngLat(centre(place))
+    pin.getElement().dataset.size = String(size(place))
   }
   showLabelsBySize(map)
 }
 
-/** Hides the labels of places too small on screen at this zoom. */
+/** A place's pin: the map pin glyph on a disc in the place's colour, decorative (the name says what it is). */
+function pinElement(): HTMLElement {
+  const element = document.createElement('div')
+  element.className = 'place-pin'
+  element.setAttribute('aria-hidden', 'true')
+  element.innerHTML = `<svg viewBox="0 0 24 24"><path d="${PIN_PATH}" fill="currentColor" fill-rule="evenodd"/></svg>`
+  return element
+}
+
+/** Hides the labels and pins of places too small on screen at this zoom. */
 function showLabelsBySize(map: MapLibreMap) {
-  const metresPerPixel = (40_075_016.686 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / (512 * 2 ** map.getZoom())
-  for (const label of labelsByMap.get(map)?.values() ?? []) {
-    const element = label.getElement()
-    element.hidden = Number(element.dataset.size) / metresPerPixel < LABEL_MIN_PX
+  for (const marker of [...(labelsByMap.get(map)?.values() ?? []), ...(pinsByMap.get(map)?.values() ?? [])]) {
+    const element = marker.getElement()
+    element.hidden = tooSmall(map, Number(element.dataset.size))
   }
+}
+
+/**
+ * Whether a place shows its pin at this zoom. When it doesn't, an asset at it wears the pin as a
+ * badge instead (markers.ts).
+ */
+export function showsPin(map: MapLibreMap, place: Place): boolean {
+  return !tooSmall(map, size(place))
+}
+
+function tooSmall(map: MapLibreMap, metresAcross: number): boolean {
+  const metresPerPixel = (40_075_016.686 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / (512 * 2 ** map.getZoom())
+  return metresAcross / metresPerPixel < LABEL_MIN_PX
+}
+
+/** The place's centre: a circle's, or the middle of a polygon's bounds. */
+function centre(place: Place): [number, number] {
+  const { lat, lon } = placeCenter(place.area)
+  return [lon, lat]
 }
 
 /** About how big a place is, in metres across. */
