@@ -5,7 +5,7 @@ import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
-import type { PlaceVisit } from './places'
+import { trailPlaces, type Place, type PlaceVisit } from './places'
 import { currentActivity, currentStay, type Activity, type Stay } from './segments'
 import { trackersOf, trailProfile } from './tracker'
 import { HISTORY_MIN_MINUTES, extendTrails, pruneTrails, trailMinutes, trailStart, type TrailLength, type Trails } from './trail'
@@ -24,7 +24,12 @@ const MAX_RETRY_MS = 60_000
  * is doing right now; only the trail's own length of it is returned for drawing.
  * `onVisits` hears of arrivals and departures as live positions show them.
  */
-export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null, onVisits?: (visits: PlaceVisit[]) => void) {
+export function useLiveAssets(
+  initialAssets: Asset[],
+  trail: TrailLength | null,
+  places: Place[],
+  onVisits?: (visits: PlaceVisit[]) => void,
+) {
   const historyMinutes = Math.max(trailMinutes(trail ?? 0), HISTORY_MIN_MINUTES)
   const router = useRouter()
   const [assets, setAssets] = useState(initialAssets)
@@ -177,11 +182,11 @@ export function useLiveAssets(initialAssets: Asset[], trail: TrailLength | null,
   const stays = useMemo(() => {
     const result: Record<number, Stay> = {}
     for (const [id, points] of Object.entries(trails)) {
-      const stay = currentStay(points, now, trailProfile(trackers[Number(id)]))
+      const stay = currentStay(points, now, trailProfile(trackers[Number(id)]), trailPlaces(places, Number(id)))
       if (stay) result[Number(id)] = stay
     }
     return result
-  }, [trails, now, trackers])
+  }, [trails, now, trackers, places])
 
   return { assets, trails: visibleTrails, trailsLoaded, activities, stays, status, updateAvailable }
 }

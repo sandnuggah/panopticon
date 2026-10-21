@@ -48,9 +48,9 @@ export type TrackerKind = 'sinotrack' | 'phone' | 'standard'
  * How the trail reads each kind of tracker's reports. SinoTrack's were tuned on an ST-904L's real
  * trips and walks (see segments.ts); the others start the same, until there's real data from one,
  * but tell a weak fix by its accuracy (a guess: over 50 m), since a satellite count means different
- * things from different receivers.
+ * things from different receivers, and aren't known to stop reporting when still.
  */
-const BY_ACCURACY: TrailProfile = { ...DEFAULT_TRAIL_PROFILE, weakSatellites: undefined, weakAccuracyMeters: 50 }
+const BY_ACCURACY: TrailProfile = { ...DEFAULT_TRAIL_PROFILE, weakSatellites: undefined, weakAccuracyMeters: 50, quietMs: undefined }
 export const TRAIL_PROFILES: Record<TrackerKind, TrailProfile> = {
   sinotrack: DEFAULT_TRAIL_PROFILE,
   phone: BY_ACCURACY,

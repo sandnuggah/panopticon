@@ -518,6 +518,28 @@ describe('currentStay', () => {
     const riding = new Trip().stay(10).ride(1000, 60)
     assert.equal(currentStay(riding.points, riding.now), null)
     const old = new Trip().walk(5).stay(10)
-    assert.equal(currentStay(old.points, old.now + 10 * 60_000), null)
+    const awake = { ...DEFAULT_TRAIL_PROFILE, quietMs: undefined }
+    assert.equal(currentStay(old.points, old.now + 10 * 60_000, awake), null)
+  })
+
+  test('a tracker that sleeps when still keeps its stay through the silence, for up to a day', () => {
+    const asleep = new Trip().walk(5).stay(10)
+    const since = currentStay(asleep.points, asleep.now)!.since
+    assert.equal(currentStay(asleep.points, asleep.now + 5 * 60 * 60_000)?.since, since)
+    assert.equal(currentStay(asleep.points, asleep.now + 25 * 60 * 60_000), null)
+    // Gone quiet on the move (out of reach, a flat battery): no stay.
+    const moving = new Trip().stay(10).walk(5)
+    assert.equal(currentStay(moving.points, moving.now + 60 * 60_000), null)
+  })
+
+  test("at one of the asset's places, wandering about it doesn't end the stay", () => {
+    // Indoors the fixes settle in two spots 50 m apart, with hops between them.
+    const home = new Trip().stay(20).walk(0.5, 6).stay(15).walk(0.5, -6).stay(20)
+    const place = {
+      center: home.points[0]!,
+      within: (point: LatLon, margin: number) => distance(home.points[0]!, point) <= 50 + margin,
+    }
+    assert.equal(currentStay(home.points, home.now)?.since === home.points[0]!.time, false, 'without the place, the latest spot')
+    assert.equal(currentStay(home.points, home.now, DEFAULT_TRAIL_PROFILE, [place])?.since, home.points[0]!.time)
   })
 })

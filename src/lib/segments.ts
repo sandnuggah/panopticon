@@ -60,6 +60,12 @@ const SPIKE_SHORTCUT = 0.6
 const SPIKE_MAX_MS = 3 * 60 * 1000
 /** Live activity only counts while reports are this fresh. */
 const ACTIVITY_MAX_AGE_MS = 3 * 60 * 1000
+/**
+ * An ST-904L stops reporting when it's still, so a stay goes on through silence, for up to this long
+ * (a night and a day), until it reports again. Over a week of Kofi's, it was silent for 81% of the
+ * time he was staying somewhere, so "Here since" showed for only 13% of it.
+ */
+const QUIET_MS = 24 * 60 * 60 * 1000
 /** Fixes this far apart in time have a leg between them that nobody saw (see snap.ts). */
 const GAP_MS = 2 * 60 * 1000
 /**
@@ -85,6 +91,8 @@ export type TrailProfile = {
   freshMs: number
   /** GAP_MS */
   gapMs: number
+  /** QUIET_MS, for a tracker that stops reporting when still; without, a stay needs fresh reports (`freshMs`). */
+  quietMs?: number
   /** A fix is weak (see isWeak) with fewer satellites than this, or said to be off by more than this many metres. */
   weakSatellites?: number
   weakAccuracyMeters?: number
@@ -98,6 +106,7 @@ export const DEFAULT_TRAIL_PROFILE: TrailProfile = {
   spikeMs: SPIKE_MAX_MS,
   freshMs: ACTIVITY_MAX_AGE_MS,
   gapMs: GAP_MS,
+  quietMs: QUIET_MS,
   weakSatellites: WEAK_SATELLITES,
 }
 
@@ -236,13 +245,14 @@ export function classifyTrail(
 
 /**
  * Whether the asset is staying in one place right now (the trail ends in a stay, with recent
- * reports), and since when. `began` is false when the stay goes back to the first point given,
- * so it may have begun earlier.
+ * reports, or a tracker that stops reporting when still has been quiet since; see QUIET_MS), and
+ * since when. At one of its `places`, wandering about it is part of the stay (see joinAtPlaces).
+ * `began` is false when the stay goes back to the first point given, so it may have begun earlier.
  */
-export function currentStay(points: TrailPoint[], now: number, profile = DEFAULT_TRAIL_PROFILE): Stay | null {
+export function currentStay(points: TrailPoint[], now: number, profile = DEFAULT_TRAIL_PROFILE, places: TrailPlace[] = []): Stay | null {
   const latest = points.at(-1)
-  if (!latest || now - latest.time > profile.freshMs) return null
-  const last = classifyTrail(points, { profile }).at(-1)
+  if (!latest || now - latest.time > (profile.quietMs ?? profile.freshMs)) return null
+  const last = classifyTrail(points, { profile, places }).at(-1)
   if (last?.kind !== 'stay') return null
   const firstFix = points.find((point) => point.valid)!
   return { since: last.from, began: last.from > firstFix.time }

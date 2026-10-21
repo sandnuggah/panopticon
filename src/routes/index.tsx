@@ -245,6 +245,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   const { assets, trails, trailsLoaded, activities, stays, status, updateAvailable } = useLiveAssets(
     loaderData.assets,
     settingsLoaded ? settings.trail : null,
+    places,
     announce,
   )
   useEffect(() => {

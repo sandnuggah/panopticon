@@ -1,6 +1,6 @@
 import type { Asset, AssetLocation } from '../lib/asset'
 import type { LiveUpdate } from '../lib/live'
-import type { TrailPoint, Trails } from '../lib/trail'
+import { HISTORY_MIN_MINUTES, MAX_TRAIL_MINUTES, type TrailPoint, type Trails } from '../lib/trail'
 import { assetImageVersion } from './images.server'
 import { adapterFor, readPosition } from './trackers.server'
 import {
@@ -28,7 +28,10 @@ export async function loadAssets(token: string): Promise<Asset[]> {
 export async function loadTrails(token: string, assetIds: number[], minutes: number): Promise<Trails> {
   const to = new Date()
   const from = new Date(to.getTime() - minutes * 60 * 1000)
-  const results = await Promise.allSettled(assetIds.map((id) => getPositionHistory(token, id, from, to)))
+  const quietSince = await lastFixes(token)
+  const results = await Promise.allSettled(
+    assetIds.map((id) => getPositionHistory(token, id, historyFrom(from, to, quietSince.get(id)), to)),
+  )
   const trails: Trails = {}
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
@@ -40,6 +43,27 @@ export async function loadTrails(token: string, assetIds: number[], minutes: num
     trails[assetIds[index]!] = result.value.map(toTrailPoint).sort((a, b) => a.time - b.time)
   })
   return trails
+}
+
+/**
+ * Where an asset's history starts: `from`, or, for one whose last fix is older than `from` allows
+ * (a tracker asleep, see QUIET_MS in segments.ts), the HISTORY_MIN_MINUTES before that fix, so the
+ * stay it went quiet in still shows ("Here since"). Not for one quiet over a day.
+ */
+function historyFrom(from: Date, to: Date, lastFix: number | undefined): Date {
+  const before = HISTORY_MIN_MINUTES * 60 * 1000
+  if (lastFix === undefined || lastFix < to.getTime() - MAX_TRAIL_MINUTES * 60 * 1000) return from
+  return new Date(Math.min(from.getTime(), lastFix - before))
+}
+
+/** Each device's latest fix time; none if Traccar can't say, which only costs the extra history. */
+async function lastFixes(token: string): Promise<Map<number, number>> {
+  try {
+    return new Map((await getLatestPositions(token)).map((position) => [position.deviceId, Date.parse(position.fixTime)]))
+  } catch (error) {
+    if (error instanceof TraccarError && error.status === 401) throw error
+    return new Map()
+  }
 }
 
 export function toAsset(device: TraccarDevice, position: TraccarPosition | undefined): Asset {
