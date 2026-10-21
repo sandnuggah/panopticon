@@ -35,7 +35,7 @@ export function stayHopKey(from: { to: number }, to: { from: number }): string {
  * walk must get somewhere from where it began (out and back counts) and have at least 3 points. A
  * walk from or to a stay starts or ends at the stay's middle, where the map draws it from (its dot),
  * marked as an anchor: leaving home then follows the street from the door, not a straight line to
- * the first fix outside, which comes once the tracker wakes (see unseenLegs in snap.ts).
+ * the first fix outside, which comes once the tracker wakes (see drawWalk in snap.ts).
  */
 export function matchableWalks(
   pieces: TrailPiece[],

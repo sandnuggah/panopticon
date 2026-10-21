@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { routeFits, snapAlong, unseenLegs, type Point } from './snap.ts'
+import { drawWalk, routeFits, snapAlong, strayCandidates, type Point } from './snap.ts'
 
 // Positions in metres east/north of a start point; the matched line is a path going east, then north.
 const START = { lat: 59.31, lon: 18.07 }
@@ -115,21 +115,60 @@ describe('snapAlong', () => {
   })
 })
 
-describe('unseenLegs', () => {
-  test('from a stay to the first fix, and between fixes minutes apart, drawn straight', () => {
-    const home: Point = { ...at(0, -40), anchor: true }
+describe('drawWalk', () => {
+  const home: Point = { ...at(0, -40), anchor: true }
+
+  test('from a stay to the first fix, and between fixes minutes apart, are legs nobody saw', () => {
     const fixes: Point[] = [
       { ...at(10, 2), time: 0 },
       { ...at(30, -3), time: 30_000 },
       { ...at(90, 5), time: 210_000 },
     ]
-    assert.deepEqual(unseenLegs([home, ...fixes], [home, ...fixes]), [0, 2])
+    const walk = drawWalk([home, ...fixes], [])
+    assert.equal(walk.snapped, false)
+    assert.deepEqual(walk.unseen, [0, 2])
   })
 
-  test('a stay that was snapped onto the line is no leg nobody saw', () => {
-    const home: Point = { ...at(0, -5), anchor: true }
-    const walk = [home, at(40, 3), at(80, -2), at(120, 4)]
-    assert.deepEqual(unseenLegs(walk, snapAlong(walk, PATH)!), [])
+  test('a leg nobody saw too short for a route is drawn straight', () => {
+    const fixes: Point[] = [
+      { ...at(10, 2), time: 0 },
+      { ...at(15, 2), time: 300_000 },
+    ]
+    assert.deepEqual(drawWalk(fixes, []).unseen, [])
+  })
+
+  test('a fix or two that strayed from the line are left out, and the line goes on', () => {
+    // The third fix jumped 30 m off, onto a street below: the walk goes on along the line.
+    const walk = [at(10, 2), at(40, -3), at(70, 1), at(110, -30), at(140, 2), at(170, -1), at(199, 60)]
+    assert.deepEqual(strayCandidates(walk, PATH), [[3]])
+    assert.deepEqual(drawWalk(walk, PATH, new Set([3])).points.map(metres), [
+      [10, 0],
+      [100, 0],
+      [200, 0],
+      [200, 60],
+    ])
+  })
+
+  test('between a stay and the line, a fix that strayed is left out too', () => {
+    const walk = [home, at(60, -30), at(100, 3), at(140, -2), at(180, 1)]
+    assert.deepEqual(strayCandidates(walk, PATH), [[1]])
+    const drawn = drawWalk(walk, PATH, new Set([1]))
+    assert.deepEqual(drawn.points.map(metres), [
+      [0, -40],
+      [100, 0],
+      [180, 0],
+    ])
+    assert.deepEqual(drawn.unseen, [0], 'from the stay to the line: a route')
+  })
+
+  test('three fixes off the line in a row are no strays', () => {
+    const walk = [at(0, 2), at(40, -3), at(80, 4), at(110, 60), at(150, 70), at(170, 65), at(198, 120), at(201, 160), at(199, 190)]
+    assert.deepEqual(strayCandidates(walk, PATH), [])
+  })
+
+  test('in a park too, a fix may stray: off the line is more than 20 m off it, anywhere', () => {
+    const walk = [at(10, 2), at(40, -12), at(70, -30), at(100, 12), at(130, -4)].map((point) => ({ ...point, park: true }))
+    assert.deepEqual(strayCandidates(walk, PATH), [[2]])
   })
 
   test('a route fits up to 4 times as far plus 50 m', () => {

@@ -32,25 +32,120 @@ const DETOUR_METERS = 20
  * Legs nobody saw: between a stay and the first or last fix (the tracker asleep, or waking up on the
  * way), and between fixes at least UNSEEN_MS apart. The way is a guess there, and the way along paths
  * is a better one than straight across (a bridge, a building, a slope in between), so these follow the
- * line, or a route (see unseenLegs), unless it's longer than UNSEEN_FACTOR times as far plus UNSEEN_METERS.
+ * line, or a route (see drawWalk), unless it's longer than UNSEEN_FACTOR times as far plus UNSEEN_METERS.
  */
 const UNSEEN_MS = 2 * 60 * 1000
 const UNSEEN_FACTOR = 4
 const UNSEEN_METERS = 50
 
+/**
+ * A fix or two in a row more than ON_PATH_METERS off the line, each this close to a way (which the
+ * line then doesn't take), jumped there: GPS error onto a street below a bridge or the other side of a
+ * wall, which the matcher, keeping the walk connected, didn't believe. They're left out (see
+ * strayCandidates), park or not. Off the line and away from every way is the grass: kept. More in a
+ * row, the matcher may be the one that's wrong: kept.
+ */
+const STRAY_FIXES = 2
+export const STRAY_NEAR_WAY_METERS = 10
+/** A leg nobody saw shorter than this is drawn straight: a route says no more. */
+const MIN_ROUTE_METERS = 20
+
 /** Where a fix lands on the line: after which vertex, how far along that segment, and how far off. */
 type Foot = { segment: number; t: number; point: Point; off: number }
 
 /**
+ * A walk as drawn, from drawWalk. `snapped`: some of it follows the line. `unseen`: the legs still
+ * straight across where nobody saw the way, by the index in `points` of each leg's start, for a route.
+ */
+export type DrawnWalk = { points: Point[]; snapped: boolean; unseen: number[] }
+
+/**
  * The walk as drawn: the matched line along the stretches where at least MIN_RUN fixes in a row lie
  * within ON_PATH_METERS of it (in parks PARK_MIN_RUN within PARK_ON_PATH_METERS), and the fixes as
- * recorded in between. Null when no stretch does, so the walk is drawn as recorded. Fixes are
- * matched to the line in order, so a walk out and back along the same path takes each way in turn;
- * where the line detours between two fixes, it's cut across (see DETOUR_FACTOR).
+ * recorded in between, but for `strays` (see strayCandidates), left out. A stay (an anchor) near the
+ * line is snapped onto it like a fix. Fixes are matched to the line in order, so a walk out and back along the same path takes
+ * each way in turn; where the line detours between two fixes, it's cut across (see DETOUR_FACTOR).
  */
+export function drawWalk(points: Point[], line: Point[], strays: ReadonlySet<number> = new Set()): DrawnWalk {
+  const feet = feetOnLine(points, line)
+  const snapped = snappedFixes(points, feet)
+  const along = points.map((_, index) => 0)
+  for (let k = 1; k < points.length; k++) along[k] = along[k - 1]! + metres(points[k - 1]!, points[k]!)
+
+  const drawn: Point[] = []
+  // The index of the point each drawn point stands for: a fix, its foot, or -1 for the line's own vertices.
+  const source: number[] = []
+  const emit = (point: Point, index: number) => {
+    const last = drawn.at(-1)
+    // A foot can fall on a vertex: one point, standing for the fix.
+    if (last && last.lat === point.lat && last.lon === point.lon) {
+      if (source.at(-1)! < 0) source[source.length - 1] = index
+      return
+    }
+    drawn.push(point)
+    source.push(index)
+  }
+  const kept = points.map((_, index) => index).filter((index) => !strays.has(index))
+  for (let n = 0; n < kept.length;) {
+    const i = kept[n]!
+    if (!snapped[i]) {
+      emit(points[i]!, i)
+      n++
+      continue
+    }
+    // Snapped fixes in a row, strays aside: foot to foot along the line, passing over a foot that falls
+    // back along it (a near tie with the way out, on the way back) unless it's the last.
+    let m = n
+    while (m < kept.length && snapped[kept[m]!]) m++
+    const row = kept.slice(n, m)
+    emit(feet![i]!.point, i)
+    let last = i
+    row.slice(1).forEach((k, index) => {
+      if (index < row.length - 2 && behind(feet![k]!, feet![last]!)) return
+      const way = lineBetween(line, feet![last]!, feet![k]!, along[k]! - along[last]!, isUnseen(points[last]!, points[k]!))
+      for (const point of way) emit(point, point === feet![last]!.point ? last : point === feet![k]!.point ? k : -1)
+      last = k
+    })
+    emit(feet![row.at(-1)!]!.point, row.at(-1)!)
+    n = m
+  }
+
+  const unseen: number[] = []
+  for (let k = 0; k + 1 < drawn.length; k++) {
+    const [a, b] = [source[k]!, source[k + 1]!]
+    if (a >= 0 && b >= 0 && isUnseen(points[a]!, points[b]!) && metres(drawn[k]!, drawn[k + 1]!) >= MIN_ROUTE_METERS) unseen.push(k)
+  }
+  return { points: drawn, snapped: snapped.some(Boolean), unseen }
+}
+
+/** The walk as drawn (see drawWalk), or null when no stretch of it is snapped, so it's drawn as recorded. */
 export function snapAlong(points: Point[], line: Point[]): Point[] | null {
-  if (points.length < 2 || line.length < 2) return null
-  // Each fix's foot on the line, no earlier than the last fix that was on it.
+  const walk = drawWalk(points, line)
+  return walk.snapped ? walk.points : null
+}
+
+/**
+ * The fixes that may have strayed (see STRAY_FIXES), in groups: a fix or two in a row off the line
+ * (stays aside). A group strays if each of its fixes is near a way, which only Valhalla knows
+ * (matching.server.ts).
+ */
+export function strayCandidates(points: Point[], line: Point[]): number[][] {
+  const feet = feetOnLine(points, line)
+  if (!feet) return []
+  const off = (index: number) => !points[index]!.anchor && feet[index]!.off > ON_PATH_METERS
+  const groups: number[][] = []
+  for (let i = 0; i < points.length;) {
+    let j = i
+    while (j < points.length && off(j)) j++
+    if (j > i && j - i <= STRAY_FIXES) groups.push(points.slice(i, j).map((_, k) => i + k))
+    i = Math.max(j, i + 1)
+  }
+  return groups
+}
+
+/** Each point's foot on the line, no earlier than the last fix that was on it; null without a line. */
+function feetOnLine(points: Point[], line: Point[]): Foot[] | null {
+  if (line.length < 2) return null
   const feet: Foot[] = []
   let from = 0
   for (const point of points) {
@@ -58,38 +153,21 @@ export function snapAlong(points: Point[], line: Point[]): Point[] | null {
     feet.push(foot)
     if (foot.off <= ON_PATH_METERS) from = foot.segment
   }
-  const onPath = feet.map((foot, index) => foot.off <= (points[index]!.park ? PARK_ON_PATH_METERS : ON_PATH_METERS))
+  return feet
+}
 
-  const result: Point[] = []
-  let snapped = false
-  let i = 0
-  while (i < points.length) {
+/** Which fixes are snapped: in stretches of at least MIN_RUN in a row on the line (in parks PARK_MIN_RUN). */
+function snappedFixes(points: Point[], feet: Foot[] | null): boolean[] {
+  const onPath = points.map((point, index) => !!feet && feet[index]!.off <= (point.park ? PARK_ON_PATH_METERS : ON_PATH_METERS))
+  const snapped = points.map(() => false)
+  for (let i = 0; i < points.length;) {
     let j = i
     while (j < points.length && onPath[j]) j++
     const needed = points.slice(i, j).some((point) => point.park) ? PARK_MIN_RUN : MIN_RUN
-    if (j - i >= needed) {
-      // Foot to foot along the line, passing over a foot that falls back along it (a near tie with
-      // the way out, on the way back) unless it's the last.
-      result.push(feet[i]!.point)
-      let went = 0
-      let last = i
-      for (let k = i + 1; k < j; k++) {
-        went += metres(points[k - 1]!, points[k]!)
-        if (k < j - 1 && behind(feet[k]!, feet[last]!)) continue
-        const unseen = isUnseen(points[last]!, points[k]!)
-        for (const point of lineBetween(line, feet[last]!, feet[k]!, went, unseen)) if (point !== result.at(-1)) result.push(point)
-        went = 0
-        last = k
-      }
-      if (feet[j - 1]!.point !== result.at(-1)) result.push(feet[j - 1]!.point)
-      snapped = true
-      i = j
-    } else {
-      result.push(points[i]!)
-      i++
-    }
+    if (j > i && j - i >= needed) snapped.fill(true, i, j)
+    i = Math.max(j, i + 1)
   }
-  return snapped ? result : null
+  return snapped
 }
 
 /**
@@ -112,22 +190,6 @@ function tooLong(went: number, unseen: boolean): number {
 
 function isUnseen(a: Point, b: Point): boolean {
   return !!a.anchor || !!b.anchor || (a.time !== undefined && b.time !== undefined && Math.abs(b.time - a.time) >= UNSEEN_MS)
-}
-
-/**
- * The legs of a drawn walk (from snapAlong, or the points as recorded) still straight across where
- * nobody saw the way: from or to an anchor drawn as it is, or between two fixes drawn as recorded at
- * least UNSEEN_MS apart. As indexes into `drawn`, of each leg's start.
- */
-export function unseenLegs(points: Point[], drawn: Point[]): number[] {
-  const given = new Set(points)
-  const legs: number[] = []
-  for (let k = 0; k + 1 < drawn.length; k++) {
-    const [a, b] = [drawn[k]!, drawn[k + 1]!]
-    const anchored = (a.anchor && given.has(a)) || (b.anchor && given.has(b))
-    if (anchored || (given.has(a) && given.has(b) && isUnseen(a, b))) legs.push(k)
-  }
-  return legs
 }
 
 /** Whether a route between two points is short enough to draw for a leg nobody saw (see UNSEEN_FACTOR). */

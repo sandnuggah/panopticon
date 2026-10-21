@@ -1,13 +1,15 @@
 import type { MatchablePoint } from '../lib/matching'
 import type { LatLon } from '../lib/segments'
-import { routeFits, snapAlong, unseenLegs, type Point } from '../lib/snap'
+import { distance } from '../lib/segments'
+import { drawWalk, routeFits, STRAY_NEAR_WAY_METERS, strayCandidates, type DrawnWalk, type Point } from '../lib/snap'
 import { env } from './env.server'
 
 // Snaps walks to streets and paths with Valhalla's map matching (`trace_route`, pedestrian costing),
 // at MAP_MATCHING_URL. Only this server talks to it; trail points never leave your own machines.
 // The matched line is kept only where the fixes lie along it, and the walk is drawn as recorded
-// elsewhere, such as a dog running about on the grass (`snapAlong`, lib/snap.ts). Legs nobody saw
-// (from a stay to the first fix, across long gaps) follow Valhalla's walking route (`route`).
+// elsewhere, such as a dog running about on the grass (`drawWalk`, lib/snap.ts), and a fix or two that
+// jumped onto a way the line doesn't take are left out (`locate`). Legs nobody saw (from a stay to the
+// first fix, across long gaps) follow Valhalla's walking route (`route`).
 
 const TIMEOUT_MS = 5_000
 /** Snapped walks are kept in memory; a walk that grows gets a new key. */
@@ -52,11 +54,10 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
       const line = trips
         .sort((a, b) => firstPoint(a) - firstPoint(b))
         .flatMap((trip) => (trip.legs ?? []).flatMap((leg) => (leg.shape ? decodePolyline6(leg.shape) : [])))
-      const snapped = line.length >= 2 ? snapAlong(points, line) : null
-      result = await routeUnseen(url, points, snapped)
+      result = await routeUnseen(url, drawWalk(points, line, await strays(url, points, line)))
     } else if (response.status === 400) {
       // No match (e.g. points far from any path): the legs nobody saw may still have a route.
-      result = await routeUnseen(url, points, null)
+      result = await routeUnseen(url, drawWalk(points, []))
     } else {
       console.warn(`Map matching failed with HTTP ${response.status}`)
     }
@@ -70,19 +71,44 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
   return result
 }
 
+/** The fixes that strayed (see strayCandidates in snap.ts): groups whose every fix is near a way, by `locate`. */
+async function strays(url: string, points: MatchablePoint[], line: LatLon[]): Promise<Set<number>> {
+  const groups = strayCandidates(points, line)
+  const candidates = groups.flat()
+  if (candidates.length === 0) return new Set()
+  const response = await fetch(`${url}/locate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      locations: candidates.map((index) => ({ lat: points[index]!.lat, lon: points[index]!.lon })),
+      costing: 'pedestrian',
+    }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  })
+  if (!response.ok) return new Set()
+  type Located = { edges?: { correlated_lat: number; correlated_lon: number }[] | null }
+  const located = (await response.json()) as Located[]
+  const nearWay = new Set(
+    candidates.filter((index, k) =>
+      (located[k]?.edges ?? []).some(
+        (edge) => distance(points[index]!, { lat: edge.correlated_lat, lon: edge.correlated_lon }) <= STRAY_NEAR_WAY_METERS,
+      ),
+    ),
+  )
+  return new Set(groups.filter((group) => group.every((index) => nearWay.has(index))).flat())
+}
+
 /**
- * The walk as drawn (snapped, or as recorded when `snapped` is null) with its legs nobody saw along
- * Valhalla's walking route where one fits (see unseenLegs). Null when nothing was snapped or routed.
+ * The walk as drawn with its legs nobody saw along Valhalla's walking route where one fits (see
+ * drawWalk). Null when nothing was snapped or routed: it's drawn as recorded.
  */
-async function routeUnseen(url: string, points: MatchablePoint[], snapped: Point[] | null): Promise<LatLon[] | null> {
-  const drawn = snapped ?? points
-  const legs = unseenLegs(points, drawn)
-  const routes = await Promise.all(legs.map((k) => walkingRoute(url, drawn[k]!, drawn[k + 1]!)))
-  if (!snapped && routes.every((route) => route === null)) return null
+async function routeUnseen(url: string, walk: DrawnWalk): Promise<LatLon[] | null> {
+  const routes = await Promise.all(walk.unseen.map((k) => walkingRoute(url, walk.points[k]!, walk.points[k + 1]!)))
+  if (!walk.snapped && routes.every((route) => route === null)) return null
   const result: LatLon[] = []
-  drawn.forEach((point, k) => {
+  walk.points.forEach((point, k) => {
     result.push({ lat: point.lat, lon: point.lon })
-    const route = routes[legs.indexOf(k)]
+    const route = routes[walk.unseen.indexOf(k)]
     if (route) result.push(...route)
   })
   return result
