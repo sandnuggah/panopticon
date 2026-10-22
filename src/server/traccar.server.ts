@@ -72,13 +72,14 @@ export type TraccarEvent = {
   geofenceId: number
 }
 
+// No parameter properties: Node strips the types of this module for the trail replay (dev/replay.ts).
 export class TraccarError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-  ) {
+  readonly status?: number
+
+  constructor(message: string, status?: number) {
     super(message)
     this.name = 'TraccarError'
+    this.status = status
   }
 }
 
@@ -507,7 +508,8 @@ function readDeviceImage(attributes: unknown): string | null {
   return typeof image === 'string' && /^device\.(jpg|png|gif|webp)$/.test(image) ? image : null
 }
 
-function parsePosition(value: unknown): TraccarPosition {
+/** A position as Traccar's API sends it; also for the trail replay (dev/replay.ts), from saved positions. */
+export function parsePosition(value: unknown): TraccarPosition {
   if (!isObject(value)) throw unexpected('position is not an object')
   const attributes = value.attributes ?? {}
   if (!isObject(attributes)) throw unexpected('position.attributes is not an object')

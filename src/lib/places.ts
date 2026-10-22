@@ -1,4 +1,6 @@
-import { distance, type LatLon, type TrailPlace } from './segments.ts'
+import type { AssetLocation } from './asset.ts'
+import { confirmedLocation, distance, type LatLon, type TrailPlace, type TrailProfile } from './segments.ts'
+import type { TrailPoint } from './trail.ts'
 
 // Places: areas like Home or Daycare, kept in Traccar as geofences (see places.server.ts). Traccar
 // works out which of an asset's places each position is inside (`geofenceIds`), and records arriving
@@ -102,6 +104,21 @@ function validLatLon({ lat, lon }: LatLon): boolean {
   return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
 }
 
+/** A Traccar geofence as a place, with the assets linked to it; null for an area panopticon can't show. */
+export function placeOf(
+  geofence: { id: number; name: string; area: string; attributes: Record<string, unknown> },
+  assetIds: number[],
+): Place | null {
+  const area = parseArea(geofence.area)
+  if (!area) return null
+  const place: Place = { id: geofence.id, name: geofence.name, area, assetIds }
+  const address = geofence.attributes[ADDRESS_ATTRIBUTE]
+  if (typeof address === 'string' && address.trim()) place.address = address.trim()
+  const wayIn = parseWayIn(geofence.attributes[WAY_IN_ATTRIBUTE])
+  if (wayIn) place.wayIn = wayIn
+  return place
+}
+
 /** The middle of a place, for its label and for showing it on the map. */
 export function placeCenter(area: PlaceArea): LatLon {
   if (area.kind === 'circle') return area.center
@@ -128,6 +145,24 @@ export function placeAt(places: Place[], assetId: number, point: LatLon): Place 
   return places
     .filter((place) => place.assetIds.includes(assetId) && withinArea(place.area, point, 0))
     .sort((a, b) => distance(placeCenter(a.area), point) - distance(placeCenter(b.area), point))[0]
+}
+
+/**
+ * Where the map shows an asset whose latest location is `location`, with its trail's `points`: where
+ * the trail can trust it to be (at its latest fix, unless GPS has yet to confirm that one, see
+ * confirmedLocation), and at one of its places at the place's centre, so it sits still there however
+ * its fixes wander indoors. With when it last reported all the same.
+ */
+export function shownLocation<L extends AssetLocation>(
+  places: Place[],
+  assetId: number,
+  location: L,
+  points: TrailPoint[] | undefined,
+  profile: TrailProfile,
+): L {
+  const confirmed = points ? confirmedLocation(location, points, profile) : location
+  const place = placeAt(places, assetId, confirmed)
+  return place ? { ...confirmed, ...placeCenter(place.area), accuracy: undefined } : confirmed
 }
 
 /** Whether a point is inside the area, or at most `margin` metres outside it. */

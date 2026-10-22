@@ -10,7 +10,7 @@ import { PlaceEditor } from '../components/PlaceEditor'
 import { LoadingScreen } from '../components/LoadingScreen'
 import { parseSettingsView, SettingsCard, type SettingsView } from '../components/SettingsCard'
 import type { Asset } from '../lib/asset'
-import type { Park } from '../lib/parks'
+import { sameParks, type Park } from '../lib/parks'
 import { visitSentence, type Place, type PlaceVisit } from '../lib/places'
 import { trackersOf } from '../lib/tracker'
 import type { LatLon } from '../lib/segments'
@@ -251,11 +251,12 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   useEffect(() => {
     if (trailsLoaded) onTrailsLoaded()
   }, [trailsLoaded])
-  // Parks in the map's tiles (null until the map is ready), where walks are snapped more strictly.
+  // Parks in the map's tiles (null until the map is ready), where walks are snapped more strictly. The
+  // map tells after every move, mostly of the same parks: those keep the walks as they are.
   const [parks, setParks] = useState<Park[] | null>(null)
   const trackerKey = assets.map((asset) => `${asset.id}:${asset.tracker ?? ''}`).join(' ')
   const trackers = useMemo(() => trackersOf(assets), [trackerKey])
-  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths, parks, places, trackers)
+  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths, parks, trackers)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
 
@@ -373,7 +374,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
               onShowMeChange={setShowMe}
               onAttribution={setAttribution}
               onLoad={onMapLoad}
-              onParks={setParks}
+              onParks={(next) => setParks((current) => (current && sameParks(current, next) ? current : next))}
               cover={mapCover}
               places={places}
               picker={

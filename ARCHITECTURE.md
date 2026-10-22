@@ -125,11 +125,11 @@ Consequences of pointing `web.url` at this app:
 
 A trail behind each asset showing where it went in the last N minutes, drawn by what it was doing: walking, staying put, riding a vehicle, or travelling underground. Older parts fade.
 
-- **History:** `getTrails({ minutes, assetIds })` calls `GET /api/positions?deviceId&from&to` once per asset. It always covers at least 3 hours, even with the trail off, so the card can say what the asset is doing right now and how long it's been in one place; only the chosen length is drawn. Three hours of reports every 30 s is about 360 points per asset. For an asset whose last fix is older than that (a tracker asleep, within the last day), it starts 3 hours before that fix instead (`historyFrom`, with the latest positions from one `GET /api/positions`), so the stay it went quiet in still shows.
+- **History:** `getTrails({ minutes, assetIds })` calls `GET /api/positions?deviceId&from&to` once per asset. It covers the trail's length and 3 hours before it (`historyMinutes`), even with the trail off (3 hours): so the card can say what the asset is doing right now and how long it's been in one place, and so the trail is worked out at its start as it would be anywhere else (see Drawing). Three hours of reports every 30 s is about 360 points per asset. For an asset whose last fix is older than that (a tracker asleep, within the last day), it starts 3 hours before that fix instead (`historyStart`, with the latest positions from one `GET /api/positions`), so the stay it went quiet in still shows. "Here since" reads only the 3 hours (or the trail's length, if longer) before the newest report, as it did before the history covered more (`stayPoints`): over more, its joining of stays at a place would join across walks.
   - Reports **without a GPS fix** are kept, marked `valid: false`. Their position is stale, so they're never drawn; they only count as evidence of travel without GPS.
   - Each point also carries the **serving cell tower**: Traccar's `network.cellTowers` when it has one, otherwise `io4` for SinoTrack's `h02` (see [Battery](#battery) for the io fields).
   - Traccar refuses this endpoint for users with "disable reports" set. Those users just get no trail and no activity.
-- **Live:** every live position, with or without a fix, is appended; points older than the window are dropped.
+- **Live:** every live position, with or without a fix, is appended; points older than the history (the trail and 3 hours) are dropped.
 
 ### What the asset was doing (`src/lib/segments.ts`)
 
@@ -155,7 +155,19 @@ The trail is split using only the tracker's own reports: speed between fixes, ga
   - Nothing when the latest report is over 3 minutes old.
   - Replayed against the real trip, the card switched on with the first train hop, and to "Moving underground" 90 s after GPS dropped.
 - **Limits:** a bus, a car and an above-ground train all read as "vehicle". A car in a road tunnel (Norra länken) reads as "underground", which is literally true. Telling subway from train or tram would need stop locations from OpenStreetMap for a configurable area; not built.
-- **Tests:** `npm test` runs `segments.test.ts` with Node's own test runner (Node 24 runs TypeScript directly). The data is a made-up trip in the same shape; real location data never goes in the repo.
+- **Tests:** `npm test` runs `segments.test.ts` and the others with Node's own test runner (Node 24 runs TypeScript directly). The data is made-up trips in the same shape (`trailGeometry.test.ts` has a made-up day shaped like one of Kofi's: asleep at home with indoor fixes scattered and weak, waking up off where it slept, a trip to the pee spot, a walk with pottering about in a park); real location data never goes in the repo.
+
+### The replay (`dev/replay.ts`)
+
+How the trail looks on a finished day says little about how it behaves while you watch it: it's worked out again with every report and every tick of the clock. The replay plays a tracker's real reports through the app's own code, in the order they arrived, with the app's 15-second clock and the browser's Snap to paths cache (and the real `matchWalk`, with `MAP_MATCHING_URL`), as if the map had been open all along, for each trail length, and scores it:
+
+- **Flashes:** a walk drawn along its snapped line, then as recorded for a moment while a longer version of it is asked for.
+- **Past changes:** the trail changing more than 15 minutes before the newest fix when a report comes. **Idle changes:** the trail or its dots changing with no report at all, but for its old end dropping off.
+- **The marker:** jumps of over 30 m, out and back within 3 minutes, in and out of a place. **"Here since":** changes, going back in time, back to what it said within 10 minutes, and shown while walking. **Grey:** minutes the asset's picture is greyed out.
+- **Hourly pictures:** how much walking is drawn, and how much of it over 40 m from every fix.
+- **Labels:** times of reports known to be GPS errors, or known to be real (`labels.json`, times only), and how long and how much of each is drawn, and how long the marker sits on one.
+
+`npm run replay -- <fixture folder>` (`--trail 60,360,1440`, `--from`, `--to`, `--json`, `--baseline` to list what got worse and exit with 1, `--events` for when each change happened). The fixture folder holds Traccar positions as its API returns them, the asset's places as geofences, and the labels; it can be anywhere, and real location data stays out of the repo. It prints times and metres, never positions. Node runs the app's TypeScript with `dev/resolve-ts.mjs`, which resolves imports without an extension as Vite does. Every change to how the trail is worked out or drawn should keep the score or make it better, on more than one week of data (TODO.md, Making the trail solid). Parks aren't known offline (they come from the map's tiles).
 
 ### Snap to paths (map matching)
 
@@ -174,14 +186,15 @@ Optional: with `MAP_MATCHING_URL` set, the Appearance page offers **Snap to path
 
 ### Drawing
 
+- **Worked out once, clipped for drawing** (`lib/trailGeometry.ts`, with tests): each asset's trail is worked out from all of its history as reports come (`trailView`), not as the clock ticks, and only asked again for an asset whose points changed. The trail's start then picks whole pieces (`firstShown`, `trailFrom`): every piece that ends after it, so a walk under way when the trail starts is drawn all of it, and the stay it set off from, so it starts at that dot. As the start moves on, only whole pieces drop off. Worked out from only what the window showed, as it was until October 2026, the trail changed by itself every few minutes: a walk cut in two at the window's start, a stay too short to be one, a dot appearing, a GPS error the unconfirmed rule could no longer check (the canal, below). Replayed over Kofi's week (see The replay), the trail changed with no new report in 674–793 of some 35,000 moments; now 0–5 (a dot that moves when a stay it shared drops off: still to do), the canal is never drawn, and Snap to paths asks for half as many walks.
 - **Walking:** a 4 px line in `--trail`, in pieces of 3 hops so it can fade with age.
-- **The latest outing in front:** from the end of the last stay of at least 20 minutes (home, daycare) before the latest movement (`latestOutingStart`, with tests); being in such a stay right now ends that outing rather than starting a new one. It's drawn from opacity 0.55 at its start to 0.95 at its newest point, and everything older from 0.12 to 0.25, so a long trail reads as this outing with the earlier ones as faint background.
+- **The latest outing in front:** from the end of the last stay of at least 20 minutes (home, daycare) before the latest movement, in all of the history (`latestOutingStart`, with tests); being in such a stay right now ends that outing rather than starting a new one. It's drawn from opacity 0.55 at its start to 0.95 at its newest point, and everything older from 0.12 to 0.25, so a long trail reads as this outing with the earlier ones as faint background.
 - **Paw prints** (Appearance → Paw prints, per browser): walking as a dog's tracks instead of the line, a left and a right print 44 px apart along the walk, turned the way it went (a symbol layer with `symbol-placement: line` and an image drawn on a canvas in `--trail`, so there's no image file). Its own source holds each walk as one piece: in 3-hop pieces most would be too short for a print.
 - **Rides:** through their fixes, in legs: dashed with GPS, dotted without (underground), and straight across stretches without fixes, since where exactly it went there isn't known. A ride is called a vehicle or underground ride by what it was for most of its time, so a train that ends in a tunnel is a vehicle ride with a dotted end, and a metro ride with stations in the open is underground.
 - **Stays:** stops shorter than 5 minutes are part of the walk on the map (a dog stopping to sniff), so a walk is one path, snapped as one, instead of pieces between dots (`joinShortStops`, with `showWandering`; tried on a real dog walk: 6 pieces became 2 walks). Longer stays are a dot with a white ring (like a location dot's: the map style can be light or dark whatever the device's mode), 5 px across for a short stop up to 9 px for an hour or more, and the walks run through it, so the trail reads as one path. Stays within 40 m of each other share a dot, whenever they were (back at the same place later in the day, home on two days): it's at the longest of them, sized by their time together and faded by the latest (`stayDots`). The map doesn't join a place's stops, so the walking about it (a park) shows: it draws them as their own dots with lines between, and only joins two stops across a blip of a fix or two when they're at the same spot (`classifyTrail` with `showWandering`; Snap to paths uses the same pieces). **At a place:** stays at one of the asset's places (Settings → Places, linked to it) are one dot at the place's way in, or its middle without one (see [Places](#places)), with the moves next to them that never got more than 25 m out of it (indoor GPS wander, the garden), and a stop there counts however short, so a walk home ends at its dot (`joinAtPlaces`, with `places`; `trailPlaces` in `lib/places.ts`). On a week of real data from Kofi's ST-904L, whose fixes indoors settle in spots up to 50 m apart, home went from 1–3 dots a day with up to 7 short moves around it to one dot. This is only for drawing: the trail keeps each visit, so "Here since" is the current one. Stays used to be circles as big as the spread of their fixes, which indoors (wandering fixes) grew far bigger than the place itself and covered the map.
 - All of it is one GeoJSON source with a `kind` property and a layer per kind, plus the paw prints' source.
-- **Length:** set in the Settings card's Appearance → Trail: Off, 1 hour (default), 6, 12 or 24 hours, or **Today**, everything since local midnight. It loads a day of history and draws from midnight, so just after midnight it shows almost nothing.
-  - An hour costs nothing extra, since 3 hours of history is always loaded. Longer means more per asset on each load: a day of reports every 30 s is about 2,900 points per asset.
+- **Length:** set in the Settings card's Appearance → Trail: Off, 1 hour (default), 6, 12 or 24 hours, or **Today**, everything since local midnight. It loads a day of history and draws from midnight, so just after midnight it shows almost nothing. A walk or stay under way when the trail starts is drawn whole, so "1 hour" can show more than an hour.
+  - Each loads 3 hours more than it shows: an hour loads 4. A day of reports every 30 s is about 2,900 points per asset, and the 3 hours before it about 360 more.
   - Saved in the browser as `trail`. A saved length that's no longer offered moves to the closest one by ratio (anything up to 2 hours becomes 1 hour, never Off; 3 hours becomes 6); `trailMinutes`, the older name, is still read.
 
 ## Stats
@@ -421,6 +434,8 @@ public/                               manifest + icons, color-scheme.js (dark mo
 dev/mock-traccar.mjs                  a stand-in Traccar with made-up assets, for development
 dev/icon-full.svg                     the app icon without rounded corners, for the PNG icons
 dev/og-image.html                     the front page's link preview picture, rendered to public/og-image.png
+dev/replay.ts                         the trail replay: real reports through the app's code, scored (npm run replay)
+dev/resolve-ts.mjs                    lets Node run the app's TypeScript (imports without an extension)
 src/
   start.ts                            request middleware: CSRF for server functions, security headers
   router.tsx                          also sets the per-request CSP nonce for Start's inline scripts
@@ -442,7 +457,8 @@ src/
     env.server.ts                     read + validate env once
     traccar.server.ts                 typed fetch client for the endpoints above
     session.server.ts                 sealed cookie, token exchange, withToken()
-    assets.server.ts                  Traccar → Asset mapping
+    assets.server.ts                  Traccar → Asset mapping, trail history
+    positions.server.ts               a Traccar position as a live update, a trail point, a location
     auth.functions.ts                 getUser / loginWithPassword / logout
     assets.functions.ts               getAssets, getTrackerDetails
     trackers.server.ts                tracker adapters: a position as one reading, whatever the tracker + tests
@@ -514,7 +530,8 @@ src/
     asset.ts                          Asset view model + isStale (shared with the browser)
     useNow.ts                         ticking clock for relative times
     live.ts                           LiveUpdate type + applyUpdates (shared with the server)
-    trail.ts                          trail types, extend/prune
+    trail.ts                          trail types, lengths, how much history, extending with live positions
+    trailGeometry.ts                  the trail worked out once, clipped to its length, and drawn as GeoJSON + tests
     places.ts                         Place type, Traccar's WKT areas, arrivals and departures + tests
     alerts.ts                         alert rules, which events they match, their text + tests
     usePhonePush.ts                   this phone's push subscription and the service worker

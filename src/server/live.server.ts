@@ -1,6 +1,7 @@
 import { BUILD_ID } from '../lib/buildId'
 import type { LiveUpdate } from '../lib/live'
-import { toDeviceUpdate, toPositionUpdate } from './assets.server'
+import { toDeviceUpdate } from './assets.server'
+import { toPositionUpdate } from './positions.server'
 import { clearSession, getSessionToken } from './session.server'
 import { getDevices, openSocket, parseSocketMessage, tokenWasRejected, type TraccarDevice, type TraccarPosition } from './traccar.server'
 

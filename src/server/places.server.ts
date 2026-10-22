@@ -2,8 +2,8 @@ import {
   ADDRESS_ATTRIBUTE,
   circleWkt,
   parseArea,
-  parseWayIn,
   placeCenter,
+  placeOf,
   WAY_IN_ATTRIBUTE,
   wayInAttribute,
   type Place,
@@ -29,15 +29,9 @@ export async function loadPlaces(token: string): Promise<Place[]> {
   const linked = await Promise.all(devices.map((device) => getGeofences(token, device.id)))
   const places: Place[] = []
   for (const geofence of geofences) {
-    const area = parseArea(geofence.area)
-    if (!area) continue
     const assetIds = devices.filter((_, index) => linked[index]!.some((other) => other.id === geofence.id)).map((device) => device.id)
-    const place: Place = { id: geofence.id, name: geofence.name, area, assetIds }
-    const address = geofence.attributes[ADDRESS_ATTRIBUTE]
-    if (typeof address === 'string' && address.trim()) place.address = address.trim()
-    const wayIn = parseWayIn(geofence.attributes[WAY_IN_ATTRIBUTE])
-    if (wayIn) place.wayIn = wayIn
-    places.push(place)
+    const place = placeOf(geofence, assetIds)
+    if (place) places.push(place)
   }
   return places.sort((a, b) => a.name.localeCompare(b.name))
 }

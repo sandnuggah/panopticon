@@ -1,7 +1,7 @@
 import type { LatLon } from '../lib/segments'
 import { dayStats, type Day, type DayStats } from '../lib/stats'
 import { trailProfile } from '../lib/tracker'
-import { toTrailPoint } from './assets.server'
+import { toTrailPoint } from './positions.server'
 import { adapterFor } from './trackers.server'
 import { getDevice, getPositionHistory } from './traccar.server'
 

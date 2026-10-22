@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { LngLatBounds, MapLibreMap, Marker, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 // maplibre looks for its worker next to its own file, which breaks once bundled.
@@ -7,8 +7,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { isStale, type Asset } from '../../lib/asset'
 import { parkFromRings, type Park } from '../../lib/parks'
 import type { Place } from '../../lib/places'
-import type { Trails } from '../../lib/trail'
-import { trackersOf } from '../../lib/tracker'
+import type { TrailViews } from '../../lib/trailGeometry'
 import type { LatLon } from '../../lib/segments'
 import { useMyPosition, type MyPosition } from '../../lib/useMyPosition'
 import { useNow } from '../../lib/useNow'
@@ -43,7 +42,8 @@ const MY_POSITION_ZOOM = 16
 
 type Props = {
   assets: Asset[]
-  trails: Trails
+  /** Each asset's trail to draw (see useLiveAssets). */
+  trails: TrailViews
   /** Snap to paths: walks snapped to streets and paths, by walk key; others are drawn as recorded. */
   snappedWalks: Record<string, LatLon[]>
   /** The map styles to choose between (see mapStyles.ts), and the default. */
@@ -286,14 +286,11 @@ export default function AssetMap({
     map.setStyle(styleUrl, { diff: false })
   }, [styleUrl])
 
-  // Each asset's kind of tracker, which changes far less often than the assets do.
-  const trackerKey = assets.map((asset) => `${asset.id}:${asset.tracker ?? ''}`).join(' ')
-  const trackers = useMemo(() => trackersOf(assets), [trackerKey])
   useEffect(() => {
     const map = mapRef.current
     if (!styleLoaded || !map) return
-    setTrails(map, trails, snappedWalks, places, trackers)
-  }, [trails, snappedWalks, places, trackers, styleLoaded])
+    setTrails(map, trails, snappedWalks)
+  }, [trails, snappedWalks, styleLoaded])
 
   const editedPlaceId = picker?.placeId
   useEffect(() => {

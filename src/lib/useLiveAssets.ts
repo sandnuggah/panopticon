@@ -5,10 +5,11 @@ import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
-import { placeAt, placeCenter, trailPlaces, type Place, type PlaceVisit } from './places'
-import { confirmedLocation, currentActivity, currentStay, type Activity, type Stay } from './segments'
-import { trackersOf, trailProfile } from './tracker'
-import { HISTORY_MIN_MINUTES, extendTrails, pruneTrails, trailMinutes, trailStart, type TrailLength, type Trails } from './trail'
+import { shownLocation, trailPlaces, type Place, type PlaceVisit } from './places'
+import { currentActivity, currentStay, type Activity, type Stay } from './segments'
+import { trackersOf, trailProfile, type TrackerKind } from './tracker'
+import { extendTrails, historyMinutes, stayPoints, trailStart, type TrailLength, type TrailPoint, type Trails } from './trail'
+import { firstShown, trailFrom, trailView, type TrailView, type TrailViews } from './trailGeometry'
 import { useNow } from './useNow'
 
 export type LiveStatus = 'connecting' | 'live' | 'offline'
@@ -20,8 +21,9 @@ const MAX_RETRY_MS = 60_000
  * Keeps the asset list and trails current from /live. `initialAssets` is the route loader's data;
  * whenever it's reloaded (reconnect, returning to the tab) it replaces the live state.
  * `trail` is null until the setting is known, so no history is fetched for a default.
- * History always covers at least HISTORY_MIN_MINUTES, even with trails off, to tell what each asset
- * is doing right now; only the trail's own length of it is returned for drawing.
+ * History covers the trail and HISTORY_MIN_MINUTES before it (see historyMinutes), even with trails
+ * off, to tell what each asset is doing right now; the trails are worked out from all of it and
+ * returned for drawing from where the trail starts (see trailFrom).
  * `onVisits` hears of arrivals and departures as live positions show them.
  */
 export function useLiveAssets(
@@ -30,7 +32,7 @@ export function useLiveAssets(
   places: Place[],
   onVisits?: (visits: PlaceVisit[]) => void,
 ) {
-  const historyMinutes = Math.max(trailMinutes(trail ?? 0), HISTORY_MIN_MINUTES)
+  const historyLength = historyMinutes(trail ?? 0)
   const router = useRouter()
   const [assets, setAssets] = useState(initialAssets)
   const assetsRef = useRef(initialAssets)
@@ -42,12 +44,12 @@ export function useLiveAssets(
   const [updateAvailable, setUpdateAvailable] = useState(false)
   // Bumped when we may have missed updates, to refetch trail history.
   const [historyVersion, setHistoryVersion] = useState(0)
-  const historyMinutesRef = useRef(historyMinutes)
+  const historyLengthRef = useRef(historyLength)
   const now = useNow(15_000)
   const onVisitsRef = useRef(onVisits)
 
   useEffect(() => {
-    historyMinutesRef.current = historyMinutes
+    historyLengthRef.current = historyLength
     onVisitsRef.current = onVisits
   })
 
@@ -65,7 +67,7 @@ export function useLiveAssets(
       return
     }
     let cancelled = false
-    getTrails({ data: { minutes: historyMinutes, assetIds: assetIdsKey.split(',').map(Number) } })
+    getTrails({ data: { minutes: historyLength, assetIds: assetIdsKey.split(',').map(Number) } })
       .then((history) => {
         // A failed server function can resolve with nothing (seen on a fresh dev server); keep
         // the trails we have rather than crash the map.
@@ -78,7 +80,7 @@ export function useLiveAssets(
     return () => {
       cancelled = true
     }
-  }, [trail === null, historyMinutes, assetIdsKey, historyVersion])
+  }, [trail === null, historyLength, assetIdsKey, historyVersion])
 
   useEffect(() => {
     let source: EventSource | undefined
@@ -98,7 +100,7 @@ export function useLiveAssets(
       // A tracker was added in Traccar; reload the full list.
       if (result.unknown) void router.invalidate()
       if (result.visits.length > 0) onVisitsRef.current?.(result.visits)
-      const since = Date.now() - historyMinutesRef.current * 60 * 1000
+      const since = Date.now() - historyLengthRef.current * 60 * 1000
       setTrails((current) => extendTrails(current, updates, since))
     }
 
@@ -161,14 +163,43 @@ export function useLiveAssets(
     }
   }, [router])
 
-  const visibleTrails = useMemo(() => {
-    const start = trailStart(trail ?? 0, now)
-    return start === null ? {} : pruneTrails(trails, start)
-  }, [trails, trail, now])
-
   // Read as each asset's kind of tracker reports.
   const trackerKey = assets.map((asset) => `${asset.id}:${asset.tracker ?? ''}`).join(' ')
   const trackers = useMemo(() => trackersOf(assets), [trackerKey])
+
+  // Each asset's trail, worked out from all of its points as they come, not as the clock ticks (see
+  // trailView); only an asset whose points changed is worked out again.
+  const worked = useRef(
+    new Map<number, { points: TrailPoint[]; places: Place[]; tracker: TrackerKind | undefined; view: TrailView | null }>(),
+  )
+  const views = useMemo(() => {
+    const result: TrailViews = {}
+    for (const [key, points] of Object.entries(trails)) {
+      const id = Number(key)
+      let entry = worked.current.get(id)
+      if (entry?.points !== points || entry.places !== places || entry.tracker !== trackers[id]) {
+        entry = { points, places, tracker: trackers[id], view: trailView(points, places, id, trackers[id]) }
+        worked.current.set(id, entry)
+      }
+      if (entry.view) result[id] = entry.view
+    }
+    return result
+  }, [trails, places, trackers])
+
+  // Drawn from where the trail starts: the same until a whole piece drops off its old end (see firstShown).
+  const start = trailStart(trail ?? 0, now)
+  const firsts = Object.entries(views).map(
+    ([id, view]) => [Number(id), start === null ? Infinity : firstShown(view.pieces, start)] as const,
+  )
+  const firstsKey = firsts.map(([id, first]) => `${id}:${first}`).join(' ')
+  const shownTrails = useMemo(() => {
+    const result: TrailViews = {}
+    for (const [id, first] of firsts) {
+      const shown = trailFrom(views[id]!, first)
+      if (shown) result[id] = shown
+    }
+    return result
+  }, [views, firstsKey])
 
   const activities = useMemo(() => {
     const result: Record<number, Activity> = {}
@@ -182,27 +213,22 @@ export function useLiveAssets(
   const stays = useMemo(() => {
     const result: Record<number, Stay> = {}
     for (const [id, points] of Object.entries(trails)) {
-      const stay = currentStay(points, now, trailProfile(trackers[Number(id)]), trailPlaces(places, Number(id)))
+      const stay = currentStay(stayPoints(points, trail ?? 0), now, trailProfile(trackers[Number(id)]), trailPlaces(places, Number(id)))
       if (stay) result[Number(id)] = stay
     }
     return result
-  }, [trails, now, trackers, places])
+  }, [trails, trail, now, trackers, places])
 
-  // Each asset where its trail can trust it to be: at its latest fix, unless GPS has yet to confirm
-  // that one (see lastConfirmedFix); and at one of its places, at the place's centre, so it sits still
-  // there however its fixes wander indoors. With when it last reported all the same.
+  // Each asset where its trail can trust it to be, and at its place's centre when it's at one (see shownLocation).
   const shownAssets = useMemo(
     () =>
       assets.map((asset) => {
         if (!asset.location) return asset
-        const points = trails[asset.id]
-        let location = points ? confirmedLocation(asset.location, points, trailProfile(asset.tracker)) : asset.location
-        const place = placeAt(places, asset.id, location)
-        if (place) location = { ...location, ...placeCenter(place.area), accuracy: undefined }
+        const location = shownLocation(places, asset.id, asset.location, trails[asset.id], trailProfile(asset.tracker))
         return location === asset.location ? asset : { ...asset, location }
       }),
     [assets, trails, places],
   )
 
-  return { assets: shownAssets, trails: visibleTrails, trailsLoaded, activities, stays, status, updateAvailable }
+  return { assets: shownAssets, trails: shownTrails, trailsLoaded, activities, stays, status, updateAvailable }
 }

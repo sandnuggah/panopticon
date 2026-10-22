@@ -18,6 +18,16 @@ export function parkFromRings(rings: [number, number][][]): Park | null {
   return { rings: points, south: Math.min(...lats), north: Math.max(...lats), west: Math.min(...lons), east: Math.max(...lons) }
 }
 
+/** Whether these are the same parks (by their bounds, in any order), as the map tells of them again after a move. */
+export function sameParks(a: Park[], b: Park[]): boolean {
+  const key = (parks: Park[]) =>
+    parks
+      .map((park) => `${park.south},${park.west},${park.north},${park.east}`)
+      .sort()
+      .join(';')
+  return a.length === b.length && key(a) === key(b)
+}
+
 /** Whether a point is in any of the parks: inside an outline and not in one of its holes. */
 export function isInPark(point: ParkPoint, parks: Park[]): boolean {
   return parks.some(

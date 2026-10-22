@@ -2,26 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { matchWalks } from '../server/map.functions'
 import { MAX_WALKS_PER_REQUEST, matchableWalks, type MatchablePoint } from './matching'
 import { isInPark, type Park } from './parks'
-import { trailPlaces, type Place } from './places'
+import type { LatLon } from './segments'
 import { trailProfile, type TrackerKind } from './tracker'
-import { classifyTrail, type LatLon } from './segments'
-import type { Trails } from './trail'
+import type { TrailViews } from './trailGeometry'
 
 /** Waits this long after the trail changes before asking, so bursts of live updates make one request. */
 const DEBOUNCE_MS = 1_000
 
 /**
- * Snap to paths: the walks on these trails snapped to streets and paths, by walk key (see
- * matching.ts). Walks the server can't snap closely enough are simply missing, and drawn as recorded.
- * `parks` (from the map, null until it's ready): fixes in them are snapped more strictly, so walks
- * wait for them. `places`, `trackers`: the walks are those the map draws, with stays at an asset's
- * places as one, read as its kind of tracker reports.
+ * Snap to paths: the walks on these trails (as the map draws them, see useLiveAssets) snapped to
+ * streets and paths, by walk key (see matching.ts). Walks the server can't snap closely enough are
+ * simply missing, and drawn as recorded. `parks` (from the map, null until it's ready): fixes in them
+ * are snapped more strictly, so walks wait for them. `trackers`: read as each asset's kind of tracker reports.
  */
 export function useSnappedWalks(
-  trails: Trails,
+  trails: TrailViews,
   enabled: boolean,
   parks: Park[] | null,
-  places: Place[],
   trackers: Record<number, TrackerKind | undefined>,
 ): Record<string, LatLon[]> {
   // null: asked, and it can't be snapped.
@@ -40,12 +37,8 @@ export function useSnappedWalks(
       inParks.current.add(where)
       return true
     }
-    return Object.entries(trails).flatMap(([id, points]) => {
-      const profile = trailProfile(trackers[Number(id)])
-      const pieces = classifyTrail(points, { showWandering: true, places: trailPlaces(places, Number(id)), profile })
-      return matchableWalks(pieces, inPark, profile)
-    })
-  }, [trails, enabled, parks, places, trackers])
+    return Object.entries(trails).flatMap(([id, view]) => matchableWalks(view.pieces, inPark, trailProfile(trackers[Number(id)])))
+  }, [trails, enabled, parks, trackers])
 
   useEffect(() => {
     // Asked again when more of a walk's fixes turn out to be in a park: parks come from the tiles in

@@ -1,16 +1,11 @@
 import type { GeoJSONSource, MapLibreMap } from 'maplibre-gl'
-import { stayHopKey, walkKey } from '../../lib/matching'
-import { trailPlaces, type Place } from '../../lib/places'
-import { classifyTrail, latestOutingStart, stayDots, type LatLon, type TrailPiece } from '../../lib/segments'
-import { trailProfile, type TrackerKind } from '../../lib/tracker'
-import type { Trails } from '../../lib/trail'
+import type { LatLon } from '../../lib/segments'
+import { toTrailFeatures, type TrailViews } from '../../lib/trailGeometry'
 
-// The trail on the map, drawn by what the asset was doing (see segments.ts): walking as a line, or
-// as paw prints (Appearance → Paw prints); rides through their fixes, dashed, and dotted where they
-// went without GPS (underground); stays as dots, bigger the longer they were, with the walks running
-// through them, so a day reads as one path. The latest outing (since the last long stay, see
-// latestOutingStart) is drawn in front, and older ones fade into the background; within each, the
-// older parts are fainter. Markers are DOM elements, so they always sit above all of it.
+// The trail on the map, drawn by what the asset was doing (see segments.ts, and trailGeometry.ts for
+// what's drawn where): walking as a line, or as paw prints (Appearance → Paw prints); rides through
+// their fixes, dashed, and dotted where they went without GPS (underground); stays as dots, bigger the
+// longer they were. Markers are DOM elements, so they always sit above all of it.
 
 const TRAILS = 'trails'
 const RIDES_VEHICLE = 'trail-vehicle'
@@ -18,21 +13,10 @@ const RIDES_UNDERGROUND = 'trail-underground'
 const STAYS = 'trail-stays'
 const PAWS = 'paws'
 const PAW_IMAGE = 'paw-prints'
-/** Walking is drawn in short pieces so the trail can fade with age, oldest faintest. */
-const HOPS_PER_PIECE = 3
 
-/**
- * Shows these trails, snapping walks to paths where Snap to paths has them (see useSnappedWalks), with
- * each asset's stays at its places as one dot there, read as its kind of tracker reports (`trackers`).
- */
-export function setTrails(
-  map: MapLibreMap,
-  trails: Trails,
-  snappedWalks: Record<string, LatLon[]>,
-  places: Place[],
-  trackers: Record<number, TrackerKind | undefined>,
-) {
-  const features = toTrailFeatures(trails, snappedWalks, places, trackers)
+/** Shows these trails (see useLiveAssets), snapping walks to paths where Snap to paths has them (see useSnappedWalks). */
+export function setTrails(map: MapLibreMap, trails: TrailViews, snappedWalks: Record<string, LatLon[]>) {
+  const features = toTrailFeatures(trails, snappedWalks)
   void map.getSource<GeoJSONSource>(TRAILS)?.setData(features.trail)
   void map.getSource<GeoJSONSource>(PAWS)?.setData(features.paws)
 }
@@ -54,7 +38,7 @@ export function recolourTrails(map: MapLibreMap) {
 /** Adds the trail layers, empty; again after each style load, since a new style drops them. */
 export function addTrailLayers(map: MapLibreMap) {
   const color = trailColor(map)
-  const empty = toTrailFeatures({}, {}, [], {})
+  const empty = toTrailFeatures({}, {})
   const kind = (value: string) => ['==', ['get', 'kind'], value] as ['==', ['get', string], string]
   const lineLayout = { 'line-cap': 'round', 'line-join': 'round' } as const
   map.addSource(TRAILS, { type: 'geojson', data: empty.trail })
@@ -138,110 +122,6 @@ export function addTrailLayers(map: MapLibreMap) {
     },
     paint: { 'icon-opacity': ['get', 'opacity'] },
   })
-}
-
-type TrailData = Extract<Parameters<GeoJSONSource['setData']>[0], { type: 'FeatureCollection' }>
-type TrailFeature = TrailData['features'][number]
-
-/**
- * GeoJSON for the trail layers. `paws` holds the walking only, in longer pieces than `trail`:
- * paw prints are spaced 44 px apart, so short pieces would show none.
- */
-function toTrailFeatures(
-  trails: Trails,
-  snappedWalks: Record<string, LatLon[]>,
-  places: Place[],
-  trackers: Record<number, TrackerKind | undefined>,
-): { trail: TrailData; paws: TrailData } {
-  const trail: TrailFeature[] = []
-  const paws: TrailFeature[] = []
-  for (const [id, points] of Object.entries(trails)) {
-    const fixes = points.filter((point) => point.valid)
-    if (fixes.length === 0) continue
-    const profile = trailProfile(trackers[Number(id)])
-    const pieces = classifyTrail(points, { showWandering: true, places: trailPlaces(places, Number(id)), profile })
-    // The latest outing from 0.55 at its start to 0.95 at its newest point; older ones from 0.12 to 0.25.
-    const [oldest, newest] = [fixes[0]!.time, fixes.at(-1)!.time]
-    const outing = latestOutingStart(pieces) ?? oldest
-    const along = (time: number, from: number, to: number) => (to > from ? Math.min(1, Math.max(0, (time - from) / (to - from))) : 1)
-    const opacity = (time: number) =>
-      time >= outing ? 0.55 + 0.4 * along(time, outing, newest) : 0.12 + 0.13 * along(time, oldest, outing)
-    const line = (kind: string, coordinates: LatLon[], time: number): TrailFeature => ({
-      type: 'Feature',
-      properties: { id: Number(id), kind, opacity: opacity(time) },
-      geometry: {
-        type: 'LineString',
-        coordinates: coordinates.map((point) => [point.lon, point.lat]),
-      },
-    })
-    const stayIndexes = pieces.flatMap((piece, index) => (piece.kind === 'stay' ? [index] : []))
-    const { dots, dotOf } = stayDots(stayIndexes.map((index) => pieces[index] as Extract<TrailPiece, { kind: 'stay' }>))
-    /** The dot of the stay at `index` in the pieces, if there's a stay there. */
-    const dotAt = (index: number) => {
-      const stay = stayIndexes.indexOf(index)
-      return stay < 0 ? undefined : dots[dotOf[stay]!]!
-    }
-    pieces.forEach((piece, index) => {
-      if (piece.kind === 'move') {
-        // From the dot of the stay before to the dot of the stay after, so the path is unbroken.
-        const [before, after] = [dotAt(index - 1), dotAt(index + 1)]
-        const walk = [
-          ...(before ? [{ ...before.center, time: piece.points[0]!.time }] : []),
-          ...alongPaths(piece.points, snappedWalks[walkKey(piece.points)]),
-          ...(after ? [{ ...after.center, time: piece.points.at(-1)!.time }] : []),
-        ]
-        for (let i = 0; i < walk.length - 1; i += HOPS_PER_PIECE) {
-          const chunk = walk.slice(i, i + HOPS_PER_PIECE + 1)
-          trail.push(line('move', chunk, chunk.at(-1)!.time))
-        }
-        paws.push(line('move', walk, walk.at(-1)!.time))
-      } else if (piece.kind === 'stay') {
-        // Straight on from another stop, a few dozen metres off (pottering about a park): a line
-        // between their dots, along the way Snap to paths routed, if it did.
-        const [before, here] = [dotAt(index - 1), dotAt(index)!]
-        if (before && before !== here) {
-          const hop = [
-            { ...before.center, time: piece.from },
-            { ...here.center, time: piece.from },
-          ]
-          const routed = snappedWalks[stayHopKey(pieces[index - 1] as Extract<TrailPiece, { kind: 'stay' }>, piece)]
-          // From dot to dot, as walks are: a dot can be at another of its stays.
-          const walk = routed ? [hop[0]!, ...alongPaths(hop, routed), hop[1]!] : hop
-          trail.push(line('move', walk, piece.from))
-          paws.push(line('move', walk, piece.from))
-        }
-      } else {
-        // Through the fixes on the way; legs without GPS are straight lines, dotted.
-        for (const leg of piece.legs) trail.push(line(leg.kind, leg.points, leg.points.at(-1)!.time))
-      }
-    })
-    for (const dot of dots) {
-      trail.push({
-        type: 'Feature',
-        properties: { id: Number(id), kind: 'stay', opacity: opacity(dot.to), minutes: dot.ms / 60_000 },
-        geometry: { type: 'Point', coordinates: [dot.center.lon, dot.center.lat] },
-      })
-    }
-  }
-  return {
-    trail: { type: 'FeatureCollection', features: trail },
-    paws: { type: 'FeatureCollection', features: paws },
-  }
-}
-
-/**
- * A walk as drawn: the snapped line when Snap to paths has one, else the fixes as recorded. The
- * snapped line has no times, so they're spread evenly between the walk's first and last fix, for fading.
- */
-function alongPaths(points: (LatLon & { time: number })[], snapped: LatLon[] | undefined): (LatLon & { time: number })[] {
-  // A line of one point (a walk of strays, left out but for a stay at its end) is nothing to draw.
-  if (!snapped || snapped.length === 0) return points
-  if (snapped.length === 1) return [{ ...snapped[0]!, time: points.at(-1)!.time }]
-  const [from, to] = [points[0]!.time, points.at(-1)!.time]
-  return snapped.map((point, index) => ({
-    ...point,
-    time: from + ((to - from) * index) / (snapped.length - 1),
-  }))
 }
 
 const PAW_PIXEL_RATIO = 2

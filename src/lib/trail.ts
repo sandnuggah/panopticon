@@ -43,7 +43,7 @@ export function trailStart(length: TrailLength, now: number): number | null {
   return length === 0 ? null : now - length * 60 * 1000
 }
 
-/** How many minutes of history a trail needs: a day at most, which also covers "today". */
+/** How many minutes back a trail goes: a day at most, which also covers "today". */
 export function trailMinutes(length: TrailLength): number {
   return length === 'today' ? MAX_TRAIL_MINUTES : length
 }
@@ -64,6 +64,40 @@ export function nearestTrail(value: unknown): TrailLength | undefined {
  */
 export const HISTORY_MIN_MINUTES = 180
 
+/**
+ * How many minutes of history a trail needs: its own, and HISTORY_MIN_MINUTES before its start, so
+ * the trail is worked out there as it would be anywhere else (see trailView in trailGeometry.ts): a
+ * walk under way when it starts, a stay long enough to be one, a fix it can check against the one
+ * before. With trails off, enough to tell what each asset is doing.
+ */
+export function historyMinutes(length: TrailLength): number {
+  return trailMinutes(length) + HISTORY_MIN_MINUTES
+}
+export const MAX_HISTORY_MINUTES = MAX_TRAIL_MINUTES + HISTORY_MIN_MINUTES
+
+/**
+ * The points "Here since" goes by (see currentStay): HISTORY_MIN_MINUTES, or the trail's length if
+ * longer, back from the newest, as the history was before it covered more; not all of the history,
+ * since currentStay joins one stay at a place with the next across walks, and over more of it, more.
+ */
+export function stayPoints(points: TrailPoint[], length: TrailLength): TrailPoint[] {
+  const newest = points.at(-1)
+  if (!newest) return points
+  const from = newest.time - Math.max(trailMinutes(length), HISTORY_MIN_MINUTES) * 60 * 1000
+  return points[0]!.time >= from ? points : points.filter((point) => point.time >= from)
+}
+
+/**
+ * Where an asset's history starts: `from`, or, for one whose last fix is older than `from` allows
+ * (a tracker asleep, see QUIET_MS in segments.ts), the HISTORY_MIN_MINUTES before that fix, so the
+ * stay it went quiet in still shows ("Here since"). Not for one quiet over a day.
+ */
+export function historyStart(from: Date, to: Date, lastFix: number | undefined): Date {
+  const before = HISTORY_MIN_MINUTES * 60 * 1000
+  if (lastFix === undefined || lastFix < to.getTime() - MAX_TRAIL_MINUTES * 60 * 1000) return from
+  return new Date(Math.min(from.getTime(), lastFix - before))
+}
+
 /** Adds live positions (with or without a GPS fix) to the trails and drops points older than `since`. */
 export function extendTrails(trails: Trails, updates: LiveUpdate[], since: number): Trails {
   let next = trails
@@ -79,15 +113,6 @@ export function extendTrails(trails: Trails, updates: LiveUpdate[], since: numbe
     if (update.satellites !== undefined) point.satellites = update.satellites
     if (update.location.accuracy !== undefined) point.accuracy = update.location.accuracy
     next = { ...next, [update.id]: [...trail.filter((p) => p.time >= since), point] }
-  }
-  return next
-}
-
-export function pruneTrails(trails: Trails, since: number): Trails {
-  const next: Trails = {}
-  for (const [id, trail] of Object.entries(trails)) {
-    const kept = trail.filter((point) => point.time >= since)
-    if (kept.length > 0) next[Number(id)] = kept
   }
   return next
 }

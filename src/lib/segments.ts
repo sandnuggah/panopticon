@@ -248,9 +248,11 @@ export function classifyTrail(
     profile = DEFAULT_TRAIL_PROFILE,
   }: { showWandering?: boolean; places?: TrailPlace[]; profile?: TrailProfile } = {},
 ): TrailPiece[] {
-  const hops = toHops(withoutSpikes(withoutUnconfirmed(points, profile), profile), profile)
+  const kept = withoutSpikes(withoutUnconfirmed(points, profile), profile)
+  const hops = toHops(kept, profile)
   if (hops.length === 0) {
-    const fixes = points.filter((point) => point.valid)
+    // A fix or so: where it is, without those left out.
+    const fixes = kept.filter((point) => point.valid)
     return fixes.length > 0 ? [toStay(fixes)] : []
   }
   const pieces: TrailPiece[] = []

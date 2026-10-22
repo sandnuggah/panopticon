@@ -449,6 +449,12 @@ describe('unconfirmed fixes', () => {
     assert.equal(lastConfirmedFix([...home, ...canal]), home.at(-1), 'not confirmed yet: where it last was')
   })
 
+  test('one fix left besides them: a stay there, not among them', () => {
+    const pieces = classifyTrail([home[0]!, at(-320, 10, 7), at(-330, 11, 4), at(-330, 12, 4)])
+    assert.deepEqual(kinds(pieces), ['stay'])
+    assert.ok(distance(home[0]!, (pieces[0] as Extract<TrailPiece, { kind: 'stay' }>).center) < 1)
+  })
+
   test('a good fix near them confirms them', () => {
     const arriving = [at(150, 10, 6), at(155, 11, 12)]
     assert.equal(lastConfirmedFix([...home, ...arriving]), arriving[1])

@@ -10,6 +10,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'src/**/*.test.ts'",
+    "replay": "node --import ./dev/resolve-ts.mjs dev/replay.ts",
     "start": "node --env-file-if-exists=.env server.mjs"
   },
   "dependencies": {
