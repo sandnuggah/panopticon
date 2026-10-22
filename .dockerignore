@@ -4,6 +4,7 @@ dist
 .tanstack
 .git
 .claude
+dev/fixtures
 .env
 .env.*
 !.env.example

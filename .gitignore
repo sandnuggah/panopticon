@@ -7,6 +7,9 @@ dist/
 *.local
 .DS_Store
 
+# real location data for the trail replay (dev/fixtures/README.md)
+dev/fixtures/
+
 # secrets
 .env
 .env.*
