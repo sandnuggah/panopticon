@@ -7,6 +7,7 @@ import type { SnappedLine } from './snapLines.ts'
 import type { TrailPoint } from './trail.ts'
 import {
   drawTrail,
+  quietAssets,
   firstShown,
   shownKey,
   shownTrails,
@@ -225,8 +226,18 @@ describe('trailViews and shownTrails', () => {
     const tracked = trailViews(trails, otherPlaces, { 1: 'phone' }, cache)[1]
     assert.notEqual(tracked, placed, 'another kind of tracker')
     assert.notEqual(trailViews({ ...trails, 1: [...trip.points] }, otherPlaces, { 1: 'phone' }, cache)[1], tracked, 'new points')
+    const quiet = trailViews(trails, otherPlaces, { 1: 'phone' }, cache, new Set([1]))[1]
+    assert.notEqual(quiet, trailViews(trails, otherPlaces, { 1: 'phone' }, cache)[1], 'quiet, then not')
     trailViews({ 1: trip.points }, places, {}, cache)
     assert.deepEqual([...cache.keys()], [1])
+  })
+
+  test('quiet: an asset whose tracker has had no fix for its gap (one that sleeps when still) or its silence (one that doesn’t)', () => {
+    const last = trip.points.findLast((point) => point.valid)!.time
+    const trails = { 1: trip.points, 2: trip.points }
+    assert.deepEqual(quietAssets(trails, { 1: 'sinotrack', 2: 'phone' }, last + 119_000), [])
+    assert.deepEqual(quietAssets(trails, { 1: 'sinotrack', 2: 'phone' }, last + 120_000), [1])
+    assert.deepEqual(quietAssets(trails, { 1: 'sinotrack', 2: 'phone' }, last + 600_000), [1, 2])
   })
 
   test('shownKey changes only when a piece drops off the old end', () => {
@@ -444,9 +455,9 @@ describe('the trail as reports come', () => {
   const final = trails.at(-1)!
 
   test('the day reads as it was: home, the pee spot, home, the walk with a stop in the park, home', () => {
-    // Home twice at first: waking up 40–60 m off reads as a gap in the trail, not as staying on.
+    // Home once at first, though it woke up 40–60 m off where it slept: it was home all along.
     const summary = final.pieces.map((piece) => (piece.kind === 'stay' ? (piece.atPlace ? 'home' : 'stop') : piece.kind))
-    assert.deepEqual(summary, ['home', 'home', 'move', 'home', 'move', 'stop', 'move', 'home'])
+    assert.deepEqual(summary, ['home', 'move', 'home', 'move', 'stop', 'move', 'home'])
   })
 
   test('its pieces follow one another in time', () => {

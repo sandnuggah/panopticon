@@ -1,5 +1,6 @@
 import { stayHopId, walkId } from './matching.ts'
-import { trailPlaces, type Place } from './places.ts'
+import type { Place } from './places.ts'
+import { placeStays, quietAfter } from './presence.ts'
 import { classifyTrail, latestOutingStart, stayDots, type LatLon, type StayDot, type TrailPiece } from './segments.ts'
 import type { SnappedLine, SnappedLines } from './snapLines.ts'
 import { trailProfile, type TrackerKind } from './tracker.ts'
@@ -28,12 +29,12 @@ export type TrailView = { pieces: TrailPiece[]; oldest: number; newest: number; 
 export type TrailViews = Record<number, TrailView>
 
 /**
- * What trailViews remembers of each asset's trail, so one whose points, places and tracker haven't
- * changed isn't worked out again.
+ * What trailViews remembers of each asset's trail, so one whose points, places, tracker and quiet
+ * haven't changed isn't worked out again.
  */
 export type TrailViewCache = Map<
   number,
-  { points: TrailPoint[]; places: Place[]; tracker: TrackerKind | undefined; view: TrailView | null }
+  { points: TrailPoint[]; places: Place[]; tracker: TrackerKind | undefined; quiet: boolean; view: TrailView | null }
 >
 
 /**
@@ -55,38 +56,64 @@ export type DrawnTrail = {
  * they come, with its places and its kind of tracker's profile; drawn from where the trail starts with
  * trailFrom. Worked out from only the points the trail shows, it would change as its start moves on:
  * a walk cut in two, a stay too short to be one, a fix the trail can't check any more (see
- * withoutUnconfirmed in segments.ts).
+ * withoutUnconfirmed in segments.ts). `quiet`: its tracker has gone quiet since (see quietAssets).
  */
-export function trailView(points: Trails[number], places: Place[], id: number, tracker: TrackerKind | undefined): TrailView | null {
+export function trailView(
+  points: Trails[number],
+  places: Place[],
+  id: number,
+  tracker: TrackerKind | undefined,
+  quiet = false,
+): TrailView | null {
   const fixes = points.filter((point) => point.valid)
   if (fixes.length === 0) return null
-  const pieces = classifyTrail(points, { showWandering: true, places: trailPlaces(places, id), profile: trailProfile(tracker) })
+  const profile = trailProfile(tracker)
+  const pieces = classifyTrail(points, { visits: placeStays(points, places, id, profile, quiet), profile })
   return { pieces, oldest: fixes[0]!.time, newest: fixes.at(-1)!.time, outing: latestOutingStart(pieces) }
 }
 
 /**
  * Each asset's trail worked out from all of its points (see trailView), as the trails are now: only
- * an asset whose points (a new array when they change, see extendTrails), places or kind of tracker
- * changed is worked out again; the rest come from `cache`, which forgets assets no longer there.
+ * an asset whose points (a new array when they change, see extendTrails), places, kind of tracker or
+ * quiet (`quiet`: see quietAssets) changed is worked out again; the rest come from `cache`, which
+ * forgets assets no longer there.
  */
 export function trailViews(
   trails: Trails,
   places: Place[],
   trackers: Record<number, TrackerKind | undefined>,
   cache: TrailViewCache = new Map(),
+  quiet: ReadonlySet<number> = new Set(),
 ): TrailViews {
   const views: TrailViews = {}
   for (const id of cache.keys()) if (!(id in trails)) cache.delete(id)
   for (const [key, points] of Object.entries(trails)) {
     const id = Number(key)
     let entry = cache.get(id)
-    if (entry?.points !== points || entry.places !== places || entry.tracker !== trackers[id]) {
-      entry = { points, places, tracker: trackers[id], view: trailView(points, places, id, trackers[id]) }
+    if (entry?.points !== points || entry.places !== places || entry.tracker !== trackers[id] || entry.quiet !== quiet.has(id)) {
+      entry = {
+        points,
+        places,
+        tracker: trackers[id],
+        quiet: quiet.has(id),
+        view: trailView(points, places, id, trackers[id], quiet.has(id)),
+      }
       cache.set(id, entry)
     }
     if (entry.view) views[id] = entry.view
   }
   return views
+}
+
+/**
+ * The assets whose trackers have gone quiet, as of `now`, for as long as a place they went quiet near
+ * counts as arrived at (see quietAfter): their trails are worked out again once, when that happens.
+ */
+export function quietAssets(trails: Trails, trackers: Record<number, TrackerKind | undefined>, now: number): number[] {
+  return Object.entries(trails).flatMap(([key, points]) => {
+    const lastFix = points.findLast((point) => point.valid)
+    return lastFix && now - lastFix.time >= quietAfter(trailProfile(trackers[Number(key)])) ? [Number(key)] : []
+  })
 }
 
 /** Each trail drawn from `start` on (see trailFrom); none when trails are off (`start` null). */

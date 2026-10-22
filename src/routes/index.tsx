@@ -242,7 +242,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
     if (!place || !asset) return
     setBanner({ text: visitSentence(asset.name, visit, place.name), time: visit.time, key: Date.now(), assetId: asset.id })
   }
-  const { assets, trails, trailsLoaded, activities, stays, status, updateAvailable } = useLiveAssets(
+  const { assets, trails, trailsLoaded, activities, stays, presence, status, updateAvailable } = useLiveAssets(
     loaderData.assets,
     settingsLoaded ? settings.trail : null,
     places,
@@ -377,6 +377,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
               onParks={(next) => setParks((current) => (current && sameParks(current, next) ? current : next))}
               cover={mapCover}
               places={places}
+              presence={presence}
               picker={
                 editing && place !== undefined
                   ? {
@@ -406,6 +407,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
         asset={details && !editing ? selected : undefined}
         activity={selectedId !== undefined ? activities[selectedId] : undefined}
         stay={selectedId !== undefined ? stays[selectedId] : undefined}
+        presence={selectedId !== undefined ? presence[selectedId] : undefined}
         address={address}
         places={places}
         onTop={cardView === undefined}

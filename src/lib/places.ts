@@ -1,7 +1,4 @@
-import type { AssetLocation } from './asset.ts'
-import { confirmedLocation, currentStay, distance, type LatLon, type Stay, type TrailPlace, type TrailProfile } from './segments.ts'
-import { trailProfile, type TrackerKind } from './tracker.ts'
-import { stayPoints, type TrailLength, type TrailPoint, type Trails } from './trail.ts'
+import { distance, type LatLon } from './segments.ts'
 
 // Places: areas like Home or Daycare, kept in Traccar as geofences (see places.server.ts). Traccar
 // works out which of an asset's places each position is inside (`geofenceIds`), and records arriving
@@ -128,80 +125,6 @@ export function placeCenter(area: PlaceArea): LatLon {
   return { lat: (Math.min(...lats) + Math.max(...lats)) / 2, lon: (Math.min(...lons) + Math.max(...lons)) / 2 }
 }
 
-/**
- * An asset's places as its trail uses them: stays in them are drawn as one dot at the place's way in,
- * or its middle (see segments.ts).
- */
-export function trailPlaces(places: Place[], assetId: number): TrailPlace[] {
-  return places
-    .filter((place) => place.assetIds.includes(assetId))
-    .map(({ area, wayIn }) => ({ center: wayIn ?? placeCenter(area), within: (point, margin) => withinArea(area, point, margin) }))
-}
-
-/**
- * The asset's place a point is inside, for showing the asset at its centre: of several, the one whose
- * centre is nearest.
- */
-export function placeAt(places: Place[], assetId: number, point: LatLon): Place | undefined {
-  return places
-    .filter((place) => place.assetIds.includes(assetId) && withinArea(place.area, point, 0))
-    .sort((a, b) => distance(placeCenter(a.area), point) - distance(placeCenter(b.area), point))[0]
-}
-
-/**
- * Where the map shows an asset whose latest location is `location`, with its trail's `points`: where
- * the trail can trust it to be (at its latest fix, unless GPS has yet to confirm that one, see
- * confirmedLocation), and at one of its places at the place's centre, so it sits still there however
- * its fixes wander indoors. With when it last reported all the same.
- */
-export function shownLocation<L extends AssetLocation>(
-  places: Place[],
-  assetId: number,
-  location: L,
-  points: TrailPoint[] | undefined,
-  profile: TrailProfile,
-): L {
-  const confirmed = points ? confirmedLocation(location, points, profile) : location
-  const place = placeAt(places, assetId, confirmed)
-  return place ? { ...confirmed, ...placeCenter(place.area), accuracy: undefined } : confirmed
-}
-
-/**
- * Each asset as the map shows it: at its location as shownLocation has it, with its trail's points
- * and its kind of tracker's profile; the same object when that's where it is.
- */
-export function shownAssets<A extends { id: number; location: AssetLocation | null; tracker?: TrackerKind }>(
-  assets: A[],
-  trails: Trails,
-  places: Place[],
-): A[] {
-  return assets.map((asset) => {
-    if (!asset.location) return asset
-    const location = shownLocation(places, asset.id, asset.location, trails[asset.id], trailProfile(asset.tracker))
-    return location === asset.location ? asset : { ...asset, location }
-  })
-}
-
-/**
- * Each asset staying put right now ("Here since", see currentStay), as of `now`: on the points it goes
- * by for this trail length (see stayPoints), with its places and its kind of tracker's profile.
- */
-export function currentStays(
-  trails: Trails,
-  length: TrailLength,
-  now: number,
-  places: Place[],
-  trackers: Record<number, TrackerKind | undefined>,
-): Record<number, Stay> {
-  const stays: Record<number, Stay> = {}
-  for (const [key, points] of Object.entries(trails)) {
-    const id = Number(key)
-    const stay = currentStay(stayPoints(points, length), now, trailProfile(trackers[id]), trailPlaces(places, id))
-    if (stay) stays[id] = stay
-  }
-  return stays
-}
-
 /** Whether a point is inside the area, or at most `margin` metres outside it. */
 export function withinArea(area: PlaceArea, point: LatLon, margin: number): boolean {
   if (area.kind === 'circle') return distance(area.center, point) <= area.radius + margin
@@ -220,6 +143,20 @@ function inRing(point: LatLon, ring: LatLon[]): boolean {
   return inside
 }
 
+/** How big an area is, in square metres (flat: places are small). */
+export function areaSize(area: PlaceArea): number {
+  if (area.kind === 'circle') return Math.PI * area.radius ** 2
+  const origin = area.ring[0]!
+  const metresPerDegreeLon = Math.cos((origin.lat * Math.PI) / 180) * 111_320
+  const xy = (q: LatLon) => [(q.lon - origin.lon) * metresPerDegreeLon, (q.lat - origin.lat) * 110_540] as const
+  let twice = 0
+  area.ring.forEach((point, index) => {
+    const [[ax, ay], [bx, by]] = [xy(point), xy(area.ring[(index + 1) % area.ring.length]!)]
+    twice += ax * by - bx * ay
+  })
+  return Math.abs(twice) / 2
+}
+
 /** How far a point is from the segment a–b, in metres (flat: places are small). */
 function metresToSegment(point: LatLon, a: LatLon, b: LatLon): number {
   const metresPerDegreeLon = Math.cos((point.lat * Math.PI) / 180) * 111_320
@@ -229,14 +166,6 @@ function metresToSegment(point: LatLon, a: LatLon, b: LatLon): number {
   const [dx, dy] = [bx - ax, by - ay]
   const t = dx || dy ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy))) : 0
   return Math.hypot(ax + t * dx, ay + t * dy)
-}
-
-/** The arrivals and departures that a change of an asset's places means: one per place left or entered. */
-export function visitsBetween(assetId: number, before: number[], after: number[], time: string): PlaceVisit[] {
-  return [
-    ...before.filter((id) => !after.includes(id)).map((placeId) => ({ assetId, placeId, arrived: false, time })),
-    ...after.filter((id) => !before.includes(id)).map((placeId) => ({ assetId, placeId, arrived: true, time })),
-  ]
 }
 
 /** "Betty arrived at Home", "Betty left Home". */

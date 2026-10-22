@@ -6,14 +6,12 @@ import {
   currentStay,
   DEFAULT_TRAIL_PROFILE,
   distance,
-  confirmedLocation,
   isWeak,
   lastConfirmedFix,
   latestOutingStart,
   stayDots,
   type LatLon,
   type TrailPiece,
-  type TrailPlace,
 } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
@@ -170,31 +168,25 @@ describe('classifyTrail', () => {
   })
 
   test('a long stop between two rides is not (changing trains)', () => {
+    // Four minutes: a stop too short to be one on the map, part of the walk between the rides.
     const pieces = classifyTrail(new Trip().walk(5).ride(800, 30).stay(4).ride(800, 30).walk(5).points)
-    assert.deepEqual(kinds(pieces), ['move', 'vehicle', 'stay', 'vehicle', 'move'])
+    assert.deepEqual(kinds(pieces), ['move', 'vehicle', 'move', 'vehicle', 'move'])
   })
 
-  test('pottering about a yard is one stay', () => {
-    const pieces = classifyTrail(new Trip().stay(10).walk(0.5, 5).stay(10).walk(0.5, 5).stay(10).walk(0.5, -5).stay(10).points)
-    assert.deepEqual(kinds(pieces), ['stay'])
-  })
-
-  test('wandering about a park is one stay, but the map shows the wandering', () => {
+  test('wandering about a park shows the wandering: its stops, and the walking between them', () => {
     // Sniffing about one spot, a minute and a half's walk to another 55 m away, sniffing there.
     const points = new Trip().stay(10, 18).walk(1.5, 2.2).stay(10, 18).points
-    assert.deepEqual(kinds(classifyTrail(points)), ['stay'])
-    assert.equal(kinds(classifyTrail(points, { showWandering: true })).filter((kind) => kind === 'stay').length, 2)
+    assert.equal(kinds(classifyTrail(points)).filter((kind) => kind === 'stay').length, 2)
   })
 
-  test('on the map, a short stop is part of the walk', () => {
+  test('a short stop is part of the walk', () => {
     const points = new Trip().stay(30).walk(5).stay(3).walk(5).stay(30).points
-    assert.deepEqual(kinds(classifyTrail(points)), ['stay', 'move', 'stay', 'move', 'stay'])
-    assert.deepEqual(kinds(classifyTrail(points, { showWandering: true })), ['stay', 'move', 'stay'])
+    assert.deepEqual(kinds(classifyTrail(points)), ['stay', 'move', 'stay'])
   })
 
   test('a GPS blip in one place is no wandering', () => {
     const points = new Trip().stay(10).walk(0.5, 5).walk(0.5, -5).stay(10).points
-    assert.deepEqual(kinds(classifyTrail(points, { showWandering: true })), ['stay'])
+    assert.deepEqual(kinds(classifyTrail(points)), ['stay'])
   })
 
   test('walking away and coming back is two stays and a walk', () => {
@@ -250,7 +242,13 @@ describe('classifyTrail', () => {
   })
 
   test('turning up nearby after a long silence draws nothing in between', () => {
-    assert.deepEqual(kinds(classifyTrail(new Trip().stay(5).silent(600, 500).stay(5).points)), ['stay', 'stay'])
+    assert.deepEqual(kinds(classifyTrail(new Trip().stay(10).silent(600, 500).stay(10).points)), ['stay', 'stay'])
+  })
+
+  test('a stop shorter than the map draws as one, before a long silence, is part of the walk to it', () => {
+    // 4.5 minutes of fixes, then 10 hours asleep: the silence counts for nothing, as it says nothing of where.
+    assert.deepEqual(kinds(classifyTrail(new Trip().stay(5).silent(600, 500).stay(5).points)), ['move', 'stay'])
+    assert.deepEqual(kinds(classifyTrail(new Trip().stay(4.5).silent(600, 500).stay(4.5).points)), ['move', 'move'])
   })
 
   test('a train that ends in a tunnel is a vehicle ride, with the tunnel underground', () => {
@@ -358,41 +356,85 @@ describe('places', () => {
     lat: START.lat + north / METERS_PER_DEGREE_LAT,
     lon: START.lon + east / METERS_PER_DEGREE_LON,
   })
-  /** A 50 m circle, like Home. */
-  const circle = (center: LatLon, radius = 50): TrailPlace => ({
-    center,
-    within: (point, margin) => distance(center, point) <= radius + margin,
-  })
   const stays = (pieces: TrailPiece[]) => pieces.filter((piece): piece is Extract<TrailPiece, { kind: 'stay' }> => piece.kind === 'stay')
+  /** A visit (see presence.ts) from the point at `from` to the one at `to` (null: still there), its dot at `center`. */
+  const visit = (points: TrailPoint[], from: number, to: number | null, center: LatLon) => ({
+    from: points[from]!.time,
+    to: to === null ? null : points[to]!.time,
+    center,
+  })
 
-  test("stays at a place, with the wandering between them, are one stay at the place's middle", () => {
+  test("a visit to a place is one stay of all its points, however they wander, at the place's dot", () => {
     // Indoors the fixes settle in two spots 50 m apart, as at Kofi's home, with hops between them.
     const points = new Trip().stay(20).walk(0.5, 6).stay(15).walk(0.5, -6).stay(20).points
-    const before = classifyTrail(points, { showWandering: true })
-    assert.deepEqual(kinds(before), ['stay', 'move', 'stay', 'move', 'stay'])
-    const home = circle(at(25))
-    const after = classifyTrail(points, { showWandering: true, places: [home] })
+    assert.deepEqual(kinds(classifyTrail(points)), ['stay', 'move', 'stay', 'move', 'stay'])
+    const after = classifyTrail(points, { visits: [visit(points, 0, null, at(25))] })
     assert.deepEqual(kinds(after), ['stay'])
-    assert.deepEqual(stays(after)[0]!.center, home.center)
+    assert.deepEqual(stays(after)[0]!.center, at(25))
     assert.equal(stays(after)[0]!.atPlace, true)
     assert.equal(stays(after)[0]!.from, points[0]!.time)
     assert.equal(stays(after)[0]!.to, points.at(-1)!.time)
   })
 
-  test('a walk out of the place is still a walk, from its dot', () => {
-    const home = circle(at(0))
-    const pieces = classifyTrail(new Trip().stay(20).walk(10).stay(10).points, { showWandering: true, places: [home] })
+  test('a walk out begins with the fix it left on, from the dot', () => {
+    // 20 minutes at home (40 fixes), out from the 41st.
+    const points = new Trip().stay(20).walk(10).stay(10).points
+    const pieces = classifyTrail(points, { visits: [visit(points, 0, 40, at(0))] })
     assert.deepEqual(kinds(pieces), ['stay', 'move', 'stay'])
-    assert.deepEqual(stays(pieces)[0]!.center, home.center)
+    assert.equal(stays(pieces)[0]!.to, points[39]!.time)
+    const move = pieces[1] as Extract<TrailPiece, { kind: 'move' }>
+    assert.deepEqual([move.points[0], move.points[1]], [points[39], points[40]], 'from the last fix there')
     assert.equal(stays(pieces)[1]!.atPlace, undefined)
+  })
+
+  test('a trip out it never left by (presence still there) is part of the visit; one it did is a walk', () => {
+    const points = new Trip().stay(20).walk(1, 6).walk(1, -6).stay(20).points
+    assert.deepEqual(kinds(classifyTrail(points, { visits: [visit(points, 0, null, at(0))] })), ['stay'])
+    const out = classifyTrail(points, { visits: [visit(points, 0, 40, at(0)), visit(points, 44, null, at(0))] })
+    assert.deepEqual(kinds(out), ['stay', 'move', 'stay'])
+  })
+
+  test('a night at a place is one stay, though the tracker wakes up 50 m off where it slept', () => {
+    const points = new Trip().stay(10).silent(600, 50).stay(10).points
+    assert.deepEqual(kinds(classifyTrail(points)), ['stay', 'stay'])
+    assert.deepEqual(kinds(classifyTrail(points, { visits: [visit(points, 0, null, at(0))] })), ['stay'])
+  })
+
+  test('a night at a place, waking up to leave it: there until it left, and the walk out from then', () => {
+    const points = new Trip().stay(10).silent(600, 120).walk(5).points
+    // The first fix after the night (after two reports without one).
+    const left = points.findIndex((point, index) => point.valid && index > 0 && point.time - points[0]!.time > 3_600_000)
+    const pieces = classifyTrail(points, { visits: [visit(points, 0, left, at(0))] })
+    assert.deepEqual(kinds(pieces), ['stay', 'move'])
+    assert.equal(stays(pieces)[0]!.to, points[left]!.time)
+    assert.equal((pieces[1] as Extract<TrailPiece, { kind: 'move' }>).points[0], points[left])
+  })
+
+  test('driven off from a place with no fix on the way: a ride, not a walk', () => {
+    // 10 minutes at home, then 3 km off 5 minutes later, then walking there.
+    const points = new Trip().stay(10).silent(5, 3000).walk(5).points
+    const out = points.findIndex((point) => point.valid && distance(points[0]!, point) > 2000)
+    const pieces = classifyTrail(points, { visits: [visit(points, 0, out, at(0))] })
+    assert.notDeepEqual(kinds(pieces).slice(0, 2), ['stay', 'move'])
   })
 
   test('a stop at a place is a stop there, however short', () => {
     // Walks east for 10 minutes (about 670 m), then 3 minutes at home: the walk ends at its dot.
-    const trip = new Trip().walk(10).stay(3)
-    const home = circle(trip.points.at(-1)!)
-    assert.deepEqual(kinds(classifyTrail(trip.points, { showWandering: true })), ['move'])
-    assert.deepEqual(kinds(classifyTrail(trip.points, { showWandering: true, places: [home] })), ['move', 'stay'])
+    const points = new Trip().walk(10).stay(3).points
+    assert.deepEqual(kinds(classifyTrail(points)), ['move'])
+    assert.deepEqual(kinds(classifyTrail(points, { visits: [visit(points, 20, null, at(670))] })), ['move', 'stay'])
+  })
+
+  test('a stop next to a visit, across a blip, is a stop of its own: presence had it out', () => {
+    // Home, a fix 60 m out, then 10 minutes 30 m out.
+    const points = new Trip().stay(20).walk(0.5, 7.2).walk(0.5, -3.6).stay(10).points
+    assert.deepEqual(kinds(classifyTrail(points)), ['stay'], 'one spot, across the blip')
+    const pieces = classifyTrail(points, { visits: [visit(points, 0, 40, at(0))] })
+    assert.deepEqual(kinds(pieces), ['stay', 'move', 'stay'])
+    assert.deepEqual(
+      stays(pieces).map((stay) => stay.atPlace),
+      [true, undefined],
+    )
   })
 
   test("a place's dot takes in a longer stay nearby", () => {
@@ -455,18 +497,24 @@ describe('unconfirmed fixes', () => {
     assert.ok(distance(home[0]!, (pieces[0] as Extract<TrailPiece, { kind: 'stay' }>).center) < 1)
   })
 
+  test('so does a run of them: four or more, over a minute and a half, at three positions or more', () => {
+    // After a night asleep, 5–7 satellites, 120–150 m off (as at Kofi's on 21/10 at 7:28).
+    const morning = [at(150, 900, 6), at(140, 901, 7), at(130, 902, 7), at(125, 903, 6)]
+    assert.equal(lastConfirmedFix([...home, ...morning]), morning[3])
+    assert.equal(away([...home, ...morning]), true)
+    assert.equal(lastConfirmedFix([...home, ...morning.slice(0, 3)]), home.at(-1), 'three')
+    const stuck = [at(-320, 10, 7), ...[11, 12, 13, 14, 15].map((step) => at(-330, step, 4))]
+    assert.equal(lastConfirmedFix([...home, ...stuck]), home.at(-1), 'the canal: stuck on one position')
+    const drifting = [at(-320, 10, 7), ...[11, 12, 13, 14, 15].map((step, k) => at(-330 + (k % 2) * 3, step, 4))]
+    assert.equal(lastConfirmedFix([...home, ...drifting]), home.at(-1), 'drifting 3 m')
+    // Stuck before a night asleep, then waking up 100 m off: not a run.
+    assert.equal(lastConfirmedFix([...home, ...stuck, at(-230, 600, 6)]), home.at(-1), 'over a night')
+  })
+
   test('a good fix near them confirms them', () => {
     const arriving = [at(150, 10, 6), at(155, 11, 12)]
     assert.equal(lastConfirmedFix([...home, ...arriving]), arriving[1])
     assert.equal(away([...home, ...arriving]), true)
-  })
-
-  test('where to show the asset: at its last confirmed fix, as of its latest report', () => {
-    const canal = [at(-320, 10, 7), at(-330, 11, 4)]
-    const latest = { lat: canal[1]!.lat, lon: canal[1]!.lon, fixTime: new Date(canal[1]!.time).toISOString(), accuracy: 0 }
-    const shown = confirmedLocation(latest, [...home, ...canal])
-    assert.deepEqual([shown.lat, shown.lon, shown.fixTime, shown.accuracy], [home.at(-1)!.lat, home.at(-1)!.lon, latest.fixTime, undefined])
-    assert.equal(confirmedLocation(latest, home), latest, 'fixes not up to it yet: as it is')
   })
 
   test('good fixes after a gap, or weak ones close by, are never in doubt', () => {
@@ -614,14 +662,10 @@ describe('currentStay', () => {
     assert.equal(currentStay(gone.points, gone.now), null)
   })
 
-  test("at one of the asset's places, wandering about it doesn't end the stay", () => {
-    // Indoors the fixes settle in two spots 50 m apart, with hops between them.
-    const home = new Trip().stay(20).walk(0.5, 6).stay(15).walk(0.5, -6).stay(20)
-    const place = {
-      center: home.points[0]!,
-      within: (point: LatLon, margin: number) => distance(home.points[0]!, point) <= 50 + margin,
-    }
-    assert.equal(currentStay(home.points, home.now)?.since === home.points[0]!.time, false, 'without the place, the latest spot')
-    assert.equal(currentStay(home.points, home.now, DEFAULT_TRAIL_PROFILE, [place])?.since, home.points[0]!.time)
+  test('a stop shorter than the map draws as one is no stay yet', () => {
+    const sniffing = new Trip().walk(5).stay(3)
+    assert.equal(currentStay(sniffing.points, sniffing.now), null)
+    const stopped = new Trip().walk(5).stay(6)
+    assert.ok(currentStay(stopped.points, stopped.now))
   })
 })

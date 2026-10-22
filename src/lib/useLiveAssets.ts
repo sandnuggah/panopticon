@@ -5,26 +5,35 @@ import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
-import { currentStays, shownAssets, type Place, type PlaceVisit } from './places'
+import type { Place, PlaceVisit } from './places'
+import { assetVisits, currentStays, news, presences, shownAssets, whileLoading, type Visit } from './presence'
 import { currentActivity, type Activity } from './segments'
 import { trackersOf, trailProfile } from './tracker'
 import { extendTrails, historyMinutes, trailStart, type TrailLength, type Trails } from './trail'
-import { shownKey, shownTrails, trailViews, type TrailViewCache } from './trailGeometry'
+import { quietAssets, shownKey, shownTrails, trailViews, type TrailViewCache } from './trailGeometry'
 import { useNow } from './useNow'
 
 export type LiveStatus = 'connecting' | 'live' | 'offline'
 
 const FIRST_RETRY_MS = 5_000
 const MAX_RETRY_MS = 60_000
+/** An arrival or departure a history load finds this recent is news ("Kofi left Home"); older, it's what a page opened again found out. */
+const NEWS_MS = 10 * 60 * 1000
+/**
+ * A history load that failed is tried again after this long, up to this many tries in all: until it
+ * comes, the page may have missed reports. Then it goes on with what it has.
+ */
+const LOAD_RETRY_MS = 10_000
+const LOAD_TRIES = 3
 
 /**
  * Keeps the asset list and trails current from /live. `initialAssets` is the route loader's data;
  * whenever it's reloaded (reconnect, returning to the tab) it replaces the live state.
  * `trail` is null until the setting is known, so no history is fetched for a default.
- * History covers the trail and HISTORY_MIN_MINUTES before it (see historyMinutes), even with trails
- * off, to tell what each asset is doing right now; the trails are worked out from all of it and
- * returned for drawing from where the trail starts (see trailFrom).
- * `onVisits` hears of arrivals and departures as live positions show them.
+ * History covers a day and HISTORY_MIN_MINUTES before it (see historyMinutes), even with trails off,
+ * to tell what each asset is doing right now and where it is; the trails are worked out from all of it
+ * and returned for drawing from where the trail starts (see trailFrom).
+ * `onVisits` hears of arrivals and departures as they happen (see presence.ts).
  */
 export function useLiveAssets(
   initialAssets: Asset[],
@@ -37,9 +46,13 @@ export function useLiveAssets(
   const [assets, setAssets] = useState(initialAssets)
   const assetsRef = useRef(initialAssets)
   const [trails, setTrails] = useState<Trails>({})
-  // Whether the first trail history has come back (or failed), for the loading screen.
+  // Whether the first trail history has come back (or failed), for the loading screen; which history
+  // last came (see loadKey), and whether where the assets are next comes from it.
   const [trailsLoaded, setTrailsLoaded] = useState(false)
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  const loaded = useRef(true)
   const [status, setStatus] = useState<LiveStatus>('connecting')
+  const [visible, setVisible] = useState(true)
   // A newer release is serving than the one this page came from (see buildId.ts).
   const [updateAvailable, setUpdateAvailable] = useState(false)
   // Bumped when we may have missed updates, to refetch trail history.
@@ -58,29 +71,46 @@ export function useLiveAssets(
     setAssets(initialAssets)
   }, [initialAssets])
 
+  // The history asked for: until it has come, the page may have missed reports (see inStep). Asked
+  // for again when one fails.
   const assetIdsKey = initialAssets.map((asset) => asset.id).join(',')
+  const loadKey = `${historyVersion} ${assetIdsKey}`
+  const failures = useRef(0)
   useEffect(() => {
     if (trail === null) return
     if (assetIdsKey === '') {
       setTrails({})
       setTrailsLoaded(true)
+      setLoadedKey(loadKey)
       return
     }
     let cancelled = false
+    let retry: ReturnType<typeof setTimeout> | undefined
     getTrails({ data: { minutes: historyLength, assetIds: assetIdsKey.split(',').map(Number) } })
       .then((history) => {
         // A failed server function can resolve with nothing (seen on a fresh dev server); keep
         // the trails we have rather than crash the map.
-        if (!cancelled && history) setTrails(history)
+        if (!history) throw new Error('no history')
+        if (cancelled) return
+        ;[loaded.current, failures.current] = [true, 0]
+        setTrails(history)
+        setLoadedKey(loadKey)
       })
-      .catch((error) => console.warn('Could not load trails:', error))
+      .catch((error) => {
+        console.warn('Could not load trails:', error)
+        if (cancelled) return
+        if (++failures.current < LOAD_TRIES) retry = setTimeout(() => setHistoryVersion((version) => version + 1), LOAD_RETRY_MS)
+        else [loaded.current, failures.current] = [true, 0]
+        if (failures.current === 0) setLoadedKey(loadKey)
+      })
       .finally(() => {
         if (!cancelled) setTrailsLoaded(true)
       })
     return () => {
       cancelled = true
+      clearTimeout(retry)
     }
-  }, [trail === null, historyLength, assetIdsKey, historyVersion])
+  }, [trail === null, historyLength, loadKey])
 
   useEffect(() => {
     let source: EventSource | undefined
@@ -99,7 +129,6 @@ export function useLiveAssets(
       setAssets(result.assets)
       // A tracker was added in Traccar; reload the full list.
       if (result.unknown) void router.invalidate()
-      if (result.visits.length > 0) onVisitsRef.current?.(result.visits)
       setTrails((current) => extendTrails(current, updates, historyLengthRef.current, Date.now()))
     }
 
@@ -145,6 +174,7 @@ export function useLiveAssets(
 
     // Phones suspend background tabs and their connections; start fresh when we're visible again.
     const onVisibilityChange = () => {
+      setVisible(document.visibilityState === 'visible')
       if (document.visibilityState !== 'visible') return
       source?.close()
       clearTimeout(retryTimer)
@@ -166,11 +196,23 @@ export function useLiveAssets(
   const trackerKey = assets.map((asset) => `${asset.id}:${asset.tracker ?? ''}`).join(' ')
   const trackers = useMemo(() => trackersOf(assets), [trackerKey])
 
+  // Where the assets are goes by the clock (see presence.ts) while the page is in step with them: in
+  // view, live, and with the history it asked for. Else the page may have missed reports: the clock
+  // stays at its last tick in step, so a tracker doesn't go quiet for reports that didn't come.
+  const inStep = visible && status === 'live' && trailsLoaded && (trail === null || loadedKey === loadKey)
+  const [steady, setSteady] = useState(now)
+  useEffect(() => {
+    if (inStep) setSteady(now)
+  }, [inStep, now])
+  const clock = inStep ? now : steady
+
   // Each asset's trail, worked out from all of its points as they come, not as the clock ticks (see
-  // trailViews), and drawn from where the trail starts: the same until a whole piece drops off its old
-  // end (see firstShown), so kept until then.
+  // trailViews; but once when its tracker goes quiet), and drawn from where the trail starts: the
+  // same until a whole piece drops off its old end (see firstShown), so kept until then.
   const worked = useRef<TrailViewCache>(new Map())
-  const views = useMemo(() => trailViews(trails, places, trackers, worked.current), [trails, places, trackers])
+  const quietKey = quietAssets(trails, trackers, clock).join(' ')
+  const quiet = useMemo(() => new Set(quietKey ? quietKey.split(' ').map(Number) : []), [quietKey])
+  const views = useMemo(() => trailViews(trails, places, trackers, worked.current, quiet), [trails, places, trackers, quiet])
   const start = trailStart(trail ?? 0, now)
   const shown = useMemo(() => shownTrails(views, start), [views, shownKey(views, start)])
 
@@ -183,10 +225,39 @@ export function useLiveAssets(
     return result
   }, [trails, now, trackers])
 
-  const stays = useMemo(() => currentStays(trails, trail ?? 0, now, places, trackers), [trails, trail, now, trackers, places])
+  // Where each asset is as its places go (see presence.ts): worked out again as reports come, and as
+  // the clock ticks, since a tracker that goes quiet near a place has arrived there; out of step, as
+  // far as is known (see whileLoading).
+  const visits = useMemo(() => assetVisits(trails, places, trackers, clock), [trails, places, trackers, clock])
+  const found = useMemo(() => presences(trails, places, trackers, clock, assets, visits), [trails, places, trackers, clock, assets, visits])
+  const where = useMemo(() => (inStep ? found : whileLoading(found, assets, places, trails)), [found, inStep, assets, places, trails])
 
-  // Each asset where its trail can trust it to be, and at its place's centre when it's at one (see shownLocation).
-  const shownAssetsNow = useMemo(() => shownAssets(assets, trails, places), [assets, trails, places])
+  // "Kofi left Home": the visits that end or begin (see news), as it happens, while in step; what a
+  // history load or a change of places finds out, if it's recent.
+  const said = useRef<Record<number, Visit[]>>({})
+  const saidPlaces = useRef(places)
+  useEffect(() => {
+    if (!inStep) return
+    const fromLoad = loaded.current || saidPlaces.current !== places
+    ;[loaded.current, saidPlaces.current] = [false, places]
+    const changes: PlaceVisit[] = []
+    for (const [key, list] of Object.entries(visits)) {
+      const before = said.current[Number(key)]
+      if (!before) continue
+      for (const change of news(before, list)) {
+        if (fromLoad && Date.now() - change.time > NEWS_MS) continue
+        changes.push({ assetId: Number(key), placeId: change.placeId, arrived: change.arrived, time: new Date(change.time).toISOString() })
+      }
+    }
+    said.current = visits
+    if (changes.length > 0) onVisitsRef.current?.(changes)
+  }, [visits, inStep, places])
 
-  return { assets: shownAssetsNow, trails: shown, trailsLoaded, activities, stays, status, updateAvailable }
+  // Staying put away from its places (at them, it's where it is that says), since it left one.
+  const stays = useMemo(() => currentStays(trails, trail ?? 0, now, trackers, where), [trails, trail, now, trackers, where])
+
+  // Each asset where its trail can trust it to be, and at its place's centre while it's at one (see shownLocation).
+  const shownAssetsNow = useMemo(() => shownAssets(assets, trails, where, places), [assets, trails, where, places])
+
+  return { assets: shownAssetsNow, trails: shown, trailsLoaded, activities, stays, presence: where, status, updateAvailable }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { contactIsNewerThanFix, isStale, statusLabel, type Asset } from '../lib/asset'
 import type { Place } from '../lib/places'
+import type { Presence } from '../lib/presence'
 import type { Activity, Stay } from '../lib/segments'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
@@ -16,8 +17,10 @@ type Props = {
   asset: Asset | undefined
   /** What it's doing right now, when it's riding (see segments.ts). */
   activity: Activity | undefined
-  /** How long it's been in one place, when it's staying put. */
+  /** How long it's been in one place, when it's staying put away from its places. */
   stay: Stay | undefined
+  /** Where it is as its places go (see presence.ts): at one, since when, or out since it left one. */
+  presence: Presence | undefined
   /** Its street address, when known. */
   address: string | undefined
   /** The user's places: shown instead of the address while it's at one, with its arrivals and departures. */
@@ -34,14 +37,14 @@ type Props = {
  * tapping its picture in the bottom bar a second time. No backdrop: the map stays in view and can
  * be moved. Absolute inside the map screen, like the Settings card (see BottomBar.tsx).
  */
-export function AssetDetailsCard({ asset, activity, stay, address, places, onTop, onClose, onCover }: Props) {
+export function AssetDetailsCard({ asset, activity, stay, presence, address, places, onTop, onClose, onCover }: Props) {
   const open = asset !== undefined
   const card = useRef<HTMLElement>(null)
   useCover(card, open, onCover)
   const closeButton = useRef<HTMLButtonElement>(null)
   // While the card slides away it keeps showing what it showed.
-  const last = useRef<{ asset: Asset; activity?: Activity; stay?: Stay; address?: string }>(undefined)
-  if (asset) last.current = { asset, activity, stay, address }
+  const last = useRef<{ asset: Asset; activity?: Activity; stay?: Stay; presence?: Presence; address?: string }>(undefined)
+  if (asset) last.current = { asset, activity, stay, presence, address }
   const shown = last.current
 
   // Focus moves to ✕ as the card opens, and back to what had it (the asset's picture in the bottom
@@ -86,6 +89,7 @@ function Details({
   asset,
   activity,
   stay,
+  presence,
   address,
   places,
   open,
@@ -93,6 +97,7 @@ function Details({
   asset: Asset
   activity?: Activity
   stay?: Stay
+  presence?: Presence
   address?: string
   places: Place[]
   open: boolean
@@ -100,7 +105,7 @@ function Details({
   const now = useNow(30_000)
   const percent = asset.battery?.percent
   // Where it is, as Find My says it: "Home" rather than the street address.
-  const at = places.find((place) => asset.placeIds.includes(place.id))
+  const at = presence?.place != null ? places.find((place) => place.id === presence.place) : undefined
   const hasPlaces = places.some((place) => place.assetIds.includes(asset.id))
   return (
     <>
@@ -129,7 +134,7 @@ function Details({
           address && <p className="text-[1.0625rem] font-semibold">{address}</p>
         )}
         <p className="opacity-60">
-          <Summary asset={asset} stay={activity ? undefined : stay} />
+          <Summary asset={asset} stay={activity ? undefined : stay} presence={presence} places={places} now={now} />
         </p>
         {asset.lastUpdate && (!asset.location || contactIsNewerThanFix(asset)) && (
           <p className="opacity-60">
@@ -145,13 +150,40 @@ function Details({
   )
 }
 
-/** When it was seen and how long it's been there. */
-function Summary({ asset, stay }: { asset: Asset; stay: Stay | undefined }) {
+/**
+ * When it was seen, and how long it's been where it is: at one of its places since it arrived, stopped
+ * somewhere else, or out since it left one.
+ */
+function Summary({
+  asset,
+  stay,
+  presence,
+  places,
+  now,
+}: {
+  asset: Asset
+  stay: Stay | undefined
+  presence: Presence | undefined
+  places: Place[]
+  now: number
+}) {
   if (!asset.location) return <>No location yet</>
+  const left = presence?.place === null && presence.left !== undefined ? places.find((place) => place.id === presence.left) : undefined
+  const where =
+    presence && presence.place !== null
+      ? sinceLabel(presence.since, presence.began, now)
+      : stay
+        ? sinceLabel(stay.since, stay.began, now)
+        : left && presence
+          ? // Not known when yet, while the history loads again (see whileLoading).
+            presence.began
+            ? `Left ${left.name} at ${whenLabel(presence.since, now)}`
+            : `Left ${left.name}`
+          : undefined
   return (
     <>
       Seen <RelativeTime time={asset.location.fixTime} />
-      {stay && <> · {stayLabel(stay)}</>}
+      {where && <> · {where}</>}
     </>
   )
 }
@@ -166,10 +198,23 @@ function StatusDot({ status }: { status: Asset['status'] }) {
 }
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
+const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' })
+const date = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
+const days = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
-/** "Here since 07:12", or "since before" when the stay goes back further than the history loaded. */
-function stayLabel(stay: Stay): string {
-  return `Here since ${stay.began ? '' : 'before '}${clock.format(stay.since)}`
+/** "Here since 07:12", or "since before" when it goes back further than the history loaded. */
+function sinceLabel(since: number, began: boolean, now: number): string {
+  return `Here since ${began ? '' : 'before '}${whenLabel(since, now)}`
+}
+
+/** A time, with its day when that isn't today: "17:49", "17:49 yesterday", "Mon 17:49", "3 Oct 17:49". */
+function whenLabel(time: number, now: number): string {
+  const day = (t: number) => new Date(t).setHours(0, 0, 0, 0)
+  const ago = Math.round((day(now) - day(time)) / 86_400_000)
+  const at = clock.format(time)
+  if (ago <= 0) return at
+  if (ago === 1) return `${at} ${days.format(-1, 'day')}`
+  return `${(ago < 7 ? weekday : date).format(time)} ${at}`
 }
 
 function activityLabel(activity: Activity): string {

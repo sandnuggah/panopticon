@@ -78,6 +78,24 @@ describe('snappedLines', () => {
     assert.deepEqual(drawn.points, line(first).slice(0, 4))
   })
 
+  test('too short now to be worth snapping: never asked for, but the line up to its new last fix, kept as other walks are answered', () => {
+    const fixes = walk(2).points.filter((point) => !point.anchor)
+    const short: AssetWalk = { ...walk(2), signature: '', points: fixes }
+    assert.deepEqual(snappedLines([], answered, [short])[1]![short.id], { points: line(first).slice(0, 3), current: false })
+    const other = walk(5, 2)
+    const later = withAnswers(answered, [other], [line(other)], now, [other, short])
+    assert.ok(snappedLines([], later, [short])[1]?.[short.id], 'not forgotten')
+  })
+
+  test('too short to be worth snapping, and starting a fix later: the line of the walk it was, kept as others are answered', () => {
+    const fixes = walk(3).points.filter((point) => !point.anchor)
+    const later: AssetWalk = { asset: 1, id: `walk-${fixes[1]!.time}`, signature: '', points: fixes.slice(1) }
+    assert.ok(snappedLines([], answered, [later])[1]?.[later.id], 'borrowed')
+    const other = walk(5, 2)
+    const after = withAnswers(answered, [other], [line(other)], now, [other, later])
+    assert.deepEqual(snappedLines([], after, [later])[1]?.[later.id], snappedLines([], answered, [later])[1]?.[later.id])
+  })
+
   test('shorter now and asked for as it is: answered, and not asked for again', () => {
     const grown = walk(7)
     const shorter = walk(4)
@@ -116,6 +134,25 @@ describe('snappedLines', () => {
     const later: AssetWalk = { asset: 1, id: `walk-${fix(1).time}`, signature: walkSignature(points), points }
     const unsnappable = withAnswers(answered, [later], [null], now, [later])
     assert.equal(snappedLines([later], unsnappable)[1]![later.id]!.points.length, 6)
+  })
+
+  test('can’t be snapped as it is: answered, and not asked for again', () => {
+    assert.deepEqual(toAsk([walk(5)], withAnswers(empty, [walk(5)], [null], now), now), [])
+  })
+
+  test('grown twice: the line of the latest version answered, not the first', () => {
+    const later = withAnswers(answered, [walk(7)], [line(walk(7))], now)
+    const drawn = snappedLines([walk(9)], later)[1]![walk(9).id]!
+    assert.deepEqual(drawn.points.slice(0, 8), line(walk(7)))
+  })
+
+  test('a hop between two stops that just touches the walk it was, at the stop: the walk’s line', () => {
+    const points = [
+      { ...fix(4), anchor: true },
+      { ...fix(6), time: fix(4).time + 60_000, anchor: true },
+    ]
+    const hop: AssetWalk = { asset: 1, id: 'stays-c-d', signature: walkSignature(points), points }
+    assert.deepEqual(snappedLines([hop], answered)[1]!['stays-c-d'], { points: line(first), current: false })
   })
 
   test('a walk that turns out to be pottering about between two stops: the hop between them has the walk’s line', () => {

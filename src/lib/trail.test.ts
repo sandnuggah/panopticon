@@ -54,8 +54,8 @@ describe('history', () => {
   const now = Date.parse('2026-10-20T12:00:00Z')
   const minutes = (n: number) => n * 60_000
 
-  test('the trail and 3 hours before it; 3 hours with trails off', () => {
-    assert.deepEqual([0, 60, 360, 'today' as const].map(historyMinutes), [180, 240, 540, 1620])
+  test('a day and 3 hours before it, whatever the trail', () => {
+    assert.deepEqual([0, 60, 360, 'today' as const].map(historyMinutes), [1620, 1620, 1620, 1620])
     assert.equal(historyMinutes('today'), MAX_HISTORY_MINUTES)
   })
 

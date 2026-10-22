@@ -22,13 +22,41 @@ import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { isStale, type Asset } from '../src/lib/asset.ts'
 import { applyUpdates } from '../src/lib/live.ts'
-import { matchableWalks } from '../src/lib/matching.ts'
-import { currentStays, placeCenter, placeOf, shownAssets, type Place } from '../src/lib/places.ts'
+import { matchableWalks, otherWalks } from '../src/lib/matching.ts'
+import { placeCenter, placeOf, withinArea, type Place } from '../src/lib/places.ts'
+import {
+  assetVisits,
+  currentStays,
+  news,
+  presences,
+  quietAfter,
+  shownAssets,
+  whileLoading,
+  type Presence,
+  type Visit,
+} from '../src/lib/presence.ts'
 import type { LatLon } from '../src/lib/segments.ts'
 import { answered, snappedLines, toAsk, withAnswers, type AssetWalk, type SnapAnswer, type SnapState } from '../src/lib/snapLines.ts'
 import { trailProfile } from '../src/lib/tracker.ts'
-import { extendTrails, historyMinutes, historyStart, trailStart, type TrailLength, type TrailPoint, type Trails } from '../src/lib/trail.ts'
-import { drawTrail, shownTrails, trailViews, type DrawnTrail, type TrailView, type TrailViewCache } from '../src/lib/trailGeometry.ts'
+import {
+  extendTrails,
+  historyMinutes,
+  historyStart,
+  MAX_HISTORY_MINUTES,
+  trailStart,
+  type TrailLength,
+  type TrailPoint,
+  type Trails,
+} from '../src/lib/trail.ts'
+import {
+  drawTrail,
+  quietAssets,
+  shownTrails,
+  trailViews,
+  type DrawnTrail,
+  type TrailView,
+  type TrailViewCache,
+} from '../src/lib/trailGeometry.ts'
 import { matchWalk } from '../src/server/matching.server.ts'
 import { toPositionUpdate, toTrailPoint } from '../src/server/positions.server.ts'
 import { parsePosition, type TraccarPosition } from '../src/server/traccar.server.ts'
@@ -51,10 +79,19 @@ const RETURN_METRES = 15
 const RETURN_MS = 3 * 60 * 1000
 /** "Here since" back to what it said this recently is a flicker. */
 const FLICKER_MS = 10 * 60 * 1000
-/** Walking, for the card: a fix this fresh, and one at least WALKING_METRES from it within WALKING_WITHIN_MS. */
+/**
+ * Walking, for the card: a fix this fresh, and one at least WALKING_METRES from it within
+ * WALKING_WITHIN_MS, the fresh one more than WALKING_AWAY_METRES outside the asset's places (indoors,
+ * fixes scatter more than that).
+ */
 const WALKING_FRESH_MS = 2 * 60 * 1000
 const WALKING_METRES = 60
 const WALKING_WITHIN_MS = 5 * 60 * 1000
+const WALKING_AWAY_METRES = 25
+/** A departure back at the same place within this long was a false alarm, or not worth one. */
+const BRIEF_MS = 3 * 60 * 1000
+/** An arrival or departure this recent is news, a banner (as in useLiveAssets). */
+const NEWS_MS = 10 * 60 * 1000
 /** Drawn this far from every fix, it's made up. */
 const FAR_METRES = 40
 /** A walk's line moving this far, but for its last LINE_HEAD_MS, when a longer version of it comes, shows. */
@@ -93,6 +130,23 @@ type Score = {
   /** The trail changing when the page is opened again (--reload), but for its old end dropping off. */
   reloadChanges: { frames: number; metres: number; dots: number }
   marker: { jumps: number; outAndBack: number; placeToggles: number }
+  /**
+   * Where the asset is as its places go (see presence.ts): departures and arrivals, how long after the
+   * fact they were known (for half, at most, in seconds), the banners the app shows ("Kofi left Home"),
+   * and how many departures were back at the place within BRIEF_MS.
+   */
+  presence?: {
+    departures: number
+    lagP50: number
+    lagMax: number
+    banners: number
+    brief: number
+    arrivals?: number
+    arrivalLagP50?: number
+    arrivalLagMax?: number
+    /** Times the page opened again would show it out of a place while its history loads, on a location its trail has (see whileLoading). */
+    whileLoading?: number
+  }
   card: { changes: number; backwards: number; flickers: number; walkingMinutes: number; walkingShownMinutes: number }
   greyMinutes: number
   /** Hourly pictures of the trail: how much walking is drawn, and how much of it far from every fix. */
@@ -101,7 +155,16 @@ type Score = {
    * For each label: its fixes' length; minutes its time was in the trail drawn, and that it was drawn
    * (an error: any of its fixes; a real outing: REAL_DRAWN_SHARE of them); and minutes the marker was on it.
    */
-  labels: { kind: Label['kind']; what: string; fixMetres: number; inTrailMinutes: number; drawnMinutes: number; markerMinutes: number }[]
+  labels: {
+    kind: Label['kind']
+    what: string
+    fixMetres: number
+    inTrailMinutes: number
+    drawnMinutes: number
+    markerMinutes: number
+    /** Whether the asset left a place then, as its presence has it. */
+    left?: boolean
+  }[]
 }
 
 type XY = [number, number]
@@ -178,7 +241,7 @@ const { values, positionals } = parseArgs({
 })
 const lengths = values.trail.split(',').map((value): TrailLength => (value === 'today' ? 'today' : Number(value)))
 const reload = values.reload === undefined ? null : Number(values.reload)
-const unavailable = values.unavailable === undefined ? undefined : Number(values.unavailable)
+const unavailable = values.unavailable === undefined || Number(values.unavailable) === 0 ? undefined : Number(values.unavailable)
 const bad = (value: number | undefined) => value !== undefined && !(Number.isFinite(value) && value > 0)
 if (
   positionals.length !== 1 ||
@@ -226,9 +289,65 @@ for (const length of lengths) {
   scores[String(length)] = score
   printScore(score, performance.now() - started)
 }
-if (values.json) fs.writeFileSync(values.json, JSON.stringify({ run, scores }, null, 1))
+const week = presenceOverAll()
+printWeek(week)
+// The fixture the whole-fixture pass went over, to compare it with a baseline whatever else it replayed.
+const replayed = { reports: fixture.positions.length, first: new Date(first).toISOString(), last: new Date(last).toISOString() }
+if (values.json) fs.writeFileSync(values.json, JSON.stringify({ run, scores, fixture: replayed, week }, null, 1))
 if (values.baseline) {
-  process.exitCode = compare(JSON.parse(fs.readFileSync(values.baseline, 'utf8')) as { run: Run; scores: Record<string, Score> })
+  process.exitCode = compare(JSON.parse(fs.readFileSync(values.baseline, 'utf8')) as Baseline)
+}
+
+/** A departure or arrival as presence has it (see presence.ts): which, where, when, and when it was known. */
+type Change = { left: boolean; place: number; time: number; known: number }
+type Baseline = { run?: Run; scores?: Record<string, Score>; fixture?: typeof replayed; week?: Change[] }
+
+/**
+ * Where the asset is as its places go, over the whole fixture, with the page open from its first
+ * report (the trail lengths' replays open later, so each starts with all of its history): every
+ * departure and arrival, when it was known, as reports come and the clock ticks.
+ */
+function presenceOverAll(): Change[] {
+  const { deviceId: id, places, positions } = fixture
+  const changes = new Map<string, Change>()
+  let trails: Trails = {}
+  let assets: Asset[] = [{ id, name: 'replay', status: 'online', lastUpdate: null, location: null, placeIds: [] }]
+  // The clock's latest tick, as the page has it (see useNow), and its next.
+  let [k, clock, next] = [0, first, first]
+  // Until the tracker has been quiet after its last report for as long as any tracker takes to have
+  // gone quiet (see quietAfter).
+  const end = last + quietAfter(trailProfile('standard')) + TICK_MS
+  while (next <= end) {
+    const time = Math.min(next, positions[k]?.serverTime ?? Infinity)
+    if (time === positions[k]?.serverTime) {
+      const updates = [toPositionUpdate(positions[k++]!)]
+      assets = applyUpdates(assets, updates).assets
+      trails = extendTrails(trails, updates, MAX_HISTORY_MINUTES, time)
+    } else [clock, next] = [next, next + TICK_MS]
+    const presence = presences(trails, places, { [id]: assets[0]!.tracker }, clock, assets)[id]
+    if (!presence || (presence.place === null && presence.left === undefined) || (presence.place !== null && !presence.began)) continue
+    const change = { left: presence.place === null, place: presence.place ?? presence.left!, time: presence.since, known: time }
+    const key = `${change.left}-${change.place}-${change.time}`
+    if (changes.has(key)) continue
+    changes.set(key, change)
+    const what = change.left ? `left ${change.place} at` : `at ${change.place} since`
+    log(time, `${what} ${local(change.time)}, known after ${Math.round((time - change.time) / 1000)} s (whole fixture)`)
+  }
+  return [...changes.values()].sort((a, b) => a.time - b.time)
+}
+
+function printWeek(week: Change[]) {
+  const lags = (left: boolean) =>
+    week
+      .filter((change) => change.left === left)
+      .map((change) => (change.known - change.time) / 1000)
+      .sort((a, b) => a - b)
+  const [out, back] = [lags(true), lags(false)]
+  const half = (lag: number[]) => Math.round(lag[Math.floor(lag.length / 2)] ?? 0)
+  console.log(
+    `\nWhere it is over the whole fixture: ${out.length} departures, known after ${half(out)} s for half, ${Math.round(out.at(-1) ?? 0)} s at most;` +
+      ` ${back.length} arrivals, ${half(back)} s, ${Math.round(back.at(-1) ?? 0)} s`,
+  )
 }
 
 /** The map open from `opened` to `closed` with this trail length. */
@@ -248,13 +367,24 @@ async function replay(length: TrailLength): Promise<Score> {
     idleChanges: { frames: 0, metres: 0, dots: 0, fade: 0 },
     reloadChanges: { frames: 0, metres: 0, dots: 0 },
     marker: { jumps: 0, outAndBack: 0, placeToggles: 0 },
+    presence: {
+      departures: 0,
+      lagP50: 0,
+      lagMax: 0,
+      banners: 0,
+      brief: 0,
+      arrivals: 0,
+      arrivalLagP50: 0,
+      arrivalLagMax: 0,
+      whileLoading: 0,
+    },
     card: { changes: 0, backwards: 0, flickers: 0, walkingMinutes: 0, walkingShownMinutes: 0 },
     greyMinutes: 0,
     picture: { drawnMetres: 0, farMetres: 0 },
     labels: labels.map((label, index) => {
       const fixes = labelFixes[index]!
       const fixMetres = Math.round(fixes.slice(1).reduce((sum, p, i) => sum + metres(fixes[i]!, p), 0))
-      return { kind: label.kind, what: label.what, fixMetres, inTrailMinutes: 0, drawnMinutes: 0, markerMinutes: 0 }
+      return { kind: label.kind, what: label.what, fixMetres, inTrailMinutes: 0, drawnMinutes: 0, markerMinutes: 0, left: false }
     }),
   }
 
@@ -297,6 +427,13 @@ async function replay(length: TrailLength): Promise<Score> {
   // What the last frame showed, scored once it's known how long it showed (until the next frame).
   let account: ((minutes: number) => void) | null = null
   const markerSeen: { time: number; at: XY; atPlace: boolean }[] = []
+  // Where it was as of the frame before, departures and arrivals seen (by place and time) and when
+  // first, and the departures it left by.
+  let wasAt: Presence | null = null
+  let wasVisits: Visit[] | null = null
+  const departures = new Map<string, { time: number; known: number | null; place: number }>()
+  const cameTo = new Map<string, { time: number; known: number | null }>()
+  const left: { place: number; time: number }[] = []
   // "Here since" as it is, and when each time it showed was last shown.
   let said: number | null | undefined
   const lastSaid = new Map<number | null, number>()
@@ -320,6 +457,14 @@ async function replay(length: TrailLength): Promise<Score> {
     if (time === nextReload) {
       kind = 'reload'
       nextReload += reload! * 60_000
+      // While the history loads, the page has the trail it had and the latest location: never newer
+      // here (no report is missed), so where the asset is mustn't change (see whileLoading).
+      const trackers = { [id]: assets[0]!.tracker }
+      const found = presences(trails, places, trackers, now, assets)
+      if (whileLoading(found, assets, places, trails)[id] !== found[id]) {
+        s.presence!.whileLoading!++
+        log(time, 'while loading: out of its place on a location its trail has')
+      }
       trails = load(time).trails
     } else if (time === nextTick) {
       kind = 'tick'
@@ -337,14 +482,68 @@ async function replay(length: TrailLength): Promise<Score> {
 
     // What the map shows (useLiveAssets → setTrails, useSnappedWalks, the marker, the details card).
     const from = trailStart(length, now)
-    const view: TrailView | null = shownTrails(trailViews(trails, places, { [id]: asset.tracker }, cache), from)[id] ?? null
+    const trackers = { [id]: asset.tracker }
+    const quiet = new Set(quietAssets(trails, trackers, now))
+    const view: TrailView | null = shownTrails(trailViews(trails, places, trackers, cache, quiet), from)[id] ?? null
     const walks: AssetWalk[] =
       snapping && view ? matchableWalks(view.pieces, () => false, profile).map((walk) => ({ ...walk, asset: id })) : []
-    const shown = view ? drawTrail(view, snappedLines(walks, snaps)[id]) : null
+    const others: AssetWalk[] = snapping && view ? otherWalks(view.pieces, walks).map((walk) => ({ ...walk, asset: id })) : []
+    const shown = view ? drawTrail(view, snappedLines(walks, snaps, others)[id]) : null
     const recorded = view ? drawTrail(view, {}) : null
     const location = asset.location
-    const marker = shownAssets(assets, trails, places)[0]!.location
-    const since = currentStays(trails, length, now, places, { [id]: asset.tracker })[id]?.since ?? null
+    const visits = assetVisits({ [id]: trails[id] ?? [] }, places, trackers, now)
+    const presence = presences({ [id]: trails[id] ?? [] }, places, trackers, now, assets, visits)[id] ?? null
+    const marker = shownAssets(assets, trails, presence ? { [id]: presence } : {}, places)[0]!.location
+    const atPlace =
+      !!marker &&
+      places.some((place) => {
+        const center = placeCenter(place.area)
+        return place.assetIds.includes(id) && center.lat === marker.lat && center.lon === marker.lon
+      })
+    // "Here since": at a place, since it came; elsewhere, at a stop the map draws.
+    const where = presence ? { [id]: presence } : {}
+    const since =
+      presence?.place != null ? presence.since : (currentStays(trails, length, now, { [id]: asset.tracker }, where)[id]?.since ?? null)
+
+    // Departures and arrivals as they become known (not those the page found when it opened), and the
+    // banners the app shows when where it is changes.
+    if (presence) {
+      const known = wasAt ? time : null
+      if (presence.place === null && presence.left !== undefined) {
+        const key = `${presence.left}-${presence.since}`
+        if (!departures.has(key)) {
+          departures.set(key, { time: presence.since, known, place: presence.left })
+          if (known)
+            log(time, `left ${presence.left} at ${local(presence.since)}, known after ${Math.round((known - presence.since) / 1000)} s`)
+        }
+      }
+      if (presence.place !== null && presence.began) {
+        const key = `${presence.place}-${presence.since}`
+        if (!cameTo.has(key)) {
+          cameTo.set(key, { time: presence.since, known })
+          if (known)
+            log(time, `at ${presence.place} since ${local(presence.since)}, known after ${Math.round((known - presence.since) / 1000)} s`)
+        }
+      }
+      // The banners: as it happens; what the page opened again finds out, if it's recent.
+      const said = wasVisits ? news(wasVisits, visits[id] ?? []).filter((change) => kind !== 'reload' || time - change.time <= NEWS_MS) : []
+      if (said.length) {
+        s.presence!.banners++
+        for (const change of said) log(time, `banner: ${change.arrived ? 'arrived at' : 'left'} ${change.placeId} at ${local(change.time)}`)
+      }
+      wasVisits = visits[id] ?? []
+      if (wasAt && wasAt.place !== presence.place) {
+        if (presence.place === null && presence.left !== undefined) left.push({ place: presence.left, time: presence.since })
+        const back =
+          presence.place !== null &&
+          left.some((out) => out.place === presence.place && presence.since >= out.time && presence.since - out.time <= BRIEF_MS)
+        if (back) {
+          s.presence!.brief++
+          log(time, `brief: back at ${presence.place} within ${BRIEF_MS / 60_000} min`)
+        }
+      }
+      wasAt = presence
+    }
 
     const pending = new Set(walks.filter((walk) => !answered(walk, snaps)).map((walk) => walk.id))
     const frame: Frame = {
@@ -380,14 +579,21 @@ async function replay(length: TrailLength): Promise<Score> {
         }
       }
     }
-    // A walk's line moving when a new version comes: how far its points move, but for its newest part.
+    // A walk's line moving when a new version comes: how far its points move, but for its newest part,
+    // and for the time both versions have (a walk whose end became a stay keeps its line up to its new end).
     if (previous) {
       for (const walk of frame.walks.filter((walk) => walk.snapped)) {
         const before = previous.walks.find((other) => other.key === walk.key && other.snapped)
         if (!before || samePoints(before.points, walk.points)) continue
-        const settled = before.points.filter((point) => point.time <= before.t2 - LINE_HEAD_MS)
+        const until = Math.min(before.t2 - LINE_HEAD_MS, walk.t2)
+        const settled = before.points.filter((point) => point.time <= until)
         if (settled.length === 0) continue
-        const shift = Math.max(...settled.map((point) => toLine(point.at, walk.points)))
+        // Either way: a point of the old line off the new one, or of the new line (but its newest part) off the old.
+        const newer = walk.points.filter((point) => point.time <= until)
+        const shift = Math.max(
+          ...settled.map((point) => toLine(point.at, walk.points)),
+          ...newer.map((point) => toLine(point.at, before.points)),
+        )
         if (shift < 1) continue
         shifts.push(shift)
         if (shift > LINE_SHIFT_METRES) log(time, `line shift: the walk of ${local(walk.t1)} moved ${Math.round(shift)} m`)
@@ -449,10 +655,6 @@ async function replay(length: TrailLength): Promise<Score> {
     // The marker: jumps, out and back, in and out of its places (at a place, it's at the place's centre).
     if (marker) {
       const at = xy(marker)
-      const atPlace = places.some((place) => {
-        const center = placeCenter(place.area)
-        return place.assetIds.includes(id) && center.lat === marker.lat && center.lon === marker.lon
-      })
       const before = markerSeen.at(-1)
       if (before && metres(before.at, at) > JUMP_METRES) {
         s.marker.jumps++
@@ -515,11 +717,12 @@ async function replay(length: TrailLength): Promise<Score> {
 
     // Scored when the next frame comes: grey, the card while walking, the labelled reports.
     const shares = drawnLabels.shares
+    // The fix the marker is on, where it isn't at a place's centre.
     const markerFix =
-      marker === location
-        ? (trails[id] ?? []).findLast((point) => point.valid && point.lat === marker?.lat && point.lon === marker?.lon)
+      marker && !atPlace
+        ? (trails[id] ?? []).findLast((point) => point.valid && point.lat === marker.lat && point.lon === marker.lon)
         : undefined
-    const walking = isWalking(trails[id] ?? [], time)
+    const walking = isWalking(trails[id] ?? [], time, places)
     const grey = isStale(asset, now)
     account = (minutes) => {
       if (grey) s.greyMinutes += minutes
@@ -540,12 +743,29 @@ async function replay(length: TrailLength): Promise<Score> {
     if (asking.length) {
       const answers = await Promise.all(asking.map(ask))
       s.snapRequests += asking.length
-      snaps = withAnswers(snaps, asking, answers, time, walks)
+      snaps = withAnswers(snaps, asking, answers, time, [...walks, ...others])
     }
   }
   if (previous) account?.((closed - previous.time) / 60_000)
 
   for (const changes of [s.pastChanges, s.idleChanges, s.reloadChanges]) changes.metres = Math.round(changes.metres)
+  const lagsOf = (seen: Map<string, { time: number; known: number | null }>) =>
+    [...seen.values()].flatMap((one) => (one.known === null ? [] : [(one.known - one.time) / 1000])).sort((a, b) => a - b)
+  const [lags, arrivalLags] = [lagsOf(departures), lagsOf(cameTo)]
+  s.presence = {
+    ...s.presence!,
+    departures: lags.length,
+    lagP50: Math.round(lags[Math.floor(lags.length / 2)] ?? 0),
+    lagMax: Math.round(lags.at(-1) ?? 0),
+    arrivals: arrivalLags.length,
+    arrivalLagP50: Math.round(arrivalLags[Math.floor(arrivalLags.length / 2)] ?? 0),
+    arrivalLagMax: Math.round(arrivalLags.at(-1) ?? 0),
+  }
+  labels.forEach((label, index) => {
+    s.labels[index]!.left = [...departures.values()].some(
+      (departure) => departure.time >= label.from - 60_000 && departure.time <= label.to + 60_000,
+    )
+  })
   shifts.sort((a, b) => a - b)
   s.lineShifts = {
     count: shifts.length,
@@ -570,7 +790,7 @@ function sameDrawing(a: DrawnTrail | null, b: DrawnTrail | null): boolean {
   if (!a || !b) return a === b
   const key = (drawn: DrawnTrail) =>
     [
-      ...drawn.walks.map((walk) => `${walk.key}${walk.snapped ? `:${walk.points.length}:${walk.current}` : ''}`),
+      ...drawn.walks.map((walk) => `${walk.key}:${walk.points.length}:${walk.snapped}:${walk.current}`),
       ...drawn.rides.map((ride) => ride.points[0]!.time),
     ].join(' ')
   return key(a) === key(b)
@@ -610,11 +830,13 @@ function lengthOf(segments: Segment[]): number {
   return segments.reduce((sum, segment) => sum + metres(segment.a, segment.b), 0)
 }
 
-/** Walking right now, by the fixes: a fresh one, and another at least WALKING_METRES from it within WALKING_WITHIN_MS. */
-function isWalking(points: TrailPoint[], now: number): boolean {
+/** Walking right now, by the fixes: see WALKING_FRESH_MS. */
+function isWalking(points: TrailPoint[], now: number, places: Place[]): boolean {
   const fixes = points.filter((point) => point.valid && point.time > now - WALKING_WITHIN_MS && point.time <= now)
   const newest = fixes.at(-1)
-  return !!newest && now - newest.time <= WALKING_FRESH_MS && fixes.some((fix) => metres(xy(fix), xy(newest)) >= WALKING_METRES)
+  if (!newest || now - newest.time > WALKING_FRESH_MS || places.some((place) => withinArea(place.area, newest, WALKING_AWAY_METRES)))
+    return false
+  return fixes.some((fix) => metres(xy(fix), xy(newest)) >= WALKING_METRES)
 }
 
 /** Metres east and north of the fixture's first position. */
@@ -677,6 +899,14 @@ function printScore(s: Score, ms: number) {
         ]
       : []),
     ['marker jumps, out and back, place toggles', `${s.marker.jumps}, ${s.marker.outAndBack}, ${s.marker.placeToggles}`],
+    [
+      'departures, known after (s, half; at most), banners, back soon',
+      `${s.presence?.departures}, ${s.presence?.lagP50}; ${s.presence?.lagMax}, ${s.presence?.banners}, ${s.presence?.brief}`,
+    ],
+    [
+      'arrivals, known after (s, half; at most); out while loading',
+      `${s.presence?.arrivals}, ${s.presence?.arrivalLagP50}; ${s.presence?.arrivalLagMax}; ${s.presence?.whileLoading ?? 0}`,
+    ],
     ['here since: changes, backwards, flickers', `${s.card.changes}, ${s.card.backwards}, ${s.card.flickers}`],
     ['here since while walking (min)', `${s.card.walkingShownMinutes} of ${s.card.walkingMinutes}`],
     ['grey (min)', `${s.greyMinutes}`],
@@ -685,7 +915,7 @@ function printScore(s: Score, ms: number) {
   for (const label of s.labels) {
     rows.push([
       `${label.kind}: ${label.what}`,
-      `${label.fixMetres} m of fixes; in the trail ${label.inTrailMinutes} min, drawn ${label.drawnMinutes}; the marker on it ${label.markerMinutes}`,
+      `${label.fixMetres} m of fixes; in the trail ${label.inTrailMinutes} min, drawn ${label.drawnMinutes}; the marker on it ${label.markerMinutes}; left ${label.left ? 'yes' : 'no'}`,
     ])
   }
   const width = Math.max(...rows.map(([name]) => name.length))
@@ -696,17 +926,19 @@ function printScore(s: Score, ms: number) {
  * Where these scores are worse than the baseline's, listed; as an exit code, 1 when anywhere, 2 when
  * the baseline replayed something else. Minutes move with the clock's ticks: a minute either way is the same.
  */
-function compare(baseline: { run?: Run; scores?: Record<string, Score> }): number {
-  if (!baseline.run || !baseline.scores || JSON.stringify(baseline.run) !== JSON.stringify(run)) {
-    console.log(`\nThe baseline replayed something else: ${JSON.stringify(baseline.run)}, not ${JSON.stringify(run)}`)
-    return 2
-  }
+function compare(baseline: Baseline): number {
+  const sameRun = !!baseline.run && !!baseline.scores && JSON.stringify(baseline.run) === JSON.stringify(run)
+  if (!sameRun) console.log(`\nThe baseline replayed something else: ${JSON.stringify(baseline.run)}, not ${JSON.stringify(run)}`)
   const worse: string[] = []
   const check = (name: string, before: number, after: number, { higherIsBetter = false, slack = 0 } = {}) => {
     if (higherIsBetter ? after < before - slack : after > before + slack) worse.push(`${name}: ${before} → ${after}`)
   }
-  for (const [length, s] of Object.entries(scores)) {
-    const b = baseline.scores[length]
+  // Neither more nor fewer is better as such (false alarms gone, or real ones missed): a change to look at.
+  const changed = (name: string, before: number | undefined, after: number | undefined, slack = 0) => {
+    if (before !== undefined && after !== undefined && Math.abs(after - before) > slack) worse.push(`${name} changed: ${before} → ${after}`)
+  }
+  for (const [length, s] of Object.entries(sameRun ? scores : {})) {
+    const b = baseline.scores![length]
     if (!b) continue
     check(`${length}: flashes`, b.flashes, s.flashes)
     check(`${length}: lines lost`, b.linesLost, s.linesLost)
@@ -723,6 +955,19 @@ function compare(baseline: { run?: Run; scores?: Record<string, Score> }): numbe
     check(`${length}: fading with no report`, b.idleChanges.fade, s.idleChanges.fade)
     check(`${length}: marker jumps`, b.marker.jumps, s.marker.jumps)
     check(`${length}: marker place toggles`, b.marker.placeToggles, s.marker.placeToggles)
+    if (b.presence && s.presence) {
+      changed(`${length}: departures`, b.presence.departures, s.presence.departures)
+      changed(`${length}: arrivals`, b.presence.arrivals, s.presence.arrivals)
+      changed(`${length}: banners`, b.presence.banners, s.presence.banners)
+      check(`${length}: departures back soon`, b.presence.brief, s.presence.brief)
+      check(`${length}: out while loading`, b.presence.whileLoading ?? 0, s.presence.whileLoading ?? 0)
+      check(`${length}: departures known after (s, half)`, b.presence.lagP50, s.presence.lagP50, { slack: 5 })
+      check(`${length}: departures known after (s, at most)`, b.presence.lagMax, s.presence.lagMax, { slack: 15 })
+      if (b.presence.arrivalLagP50 !== undefined && s.presence.arrivalLagP50 !== undefined) {
+        check(`${length}: arrivals known after (s, half)`, b.presence.arrivalLagP50, s.presence.arrivalLagP50, { slack: 5 })
+        check(`${length}: arrivals known after (s, at most)`, b.presence.arrivalLagMax!, s.presence.arrivalLagMax!, { slack: 15 })
+      }
+    }
     check(`${length}: here since backwards`, b.card.backwards, s.card.backwards)
     check(`${length}: here since flickers`, b.card.flickers, s.card.flickers)
     check(`${length}: here since while walking (min)`, b.card.walkingShownMinutes, s.card.walkingShownMinutes, { slack: 1 })
@@ -738,9 +983,28 @@ function compare(baseline: { run?: Run; scores?: Record<string, Score> }): numbe
       if (!before) continue
       const real = label.kind === 'real'
       check(`${length}: ${label.what}, drawn (min)`, before.drawnMinutes, label.drawnMinutes, { higherIsBetter: real, slack: 1 })
+      // A real outing left by, an error not.
+      if (before.left !== undefined && label.left !== undefined && label.left !== real && before.left === real) {
+        worse.push(`${length}: ${label.what}, left: ${before.left ? 'yes' : 'no'} → ${label.left ? 'yes' : 'no'}`)
+      }
       if (!real) check(`${length}: ${label.what}, the marker on it (min)`, before.markerMinutes, label.markerMinutes, { slack: 1 })
     }
   }
-  console.log(worse.length ? `\nWorse than the baseline:\n  ${worse.join('\n  ')}` : '\nNo worse than the baseline anywhere.')
-  return worse.length ? 1 : 0
+  // Over the whole fixture: each departure or arrival there or not, or known a minute later or more.
+  if (baseline.week && JSON.stringify(baseline.fixture) === JSON.stringify(replayed)) {
+    const key = (change: Change) => `${change.left}-${change.place}-${change.time}`
+    const before = new Map(baseline.week.map((change) => [key(change), change]))
+    const after = new Map(week.map((change) => [key(change), change]))
+    const what = (change: Change) => `${change.left ? 'left' : 'arrived at'} ${change.place} at ${local(change.time)}`
+    for (const [k, change] of before) if (!after.has(k)) worse.push(`whole fixture: no longer ${what(change)}`)
+    for (const [k, change] of after) {
+      const was = before.get(k)
+      if (!was) worse.push(`whole fixture: now ${what(change)}`)
+      else if (change.known - was.known >= 60_000)
+        worse.push(`whole fixture: ${what(change)}, known ${Math.round((change.known - was.known) / 1000)} s later`)
+    }
+  }
+  const compared = sameRun ? 'anywhere' : "over the whole fixture (the trail scores weren't compared)"
+  console.log(worse.length ? `\nWorse than the baseline:\n  ${worse.join('\n  ')}` : `\nNo worse than the baseline ${compared}.`)
+  return sameRun ? (worse.length ? 1 : 0) : 2
 }

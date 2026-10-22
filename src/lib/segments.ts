@@ -54,8 +54,6 @@ const BLIP_FIXES = 2
 const LEFT_FIXES = 2
 /** On the map, a stop shorter than this is part of the walk (a dog sniffing), not a dot of its own. */
 const SHORT_STOP_MS = 5 * 60 * 1000
-/** A move that never gets further than this outside a place (GPS wander, the garden) is pottering about there. */
-const PLACE_WANDER_METERS = 25
 /**
  * A lone fix at least this far from the fixes either side of it, all within SPIKE_MAX_MS, while
  * those two are much closer to each other (at most SPIKE_SHORTCUT of the way through it), went out
@@ -72,12 +70,26 @@ const SPIKE_MAX_MS = 3 * 60 * 1000
  * the fix before the gap, is provisional, and so are the weak fixes after it that stay that far: GPS
  * finding itself again, as when an ST-904L at home put Kofi in the canal 320 m away (6 fixes, 4–7
  * satellites, the same position five times), then slept for 2.7 hours and woke up at home. A good fix
- * within CONFIRM_METERS of them confirms them; a fix back near where it was, a good one elsewhere, or
- * none yet leaves them out. On a week of Kofi's: that, 5 weak fixes of a doubtful run one morning,
- * and one arrival home, confirmed 30 s later.
+ * within CONFIRM_METERS of them confirms them, and so does a run of them (see WEAK_RUN_FIXES); a fix
+ * back near where it was, a good one elsewhere, or none yet leaves them out. On a week of Kofi's:
+ * that, the 5 weak fixes of a real outing at 7:28 one morning, and one arrival home, confirmed 30 s later.
  */
 const UNCONFIRMED_METERS = 100
 const CONFIRM_METERS = 50
+/**
+ * Weak fixes are GPS that has found itself, not wandering, once there are this many in a row, over
+ * this long, without the tracker going silent (`silentMs`) between them, at this many positions this
+ * far apart (GPS stuck repeats its position, or drifts by a metre or two). They confirm the fixes left
+ * out as unconfirmed, and an asset leaves one of its places on them (see presence.ts). On a week of
+ * Kofi's, that was one real outing, at 7:28 after a night's sleep with 5–7 satellites, moving 15 m over
+ * its 5 fixes; not the canal, where GPS was stuck on one position five times.
+ */
+export const WEAK_RUN_FIXES = 4
+export const WEAK_RUN_MS = 90 * 1000
+export const WEAK_RUN_POSITIONS = 3
+export const WEAK_RUN_METERS = 5
+/** A fix this close to the one before is the same position: an ST-904L that's still, or stuck, repeats it to the centimetre. */
+export const SAME_POSITION_METERS = 0.5
 /** Live activity only counts while reports are this fresh. */
 const ACTIVITY_MAX_AGE_MS = 3 * 60 * 1000
 /**
@@ -94,6 +106,12 @@ const GAP_MS = 2 * 60 * 1000
  * and 16 of the week's 18 hops of 60 m or more within walks started or ended at one.
  */
 const WEAK_SATELLITES = 10
+/**
+ * An asset has left one of its places once its fixes are this far outside it, and settled there once
+ * they're this close (see presence.ts): Home's edge is no wall, and indoors an ST-904L's fixes wander
+ * 15–25 m past it. On a week of Kofi's at a 50 m Home, his trips to the park's edge 70–85 m out count.
+ */
+const PLACE_MARGIN_METERS = 15
 
 /**
  * How the trail reads one kind of tracker's reports (see TRAIL_PROFILES in lib/tracker.ts): the
@@ -116,6 +134,8 @@ export type TrailProfile = {
   /** A fix is weak (see isWeak) with fewer satellites than this, or said to be off by more than this many metres. */
   weakSatellites?: number
   weakAccuracyMeters?: number
+  /** PLACE_MARGIN_METERS */
+  placeMarginMeters: number
 }
 
 /** The thresholds as tuned on a SinoTrack ST-904L. */
@@ -128,6 +148,7 @@ export const DEFAULT_TRAIL_PROFILE: TrailProfile = {
   gapMs: GAP_MS,
   quietMs: QUIET_MS,
   weakSatellites: WEAK_SATELLITES,
+  placeMarginMeters: PLACE_MARGIN_METERS,
 }
 
 /**
@@ -149,7 +170,11 @@ export type LatLon = { lat: number; lon: number }
  * One of the asset's places (Home, Daycare), for drawing: stays inside it are one dot at `center`.
  * `within` says whether a point is inside it, or at most `margin` metres outside.
  */
-export type TrailPlace = { center: LatLon; within: (point: LatLon, margin: number) => boolean }
+/**
+ * A visit to one of the asset's places, as presence has it (see presence.ts): from its first fix to
+ * the first fix out (null: there still), drawn as one stay at `center` (the place's way in, or middle).
+ */
+export type PlaceStay = { from: number; to: number | null; center: LatLon }
 
 export type TrailPiece =
   /** On foot: the GPS fixes in order. */
@@ -234,22 +259,19 @@ type HopKind = 'walk' | 'vehicle' | 'underground' | 'gap'
 type Hop = { from: TrailPoint; to: TrailPoint; kind: HopKind }
 
 /**
- * The trail as pieces, oldest first. Reports without a fix only count as evidence, never as positions.
- * Pottering about one place (a yard, a park) is one stay, so "Here since" holds; `showWandering`, for
- * drawing, keeps the walking about as moves between its stops, and only joins stops across blips.
- * `places`, for drawing: the asset's places, where stays and the pottering about between them are one
- * stay at the place's middle (see joinAtPlaces). `profile`: the tracker's (see TrailProfile).
+ * The trail as pieces, oldest first, as the map draws it, the card reads it and Stats counts it.
+ * Reports without a fix only count as evidence, never as positions. Pottering about one place (a
+ * park) is the walking about between its stops, which are joined only across blips; stops shorter
+ * than SHORT_STOP_MS are part of the walk. `visits`: the asset's visits to its places, each one stay
+ * of all the points in it, however its fixes wander, and however short (see splitWalk). `profile`:
+ * the tracker's (see TrailProfile).
  */
 export function classifyTrail(
   points: TrailPoint[],
-  {
-    showWandering = false,
-    places = [],
-    profile = DEFAULT_TRAIL_PROFILE,
-  }: { showWandering?: boolean; places?: TrailPlace[]; profile?: TrailProfile } = {},
+  { visits = [], profile = DEFAULT_TRAIL_PROFILE }: { visits?: PlaceStay[]; profile?: TrailProfile } = {},
 ): TrailPiece[] {
   const kept = withoutSpikes(withoutUnconfirmed(points, profile), profile)
-  const hops = toHops(kept, profile)
+  const hops = toHops(kept, profile, visits)
   if (hops.length === 0) {
     // A fix or so: where it is, without those left out.
     const fixes = kept.filter((point) => point.valid)
@@ -257,7 +279,7 @@ export function classifyTrail(
   }
   const pieces: TrailPiece[] = []
   for (const stretch of toStretches(hops)) {
-    if (stretch.kind === 'walk') pieces.push(...splitWalk(stretch.points, showWandering, places, profile))
+    if (stretch.kind === 'walk') pieces.push(...splitWalk(stretch.points, visits, profile))
     else if (stretch.kind !== 'gap') {
       pieces.push({ kind: stretch.kind, from: stretch.points[0]!, to: stretch.points.at(-1)!, legs: stretch.legs })
     }
@@ -266,15 +288,16 @@ export function classifyTrail(
 }
 
 /**
- * Whether the asset is staying in one place right now (the trail ends in a stay, with recent
- * reports, or a tracker that stops reporting when still has been quiet since; see QUIET_MS), and
- * since when. At one of its `places`, wandering about it is part of the stay (see joinAtPlaces), and
- * it holds until the asset has clearly left (see LEFT_FIXES). `began` is false when the stay goes back to the first point given, so it may have begun earlier.
+ * Whether the asset is staying in one place right now, as the map has it (the trail ends in a stop of
+ * SHORT_STOP_MS or more, a dot, with recent reports, or a tracker that stops reporting when still has
+ * been quiet since; see QUIET_MS), and since when; it holds until the asset has clearly left (see
+ * LEFT_FIXES). At one of its places, where it is goes by its presence instead (see presence.ts).
+ * `began` is false when the stay goes back to the first point given, so it may have begun earlier.
  */
-export function currentStay(points: TrailPoint[], now: number, profile = DEFAULT_TRAIL_PROFILE, places: TrailPlace[] = []): Stay | null {
+export function currentStay(points: TrailPoint[], now: number, profile = DEFAULT_TRAIL_PROFILE): Stay | null {
   const latest = points.at(-1)
   if (!latest || now - latest.time > (profile.quietMs ?? profile.freshMs)) return null
-  const pieces = classifyTrail(points, { profile, places })
+  const pieces = classifyTrail(points, { profile })
   const [before, last] = [pieces.at(-2), pieces.at(-1)]
   let stay = last?.kind === 'stay' ? last : null
   // Not left yet: a move since the stay that hasn't got clearly away from it (see LEFT_FIXES).
@@ -326,41 +349,34 @@ export function lastConfirmedFix(points: TrailPoint[], profile = DEFAULT_TRAIL_P
   return withoutUnconfirmed(points, profile).findLast((point) => point.valid)
 }
 
-/**
- * Where to show an asset whose latest location is `location`, with its recent fixes: there, unless GPS
- * has yet to confirm it, then at the last confirmed fix, keeping when it last reported. As it is when
- * the fixes don't end with that location (not loaded yet).
- */
-export function confirmedLocation<L extends LatLon & { fixTime: string; accuracy?: number }>(
-  location: L,
-  points: TrailPoint[],
-  profile = DEFAULT_TRAIL_PROFILE,
-): L {
-  const latest = points.findLast((point) => point.valid)
-  if (!latest || latest.time !== Date.parse(location.fixTime)) return location
-  const confirmed = lastConfirmedFix(points, profile)
-  if (!confirmed || confirmed === latest) return location
-  return { ...location, lat: confirmed.lat, lon: confirmed.lon, accuracy: undefined }
-}
-
 /** The points without fixes GPS didn't confirm (see UNCONFIRMED_METERS). */
 function withoutUnconfirmed(points: TrailPoint[], profile: TrailProfile): TrailPoint[] {
   const unconfirmed = new Set<TrailPoint>()
   let trusted: TrailPoint | undefined
   let previous: TrailPoint | undefined
   let provisional: TrailPoint[] = []
+  // The different positions among them, as many as it takes (see WEAK_RUN_POSITIONS).
+  let positions: TrailPoint[] = []
   for (const fix of points) {
     if (!fix.valid) continue
     const weak = isWeak(fix, profile)
-    if (provisional.length > 0) {
-      if (weak && distance(trusted!, fix) >= UNCONFIRMED_METERS) provisional.push(fix)
-      else {
+    const far = weak && trusted !== undefined && distance(trusted, fix) >= UNCONFIRMED_METERS
+    if (provisional.length > 0 && far && fix.time - previous!.time >= profile.silentMs) {
+      // After a silence, a run starts again: GPS stuck before a night and a fix on waking aren't one.
+      for (const point of provisional) unconfirmed.add(point)
+      ;[provisional, positions] = [[fix], [fix]]
+    } else if (provisional.length > 0) {
+      if (far) {
+        provisional.push(fix)
+        if (positions.length < WEAK_RUN_POSITIONS && positions.every((other) => distance(other, fix) > WEAK_RUN_METERS)) positions.push(fix)
+        const run = provisional.length >= WEAK_RUN_FIXES && fix.time - provisional[0]!.time >= WEAK_RUN_MS
+        if (run && positions.length >= WEAK_RUN_POSITIONS) [provisional, positions, trusted] = [[], [], fix]
+      } else {
         if (weak || distance(provisional.at(-1)!, fix) > CONFIRM_METERS) for (const point of provisional) unconfirmed.add(point)
-        provisional = []
-        trusted = fix
+        ;[provisional, positions, trusted] = [[], [], fix]
       }
-    } else if (trusted && previous && fix.time - previous.time >= profile.gapMs && weak && distance(trusted, fix) >= UNCONFIRMED_METERS) {
-      provisional = [fix]
+    } else if (far && previous && fix.time - previous.time >= profile.gapMs) {
+      ;[provisional, positions] = [[fix], [fix]]
     } else trusted = fix
     previous = fix
   }
@@ -388,7 +404,7 @@ function isSpike(before: TrailPoint, fix: TrailPoint, after: TrailPoint, profile
   return out >= profile.spikeMeters && back >= profile.spikeMeters && distance(before, after) <= SPIKE_SHORTCUT * (out + back)
 }
 
-function toHops(points: TrailPoint[], profile: TrailProfile): Hop[] {
+function toHops(points: TrailPoint[], profile: TrailProfile, visits: PlaceStay[] = []): Hop[] {
   const hops: Hop[] = []
   let from: TrailPoint | undefined
   let gap: TrailPoint[] = []
@@ -406,7 +422,11 @@ function toHops(points: TrailPoint[], profile: TrailProfile): Hop[] {
       const meters = distance(from, point)
       const kmh = (meters / ((point.time - from.time) / 1000)) * 3.6
       let kind: HopKind = 'walk'
-      if (silence > profile.silentMs) {
+      // At one of its places all along, as presence has it (waking up off where it slept indoors), or
+      // leaving it on waking up, but not too fast for a walk (driven off, with no fix on the way).
+      const there = visitAt(visits, from)
+      if (there && (visitAt(visits, point) === there || (point.time === there.to && kmh < VEHICLE_KMH))) kind = 'walk'
+      else if (silence > profile.silentMs) {
         // Silent: still in the same place (walking, so a stay), a ride if it got there fast, or unknown.
         if (meters > profile.stayMeters) kind = kmh >= VEHICLE_KMH ? 'vehicle' : 'gap'
       } else if (kmh >= VEHICLE_KMH && meters >= VEHICLE_MIN_METERS) kind = gap.length > 0 ? 'underground' : 'vehicle'
@@ -480,30 +500,48 @@ function toStretches(hops: Hop[]): Stretch[] {
   return stretches
 }
 
-/** `place`: a stay at one of the asset's places (see joinAtPlaces). */
-type Part = { stay: boolean; points: TrailPoint[]; place?: TrailPlace }
+/** `place`: a visit to one of the asset's places; `until`: when it ended, after its last fix (asleep there). */
+type Part = { stay: boolean; points: TrailPoint[]; place?: PlaceStay; until?: number }
 
 /**
- * Splits walking into moves between stays. A move's ends touch the stays around it. Stays in one
- * place with only local wandering between them (a yard, a park) become one; see mergePlaces.
+ * Splits walking into moves between stays. A move's ends touch the stays around it. A visit to one
+ * of the asset's places is a stay of all its points, from the first fix that showed it to the last
+ * before it left, so its dot is where presence says the asset is: the fixes indoors that wander tens
+ * of metres, and a trip to the pee spot too short to leave by, are part of it, and a walk out begins
+ * with the fix it left on, however near. Stays at one spot with a blip between them become one (see
+ * mergePlaces); short stops are part of the walk.
  */
-function splitWalk(points: TrailPoint[], showWandering: boolean, places: TrailPlace[], profile: TrailProfile): TrailPiece[] {
+function splitWalk(points: TrailPoint[], visits: PlaceStay[], profile: TrailProfile): TrailPiece[] {
+  const visitOf = (point: TrailPoint) => visitAt(visits, point)
   const parts: Part[] = []
   let move: TrailPoint[] = []
   let i = 0
+  const stay = (j: number, place?: PlaceStay) => {
+    move.push(points[i]!)
+    if (move.length > 1) parts.push({ stay: false, points: move })
+    // Asleep at a place until it left: there until the fix it left on, where the walk out begins.
+    const next = points[j + 1]
+    const slept = place && next && next.time - points[j]!.time >= profile.silentMs
+    parts.push({ stay: true, points: points.slice(i, j + 1), place, until: slept ? next.time : undefined })
+    move = slept ? [] : [points[j]!]
+    i = j + 1
+  }
   while (i < points.length) {
+    const visit = visitOf(points[i]!)
     let j = i
-    while (j + 1 < points.length && distance(points[i]!, points[j + 1]!) <= profile.stayMeters) j++
+    if (visit) {
+      while (j + 1 < points.length && visitOf(points[j + 1]!) === visit) j++
+      stay(j, visit)
+      continue
+    }
+    const free = (k: number) => k < points.length && !visitOf(points[k]!)
+    while (free(j + 1) && distance(points[i]!, points[j + 1]!) <= profile.stayMeters) j++
     if (points[j]!.time - points[i]!.time >= STAY_MIN_MS) {
       // The middle of the fixes it began with, kept as it is: a middle that moved with each new fix
       // would follow a slow walk away.
       const middle = centre(points.slice(i, j + 1))
-      while (j + 1 < points.length && distance(middle, points[j + 1]!) <= profile.stayMeters) j++
-      move.push(points[i]!)
-      if (move.length > 1) parts.push({ stay: false, points: move })
-      parts.push({ stay: true, points: points.slice(i, j + 1) })
-      move = [points[j]!]
-      i = j + 1
+      while (free(j + 1) && distance(middle, points[j + 1]!) <= profile.stayMeters) j++
+      stay(j)
     } else {
       move.push(points[i]!)
       i++
@@ -511,41 +549,14 @@ function splitWalk(points: TrailPoint[], showWandering: boolean, places: TrailPl
   }
   if (move.length > 1) parts.push({ stay: false, points: move })
 
-  const merged = joinAtPlaces(mergePlaces(parts, showWandering), places)
-  return (showWandering ? joinShortStops(merged) : merged).map((part) =>
-    part.stay ? toStay(part.points, part.place) : { kind: 'move', points: part.points },
+  return joinShortStops(mergePlaces(parts)).map((part) =>
+    part.stay ? toStay(part.points, part.place, part.until) : { kind: 'move', points: part.points },
   )
 }
 
-/**
- * For drawing: stays inside one of the asset's places (Home) become one, with the moves next to them
- * that never got more than PLACE_WANDER_METERS out of it (indoor GPS wander, the garden), and it's
- * drawn at the place's middle, so home is one dot however the fixes wander. A walk out stays a walk.
- */
-function joinAtPlaces(parts: Part[], places: TrailPlace[]): Part[] {
-  if (places.length === 0) return parts
-  const tagged = parts.map((part) => {
-    if (!part.stay) return part
-    const middle = centre(part.points)
-    const place = places.find((candidate) => candidate.within(middle, 0))
-    return place ? { ...part, place } : part
-  })
-  // A move next to a stay at a place, that stayed about it, is part of that stay.
-  const placeOf = tagged.map((part, index) => {
-    if (part.stay) return part.place
-    const neighbours = [tagged[index - 1], tagged[index + 1]]
-    return neighbours.find((other) => other?.place && part.points.every((point) => other.place!.within(point, PLACE_WANDER_METERS)))?.place
-  })
-  const joined: Part[] = []
-  tagged.forEach((part, index) => {
-    const place = placeOf[index]
-    const last = joined.at(-1)
-    if (place && last?.place === place) {
-      // Neighbouring parts share their end point.
-      last.points = [...last.points, ...part.points.slice(last.points.at(-1) === part.points[0] ? 1 : 0)]
-    } else joined.push(place ? { stay: true, points: [...part.points], place } : part)
-  })
-  return joined
+/** The visit a point is in, if any: from its first fix to before the first fix out. */
+function visitAt(visits: PlaceStay[], point: TrailPoint): PlaceStay | undefined {
+  return visits.find((visit) => point.time >= visit.from && (visit.to === null || point.time < visit.to))
 }
 
 /**
@@ -568,20 +579,20 @@ function joinShortStops(parts: Part[]): Part[] {
 }
 
 /**
- * Pottering about one place (a yard, a park) gives many stays with short moves between them. Joins
- * two stays, and the move between them, when they're close and the move never strayed from them,
- * until nothing more joins; then moves that never left a neighbouring stay's circle join it too.
- * With `blipsOnly`, for drawing, two stays only join across a move of a fix or two (GPS noise)
- * when they're at the same spot, where they'd share a dot (see stayDots) anyway.
+ * Joins two stays, and the move between them, across a move of a fix or two (GPS noise) when they're
+ * at the same spot, where they'd share a dot (see stayDots) anyway, and the move never strayed from
+ * them, until nothing more joins; then moves that never left a neighbouring stay's circle join it too.
  */
-function mergePlaces(parts: Part[], blipsOnly: boolean): Part[] {
+function mergePlaces(parts: Part[]): Part[] {
   const merged = [...parts]
   for (let joined = true; joined;) {
     joined = false
     for (let k = 0; k + 2 < merged.length; k++) {
       const [a, between, b] = [merged[k]!, merged[k + 1]!, merged[k + 2]!]
       const blip = () => between.points.length - 2 <= BLIP_FIXES && distance(centre(a.points), centre(b.points)) <= STAY_DOT_JOIN_METERS
-      if (a.stay && !between.stay && b.stay && (!blipsOnly || blip()) && samePlace(a.points, between.points, b.points)) {
+      // Not a visit to a place: presence has said where it was.
+      const free = !a.place && !b.place
+      if (a.stay && !between.stay && b.stay && free && blip() && samePlace(a.points, between.points, b.points)) {
         merged.splice(k, 3, { stay: true, points: [...a.points, ...between.points.slice(1, -1), ...b.points] })
         joined = true
       }
@@ -589,8 +600,10 @@ function mergePlaces(parts: Part[], blipsOnly: boolean): Part[] {
   }
   for (let k = 0; k < merged.length; k++) {
     const part = merged[k]!
-    if (part.stay) continue
-    const neighbour = [merged[k - 1], merged[k + 1]].find((other) => other?.stay && withinStay(toStay(other.points), part.points, 0))
+    const around = [merged[k - 1], merged[k + 1]]
+    // A walk to or from a visit to a place is one: presence has said it left, or came.
+    if (part.stay || around.some((other) => other?.place)) continue
+    const neighbour = around.find((other) => other?.stay && withinStay(toStay(other.points), part.points, 0))
     if (!neighbour) continue
     const before = neighbour === merged[k - 1]
     neighbour.points = before ? [...neighbour.points, ...part.points.slice(1)] : [...part.points.slice(0, -1), ...neighbour.points]
@@ -625,11 +638,11 @@ function centre(points: TrailPoint[]): LatLon {
  * Where a stay was, and how big an area: 90% of the fixes lie within the radius, so one stray fix
  * doesn't blow it up. At one of the asset's places, it's at the place's middle.
  */
-function toStay(points: TrailPoint[], place?: TrailPlace): StayPiece {
+function toStay(points: TrailPoint[], place?: PlaceStay, until?: number): StayPiece {
   const center = centre(points)
   const distances = points.map((point) => distance(center, point)).sort((a, b) => a - b)
   const radius = Math.max(STAY_MIN_RADIUS_METERS, distances[Math.ceil(distances.length * 0.9) - 1]!)
-  const stay: StayPiece = { kind: 'stay', center, radius, from: points[0]!.time, to: points.at(-1)!.time }
+  const stay: StayPiece = { kind: 'stay', center, radius, from: points[0]!.time, to: until ?? points.at(-1)!.time }
   return place ? { ...stay, center: place.center, atPlace: true } : stay
 }
 

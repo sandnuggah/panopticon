@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { matchWalks } from '../server/map.functions'
-import { matchableWalks } from './matching'
+import { matchableWalks, otherWalks, type MatchableWalk } from './matching'
 import { isInPark, type Park } from './parks'
 import type { LatLon } from './segments'
 import { nextTry, snappedLines, toAsk, withAnswers, type AssetWalk, type SnappedLines, type SnapState } from './snapLines'
 import { trailProfile, type TrackerKind } from './tracker'
 import type { TrailViews } from './trailGeometry'
+
+/** A request that hasn't come back after this long has failed: asked again later, so one lost request can't stop it. */
+const REQUEST_TIMEOUT_MS = 30_000
 
 /**
  * Snap to paths: the lines to draw the walks on these trails along (as the map draws them, see
@@ -31,8 +34,8 @@ export function useSnappedWalks(
   // view, and a walk shouldn't change back when the map moves away from it.
   const inParks = useRef(new Set<string>())
 
-  const walks = useMemo((): AssetWalk[] => {
-    if (!enabled || !parks) return []
+  const [walks, others] = useMemo((): [AssetWalk[], AssetWalk[]] => {
+    if (!enabled || !parks) return [[], []]
     const inPark = (point: LatLon) => {
       const where = `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`
       if (inParks.current.has(where)) return true
@@ -40,13 +43,16 @@ export function useSnappedWalks(
       inParks.current.add(where)
       return true
     }
-    return Object.entries(trails).flatMap(([id, view]) =>
-      matchableWalks(view.pieces, inPark, trailProfile(trackers[Number(id)])).map((walk) => ({ ...walk, asset: Number(id) })),
-    )
+    const all = Object.entries(trails).map(([id, view]) => {
+      const worth = matchableWalks(view.pieces, inPark, trailProfile(trackers[Number(id)]))
+      const asset = (walk: MatchableWalk) => ({ ...walk, asset: Number(id) })
+      return [worth.map(asset), otherWalks(view.pieces, worth).map(asset)] as const
+    })
+    return [all.flatMap(([worth]) => worth), all.flatMap(([, rest]) => rest)]
   }, [trails, enabled, parks, trackers])
   // The walks as they are when an answer comes, to forget those no longer on the map.
-  const walksRef = useRef(walks)
-  walksRef.current = walks
+  const walksRef = useRef([...walks, ...others])
+  walksRef.current = [...walks, ...others]
 
   useEffect(() => {
     if (asking.current) return
@@ -59,7 +65,8 @@ export function useSnappedWalks(
       return () => clearTimeout(timer)
     }
     asking.current = true
-    matchWalks({ data: ask.map((walk) => walk.points) })
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('no answer')), REQUEST_TIMEOUT_MS))
+    Promise.race([matchWalks({ data: ask.map((walk) => walk.points) }), timeout])
       .then((answers) => setState((current) => withAnswers(current, ask, answers, Date.now(), walksRef.current)))
       .catch((error) => {
         // Unreachable or signed out: asked again later.
@@ -80,5 +87,5 @@ export function useSnappedWalks(
       })
   }, [walks, state, wake])
 
-  return useMemo(() => snappedLines(walks, state), [walks, state])
+  return useMemo(() => snappedLines(walks, state, others), [walks, others, state])
 }

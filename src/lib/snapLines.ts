@@ -86,6 +86,9 @@ export function withAnswers(state: SnapState, asked: AssetWalk[], answers: SnapA
   asked.forEach((walk, index) => {
     const key = entryKey(walk)
     const entry: Entry = { ...next.get(key) }
+    // A walk drawn along the line of the walk it was keeps that line as its own, so it doesn't go when
+    // that walk is forgotten (below).
+    entry.had ??= wasWalk(walk, state)
     const answer = answers[index]
     if (answer === 'unavailable' || answer === undefined) {
       const wait = entry.retry?.signature === walk.signature ? Math.min(entry.retry.wait * 2, MAX_RETRY_MS) : FIRST_RETRY_MS
@@ -93,13 +96,18 @@ export function withAnswers(state: SnapState, asked: AssetWalk[], answers: SnapA
     } else {
       entry.answered = { signature: walk.signature, line: answer }
       delete entry.retry
-      // Can't be snapped as it is now, but was another walk with a line: that one's, as its own.
       if (answer) entry.had = { fixes: spanOf(walk), line: answer }
-      else entry.had ??= wasWalk(walk, state)
     }
     next.set(key, entry)
   })
   if (keep) {
+    // A walk kept that's drawn along the line of the walk it was, with no line of its own yet, keeps
+    // that line, so it doesn't go with that walk (asked for or not: see otherWalks).
+    for (const walk of keep) {
+      const key = entryKey(walk)
+      const had = next.get(key)?.had ?? wasWalk(walk, state)
+      if (had) next.set(key, { ...next.get(key), had })
+    }
     const ids = new Set(keep.map(entryKey))
     for (const key of next.keys()) if (!ids.has(key)) next.delete(key)
   }
@@ -111,10 +119,11 @@ export function withAnswers(state: SnapState, asked: AssetWalk[], answers: SnapA
  * as recorded. A walk new as such, with no line of its own yet, has the line of the walk it was for
  * the time they share: its first fix changes when the stay it set off from takes in a fix or two, and a
  * walk between two stops can turn out to be pottering about between them, a hop between their dots.
+ * `others`: walks not worth asking for (see otherWalks), which keep a line they had as a longer walk.
  */
-export function snappedLines(walks: AssetWalk[], state: SnapState): SnappedLines {
+export function snappedLines(walks: AssetWalk[], state: SnapState, others: AssetWalk[] = []): SnappedLines {
   const lines: SnappedLines = {}
-  for (const walk of walks) {
+  for (const walk of [...walks, ...others]) {
     const entry = state.get(entryKey(walk))
     const answered = entry?.answered?.signature === walk.signature ? entry.answered.line : null
     const had = entry?.had ?? wasWalk(walk, state)

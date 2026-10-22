@@ -1,6 +1,6 @@
 import type { Asset } from '../lib/asset'
 import type { LiveUpdate } from '../lib/live'
-import { confirmedLocation } from '../lib/segments'
+import { shownLocation } from '../lib/presence'
 import type { SharedView } from '../lib/share'
 import { trailProfile, type TrackerKind } from '../lib/tracker'
 import { HISTORY_MIN_MINUTES, type TrailPoint } from '../lib/trail'
@@ -29,8 +29,9 @@ import {
 // enforces the expiry too. Stopping a link revokes that token. What a viewer gets is deliberately
 // less than the app shows: the asset's name, picture, position, status and address; never its
 // battery, trail, tracker ID, or anything about the sharer or their other assets. The position is
-// where the app shows it too: the last fix GPS confirmed (see confirmedLocation in segments.ts),
-// judged here on the asset's recent fixes, which stay on the server.
+// where the app shows it too, but for places: the last fix GPS confirmed, never where a report without
+// a fix says (see shownLocation in presence.ts), judged here on the asset's recent fixes, which stay
+// on the server.
 
 /** Creates a link to `assetId` lasting `hours`, capped at the sharer's own session. */
 export async function createLiveLink(
@@ -135,7 +136,7 @@ async function loadShared(data: LiveLinkData, link: string): Promise<Asset | nul
   if (!device || device.disabled) return null
   const asset = toAsset(device, latest)
   const fixes = await recentFixes(data, latest)
-  const location = asset.location && confirmedLocation(asset.location, fixes.points, trailProfile(fixes.tracker))
+  const location = asset.location && shownLocation(asset.location, fixes.points, undefined, [], trailProfile(fixes.tracker))
   return { ...asset, location, battery: undefined, tracker: undefined, imageUrl: sharedImageUrl(device, link), placeIds: [] }
 }
 
@@ -187,7 +188,7 @@ function toSharedUpdates(
     // Only as far back as the app looks: a page left open for days keeps a few hours of fixes.
     const since = point.time - 2 * HISTORY_MIN_MINUTES * 60 * 1000
     if ((fixes.points[0]?.time ?? since) < since) fixes.points = fixes.points.filter((fix) => fix.time >= since)
-    const location = confirmedLocation(update.location, fixes.points, trailProfile(fixes.tracker))
+    const location = shownLocation(update.location, fixes.points, undefined, [], trailProfile(fixes.tracker))
     updates.push({ kind: 'position', id: update.id, location, valid: update.valid, placeIds: [] })
   }
   return updates

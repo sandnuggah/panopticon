@@ -7,6 +7,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { isStale, type Asset } from '../../lib/asset'
 import { parkFromRings, type Park } from '../../lib/parks'
 import type { Place } from '../../lib/places'
+import type { Presence } from '../../lib/presence'
 import type { TrailViews } from '../../lib/trailGeometry'
 import type { LatLon } from '../../lib/segments'
 import type { SnappedLines } from '../../lib/snapLines'
@@ -37,6 +38,7 @@ const CARD_MS = 300
 
 /** Live link pages show no places; one empty list, so it never counts as a change. */
 const NO_PLACES: Place[] = []
+const NOWHERE: Record<number, Presence> = {}
 
 /** Zoom when showing just your position. */
 const MY_POSITION_ZOOM = 16
@@ -76,6 +78,8 @@ type Props = {
   cover?: Cover
   /** The user's places (Settings → Places), drawn under the trail. None on live link pages. */
   places?: Place[]
+  /** Where each asset is as its places go (see presence.ts), for the place it wears as a badge when zoomed out. */
+  presence?: Record<number, Presence>
   /** While a place is being added or changed (PlaceEditor): the circle to place, and which place it is. */
   picker?: (PickerProps & { placeId?: number }) | null
 }
@@ -99,6 +103,7 @@ export default function AssetMap({
   onParks,
   cover = NO_COVER,
   places = NO_PLACES,
+  presence = NOWHERE,
   picker = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -353,12 +358,12 @@ export default function AssetMap({
         const marker = markers.get(asset.id)
         if (!marker) continue
         // At a place too small on screen to show its own pin: the asset wears it.
-        const atPlace = places.find((place) => asset.placeIds.includes(place.id) && !showsPin(map, place))?.name
+        const atPlace = places.find((place) => place.id === presence[asset.id]?.place && !showsPin(map, place))?.name
         updateMarkerElement(marker.getElement(), asset, { stale: isStale(asset, now), selected: asset.id === selectedId, atPlace })
       }
     }
     updateMarkersRef.current()
-  }, [assets, selectedId, now, places])
+  }, [assets, selectedId, now, places, presence])
 
   // First render: show the selected asset, or fit all assets. Afterwards: fly to each new selection.
   useEffect(() => {

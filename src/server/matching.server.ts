@@ -30,7 +30,7 @@ export async function matchWalk(points: MatchablePoint[]): Promise<SnapAnswer> {
   const key = points
     .map(
       (point) =>
-        `${point.lat.toFixed(6)},${point.lon.toFixed(6)}${point.park ? 'p' : ''}${point.anchor ? 'a' : ''}${point.unseen ? 'u' : ''}`,
+        `${point.time}:${point.lat.toFixed(6)},${point.lon.toFixed(6)}${point.park ? 'p' : ''}${point.anchor ? 'a' : ''}${point.unseen ? 'u' : ''}`,
     )
     .join(';')
   if (cache.has(key)) return cache.get(key)!

@@ -57,6 +57,19 @@ export function walkSignature(points: MatchablePoint[]): string {
 export type MatchableWalk = { id: string; signature: string; points: MatchablePoint[] }
 
 /**
+ * The walks in these pieces not worth snapping (see matchableWalks), with their fixes: never asked
+ * for, but one that had a line as a longer walk keeps it (see snapLines.ts). No signature.
+ */
+export function otherWalks(pieces: TrailPiece[], worth: MatchableWalk[]): MatchableWalk[] {
+  const asked = new Set(worth.map((walk) => walk.id))
+  return pieces.flatMap((piece) =>
+    piece.kind === 'move' && !asked.has(walkId(piece.points))
+      ? [{ id: walkId(piece.points), signature: '', points: piece.points.map(({ lat, lon, time }) => ({ lat, lon, time })) }]
+      : [],
+  )
+}
+
+/**
  * The walks in these pieces worth snapping, without jitter, and thinned out evenly when there are too
  * many points (a walk of over three hours from an ST-904L): stays are already carved out, and a
  * walk must get somewhere from where it began (out and back counts) and have at least 3 points. A

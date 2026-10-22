@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { MAX_POINTS_PER_WALK, matchableWalks, stayHopId, walkId } from './matching.ts'
+import { MAX_POINTS_PER_WALK, matchableWalks, otherWalks, stayHopId, walkId } from './matching.ts'
 import { DEFAULT_TRAIL_PROFILE } from './segments.ts'
 import type { TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
@@ -108,5 +108,17 @@ describe('matchableWalks', () => {
     assert.equal(walk!.points.at(-2)!.time, points.at(-1)!.time)
     const gaps = walk!.points.slice(2, -1).map((point, index) => point.time - walk!.points[index + 1]!.time)
     assert.ok(Math.max(...gaps) - Math.min(...gaps) <= 30_000, 'evenly')
+  })
+})
+
+describe('otherWalks', () => {
+  test('the moves not worth snapping, by the id they had as walks, with their fixes', () => {
+    const short: TrailPiece = { kind: 'move', points: [fix(0, 0, 10), fix(20, 5, 11), fix(10, 0, 12)] }
+    const long: TrailPiece = { kind: 'move', points: [fix(0, 0, 30), fix(60, 0, 31), fix(120, 0, 32)] }
+    const pieces = [stay(0, 0, 10), short, stay(0, 12, 30), long]
+    const others = otherWalks(pieces, matchableWalks(pieces))
+    assert.deepEqual(others, [
+      { id: walkId(short.points), signature: '', points: short.points.map(({ lat, lon, time }) => ({ lat, lon, time })) },
+    ])
   })
 })

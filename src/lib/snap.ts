@@ -236,8 +236,8 @@ function snappedFixes(points: Point[], feet: Foot[] | null): boolean[] {
 
 /**
  * The way from one fix's foot to a later one's, `went` metres on by the fixes: the line's vertices
- * between them (`followed`), or the two feet where the line goes back or detours (see DETOUR_FACTOR;
- * for a leg nobody saw, UNSEEN_FACTOR), to be joined straight.
+ * between them and the later foot (`followed`), or the two feet where the line goes back or detours
+ * (see DETOUR_FACTOR; for a leg nobody saw, UNSEEN_FACTOR), to be joined straight.
  */
 function lineBetween(line: Point[], start: Foot, end: Foot, went: number, unseen: boolean): { points: Point[]; followed: boolean } {
   const cut = { points: [start.point, end.point], followed: false }
@@ -245,7 +245,8 @@ function lineBetween(line: Point[], start: Foot, end: Foot, went: number, unseen
   const vertices = line.slice(start.segment + 1, end.segment + 1)
   const way = [start.point, ...vertices, end.point]
   const length = way.slice(1).reduce((sum, point, index) => sum + metres(way[index]!, point), 0)
-  return length > tooLong(went, unseen) ? cut : { points: vertices, followed: true }
+  // With the later foot, so each fix on the line is a point of it, at the fix's time (see timedWalk).
+  return length > tooLong(went, unseen) ? cut : { points: [...vertices, end.point], followed: true }
 }
 
 /** How long a way between two points `went` metres apart may be before it's a detour. */

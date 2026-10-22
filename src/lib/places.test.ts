@@ -1,26 +1,21 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import {
+  areaSize,
   circleWkt,
   durationLabel,
   parseArea,
   parseWayIn,
-  placeAt,
   placeCenter,
   placeOf,
   radiusLabel,
-  shownLocation,
   streetOf,
-  trailPlaces,
   visitRows,
   visitSentence,
-  visitsBetween,
   wayInAttribute,
   withinArea,
   type Place,
 } from './places.ts'
-import { DEFAULT_TRAIL_PROFILE } from './segments.ts'
-import type { TrailPoint } from './trail.ts'
 
 describe('parseArea', () => {
   test("a circle: latitude first, radius in metres, as Traccar's own UI writes it", () => {
@@ -61,14 +56,6 @@ describe('places', () => {
   test("a polygon's centre is the middle of its bounds", () => {
     const area = parseArea('POLYGON ((59 18, 59 18.4, 59.2 18.4, 59 18))')!
     assert.deepEqual(placeCenter(area), { lat: 59.1, lon: 18.2 })
-  })
-
-  test('visitsBetween: leaving and arriving, one per place that changed', () => {
-    assert.deepEqual(visitsBetween(3, [1, 2], [2, 5], 'T'), [
-      { assetId: 3, placeId: 1, arrived: false, time: 'T' },
-      { assetId: 3, placeId: 5, arrived: true, time: 'T' },
-    ])
-    assert.deepEqual(visitsBetween(3, [2], [2], 'T'), [])
   })
 
   test('visitRows: each departure is out until the next arrival, anywhere', () => {
@@ -130,27 +117,12 @@ describe('withinArea', () => {
   })
 })
 
-describe('trailPlaces', () => {
-  test("only the asset's own places, at their middles", () => {
-    const places: Place[] = [
-      { id: 1, name: 'Home', area: parseArea('CIRCLE (59.3 18.07, 50)')!, assetIds: [30] },
-      { id: 2, name: 'Daycare', area: parseArea('CIRCLE (59.35 18.09, 120)')!, assetIds: [10] },
-    ]
-    const mine = trailPlaces(places, 30)
-    assert.equal(mine.length, 1)
-    assert.deepEqual(mine[0]!.center, { lat: 59.3, lon: 18.07 })
-    assert.equal(mine[0]!.within({ lat: 59.3006, lon: 18.07 }, 25), true)
-  })
-
-  test("a place's way in, where it has one, is its dot", () => {
-    const home: Place = {
-      id: 1,
-      name: 'Home',
-      area: parseArea('CIRCLE (59.3 18.07, 50)')!,
-      assetIds: [30],
-      wayIn: { lat: 59.3003, lon: 18.0702 },
-    }
-    assert.deepEqual(trailPlaces([home], 30)[0]!.center, { lat: 59.3003, lon: 18.0702 })
+describe('areaSize', () => {
+  test('a circle, and a polygon, in square metres', () => {
+    assert.equal(Math.round(areaSize(parseArea('CIRCLE (59.3 18.07, 50)')!)), 7854)
+    // About 100 m by 100 m.
+    const square = parseArea('POLYGON ((59.3 18.07, 59.3009 18.07, 59.3009 18.07176, 59.3 18.07176, 59.3 18.07))')!
+    assert.ok(Math.abs(areaSize(square) - 10_000) < 200)
   })
 })
 
@@ -169,59 +141,6 @@ describe('address and way in', () => {
     assert.equal(streetOf('12 Main Street, Springfield'), 'Main Street')
     assert.equal(streetOf('Rue de la Paix 4b'), 'Rue de la Paix')
     assert.equal(streetOf('116 67, Stockholm'), null)
-  })
-})
-
-describe('placeAt', () => {
-  const home: Place = { id: 1, name: 'Home', area: parseArea('CIRCLE (59.3 18.07, 50)')!, assetIds: [30] }
-  const yard: Place = { id: 2, name: 'Yard', area: parseArea('CIRCLE (59.3004 18.07, 50)')!, assetIds: [30] }
-  const daycare: Place = { id: 3, name: 'Daycare', area: parseArea('CIRCLE (59.3 18.07, 100)')!, assetIds: [10] }
-
-  test("the asset's own place it's in; of two, the one whose centre is nearest", () => {
-    assert.equal(placeAt([home, yard, daycare], 30, { lat: 59.3001, lon: 18.07 })?.name, 'Home')
-    assert.equal(placeAt([home, yard, daycare], 30, { lat: 59.3003, lon: 18.07 })?.name, 'Yard')
-    assert.equal(placeAt([home, daycare], 30, { lat: 59.301, lon: 18.07 }), undefined, 'outside')
-    assert.equal(placeAt([daycare], 30, { lat: 59.3, lon: 18.07 }), undefined, 'not its place')
-  })
-})
-
-describe('shownLocation', () => {
-  const home: Place = { id: 1, name: 'Home', area: parseArea('CIRCLE (59.3 18.07, 50)')!, assetIds: [30] }
-  // Metres north of Home's centre, a step of 30 s, so many satellites.
-  const at = (north: number, step: number, satellites: number): TrailPoint => ({
-    lat: 59.3 + north / 110_540,
-    lon: 18.07,
-    time: Date.parse('2026-10-19T05:00:00Z') + step * 30_000,
-    valid: true,
-    satellites,
-  })
-  const location = (point: TrailPoint) => ({ lat: point.lat, lon: point.lon, fixTime: new Date(point.time).toISOString(), accuracy: 12 })
-  const before = [at(10, 0, 18), at(12, 1, 18), at(9, 2, 18)]
-
-  test('at a place: its centre, however the fixes wander, with when it last reported', () => {
-    const shown = shownLocation([home], 30, location(before[2]!), before, DEFAULT_TRAIL_PROFILE)
-    assert.deepEqual(shown, { lat: 59.3, lon: 18.07, fixTime: location(before[2]!).fixTime, accuracy: undefined })
-  })
-
-  test('a fix GPS has yet to confirm (weak, far off after a gap): at the last one it did', () => {
-    const canal = [at(-320, 10, 7), at(-330, 11, 4)]
-    const shown = shownLocation([], 30, location(canal[1]!), [...before, ...canal], DEFAULT_TRAIL_PROFILE)
-    assert.deepEqual(
-      [shown.lat, shown.lon, shown.fixTime, shown.accuracy],
-      [before[2]!.lat, before[2]!.lon, location(canal[1]!).fixTime, undefined],
-    )
-  })
-
-  test('back home by the fixes GPS confirmed, though the latest is far off: at home', () => {
-    const canal = [at(-320, 10, 7), at(-330, 11, 4)]
-    const shown = shownLocation([home], 30, location(canal[1]!), [...before, ...canal], DEFAULT_TRAIL_PROFILE)
-    assert.deepEqual(shown, { lat: 59.3, lon: 18.07, fixTime: location(canal[1]!).fixTime, accuracy: undefined })
-  })
-
-  test('elsewhere, and without its points, as it is', () => {
-    const away = at(200, 20, 18)
-    assert.deepEqual(shownLocation([home], 30, location(away), [...before, away], DEFAULT_TRAIL_PROFILE), location(away))
-    assert.deepEqual(shownLocation([home], 30, location(away), undefined, DEFAULT_TRAIL_PROFILE), location(away))
   })
 })
 

@@ -46,7 +46,7 @@ export type Period = 'today' | 'week' | 'month'
  */
 export function dayStats(points: TrailPoint[], home: LatLon | null, profile: TrailProfile = DEFAULT_TRAIL_PROFILE): DayStats {
   const stats = { ...NO_WALKS, fixes: points.filter((point) => point.valid).length }
-  for (const piece of classifyTrail(points, { showWandering: true, profile })) {
+  for (const piece of classifyTrail(points, { profile })) {
     if (piece.kind !== 'move') continue
     const fixes = piece.points
     if (!fixes.some((fix) => distance(fixes[0]!, fix) >= MIN_WALK_METERS)) continue

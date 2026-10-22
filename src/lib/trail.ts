@@ -65,15 +65,17 @@ export function nearestTrail(value: unknown): TrailLength | undefined {
 export const HISTORY_MIN_MINUTES = 180
 
 /**
- * How many minutes of history a trail needs: its own, and HISTORY_MIN_MINUTES before its start, so
- * the trail is worked out there as it would be anywhere else (see trailView in trailGeometry.ts): a
- * walk under way when it starts, a stay long enough to be one, a fix it can check against the one
- * before. With trails off, enough to tell what each asset is doing.
+ * How many minutes of history to load, whatever the trail's length (it needs at most a day): a day
+ * and HISTORY_MIN_MINUTES before it. Enough for the trail to be worked out at its start as it would
+ * be anywhere else (see trailView in trailGeometry.ts): a walk under way when it starts, a stay long
+ * enough to be one, a fix it can check against the one before; and for where an asset is (see
+ * presence.ts) to go back past a night's sleep: an ST-904L at home sends nothing for hours, and a
+ * shorter history was cut to after the sleep when it woke, as if it hadn't been home at all.
  */
-export function historyMinutes(length: TrailLength): number {
-  return trailMinutes(length) + HISTORY_MIN_MINUTES
-}
 export const MAX_HISTORY_MINUTES = MAX_TRAIL_MINUTES + HISTORY_MIN_MINUTES
+export function historyMinutes(_length?: TrailLength): number {
+  return MAX_HISTORY_MINUTES
+}
 
 /**
  * The points "Here since" goes by (see currentStay): HISTORY_MIN_MINUTES, or the trail's length if
