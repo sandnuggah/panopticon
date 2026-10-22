@@ -5,10 +5,10 @@ import { getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
-import { shownLocation, trailPlaces, type Place, type PlaceVisit } from './places'
-import { currentActivity, currentStay, type Activity, type Stay } from './segments'
+import { currentStays, shownAssets, type Place, type PlaceVisit } from './places'
+import { currentActivity, type Activity } from './segments'
 import { trackersOf, trailProfile } from './tracker'
-import { extendTrails, historyMinutes, stayPoints, trailStart, type TrailLength, type Trails } from './trail'
+import { extendTrails, historyMinutes, trailStart, type TrailLength, type Trails } from './trail'
 import { shownKey, shownTrails, trailViews, type TrailViewCache } from './trailGeometry'
 import { useNow } from './useNow'
 
@@ -183,25 +183,10 @@ export function useLiveAssets(
     return result
   }, [trails, now, trackers])
 
-  const stays = useMemo(() => {
-    const result: Record<number, Stay> = {}
-    for (const [id, points] of Object.entries(trails)) {
-      const stay = currentStay(stayPoints(points, trail ?? 0), now, trailProfile(trackers[Number(id)]), trailPlaces(places, Number(id)))
-      if (stay) result[Number(id)] = stay
-    }
-    return result
-  }, [trails, trail, now, trackers, places])
+  const stays = useMemo(() => currentStays(trails, trail ?? 0, now, places, trackers), [trails, trail, now, trackers, places])
 
   // Each asset where its trail can trust it to be, and at its place's centre when it's at one (see shownLocation).
-  const shownAssets = useMemo(
-    () =>
-      assets.map((asset) => {
-        if (!asset.location) return asset
-        const location = shownLocation(places, asset.id, asset.location, trails[asset.id], trailProfile(asset.tracker))
-        return location === asset.location ? asset : { ...asset, location }
-      }),
-    [assets, trails, places],
-  )
+  const shownAssetsNow = useMemo(() => shownAssets(assets, trails, places), [assets, trails, places])
 
-  return { assets: shownAssets, trails: shown, trailsLoaded, activities, stays, status, updateAvailable }
+  return { assets: shownAssetsNow, trails: shown, trailsLoaded, activities, stays, status, updateAvailable }
 }

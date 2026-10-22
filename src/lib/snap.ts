@@ -57,11 +57,23 @@ const MIN_ROUTE_METERS = 20
 type Foot = { segment: number; t: number; point: Point; off: number }
 
 /**
- * A walk as drawn, from drawWalk. `snapped`: some of it follows the line. `strayed`: some fixes were
- * left out. `unseen`: the legs still straight across where nobody saw the way, by the index in
- * `points` of each leg's start, for a route.
+ * How the way to a point of a walk was drawn: along the matched line; straight between fixes, as
+ * recorded; cut straight across where the line went somewhere no fix was (see DETOUR_FACTOR); along a
+ * walking route, or straight, across a leg nobody saw (see UNSEEN_FACTOR).
  */
-export type DrawnWalk = { points: Point[]; snapped: boolean; strayed: boolean; unseen: number[] }
+export type How = 'matched' | 'recorded' | 'cut' | 'routed' | 'unseen'
+
+/** A point of a walk as drawn, with when (see timedWalk) and how the way to it was drawn. */
+export type SnappedPoint = { lat: number; lon: number; time: number; how: How }
+
+/**
+ * A walk as drawn, from drawWalk. For each point: which of the walk's points it stands for (`source`:
+ * a fix or its foot on the line; -1 for the line's own vertices) and how the way to it was drawn
+ * (`how`). `snapped`: some of it follows the line. `strayed`: some fixes were left out. `unseen`: the
+ * legs still straight across where nobody saw the way, by the index in `points` of each leg's start,
+ * for a route.
+ */
+export type DrawnWalk = { points: Point[]; source: number[]; how: How[]; snapped: boolean; strayed: boolean; unseen: number[] }
 
 /**
  * The walk as drawn: the matched line along the stretches where at least MIN_RUN fixes in a row lie
@@ -79,7 +91,8 @@ export function drawWalk(points: Point[], line: Point[], strays: ReadonlySet<num
   const drawn: Point[] = []
   // The index of the point each drawn point stands for: a fix, its foot, or -1 for the line's own vertices.
   const source: number[] = []
-  const emit = (point: Point, index: number) => {
+  const how: How[] = []
+  const emit = (point: Point, index: number, way: How) => {
     const last = drawn.at(-1)
     // A foot can fall on a vertex: one point, standing for the fix.
     if (last && last.lat === point.lat && last.lon === point.lon) {
@@ -88,12 +101,13 @@ export function drawWalk(points: Point[], line: Point[], strays: ReadonlySet<num
     }
     drawn.push(point)
     source.push(index)
+    how.push(way)
   }
   const kept = points.map((_, index) => index).filter((index) => !strays.has(index))
   for (let n = 0; n < kept.length;) {
     const i = kept[n]!
     if (!snapped[i]) {
-      emit(points[i]!, i)
+      emit(points[i]!, i, 'recorded')
       n++
       continue
     }
@@ -102,24 +116,64 @@ export function drawWalk(points: Point[], line: Point[], strays: ReadonlySet<num
     let m = n
     while (m < kept.length && snapped[kept[m]!]) m++
     const row = kept.slice(n, m)
-    emit(feet![i]!.point, i)
+    emit(feet![i]!.point, i, 'recorded')
     let last = i
+    // How the way to the last foot was drawn.
+    let arriving: How = 'recorded'
     row.slice(1).forEach((k, index) => {
       if (index < row.length - 2 && behind(feet![k]!, feet![last]!)) return
       const way = lineBetween(line, feet![last]!, feet![k]!, along[k]! - along[last]!, isUnseen(points, last, k))
-      for (const point of way) emit(point, point === feet![last]!.point ? last : point === feet![k]!.point ? k : -1)
+      const leg: How = way.followed ? 'matched' : 'cut'
+      for (const point of way.points) {
+        const source = point === feet![last]!.point ? last : point === feet![k]!.point ? k : -1
+        emit(point, source, source === last ? arriving : leg)
+      }
+      arriving = leg
       last = k
     })
-    emit(feet![row.at(-1)!]!.point, row.at(-1)!)
+    emit(feet![row.at(-1)!]!.point, row.at(-1)!, arriving)
     n = m
   }
 
   const unseen: number[] = []
   for (let k = 0; k + 1 < drawn.length; k++) {
     const [a, b] = [source[k]!, source[k + 1]!]
-    if (a >= 0 && b >= 0 && isUnseen(points, a, b) && metres(drawn[k]!, drawn[k + 1]!) >= MIN_ROUTE_METERS) unseen.push(k)
+    if (a < 0 || b < 0 || !isUnseen(points, a, b)) continue
+    how[k + 1] = 'unseen'
+    if (metres(drawn[k]!, drawn[k + 1]!) >= MIN_ROUTE_METERS) unseen.push(k)
   }
-  return { points: drawn, snapped: snapped.some(Boolean), strayed: strays.size > 0, unseen }
+  return { points: drawn, source, how, snapped: snapped.some(Boolean), strayed: strays.size > 0, unseen }
+}
+
+/**
+ * The walk as drawn (see drawWalk) with its legs nobody saw along a walking route where there is one
+ * (`routes`, by leg, as in `walk.unseen`), and when each point was: a point standing for one of the
+ * walk's points at that point's time, the rest in between by how far along the way they are.
+ */
+export function timedWalk(points: (Point & { time: number })[], walk: DrawnWalk, routes: (Point[] | null)[]): SnappedPoint[] {
+  const timed: { lat: number; lon: number; time: number | null; how: How }[] = []
+  walk.points.forEach((point, k) => {
+    const routed = k > 0 && !!routes[walk.unseen.indexOf(k - 1)]
+    const source = walk.source[k]!
+    timed.push({ lat: point.lat, lon: point.lon, time: source >= 0 ? points[source]!.time : null, how: routed ? 'routed' : walk.how[k]! })
+    for (const step of routes[walk.unseen.indexOf(k)] ?? []) timed.push({ lat: step.lat, lon: step.lon, time: null, how: 'routed' })
+  })
+  // Between two points with times, by distance; before the first or after the last, theirs.
+  const along = timed.map(() => 0)
+  for (let k = 1; k < timed.length; k++) along[k] = along[k - 1]! + metres(timed[k - 1]!, timed[k]!)
+  let before = -1
+  for (let k = 0; k < timed.length; k++) {
+    if (timed[k]!.time === null) continue
+    for (let j = before + 1; j < k; j++) {
+      const [from, to] = before < 0 ? [k, k] : [before, k]
+      const span = along[to]! - along[from]!
+      const share = span > 0 ? (along[j]! - along[from]!) / span : 0
+      timed[j]!.time = timed[from]!.time! + (timed[to]!.time! - timed[from]!.time!) * share
+    }
+    before = k
+  }
+  const last = before >= 0 ? timed[before]!.time : 0
+  return timed.map((point) => ({ ...point, time: Math.round(point.time ?? last!) }))
 }
 
 /** The walk as drawn (see drawWalk), or null when no stretch of it is snapped, so it's drawn as recorded. */
@@ -182,15 +236,16 @@ function snappedFixes(points: Point[], feet: Foot[] | null): boolean[] {
 
 /**
  * The way from one fix's foot to a later one's, `went` metres on by the fixes: the line's vertices
- * between them, or the two feet where the line goes back or detours (see DETOUR_FACTOR; for a leg
- * nobody saw, UNSEEN_FACTOR), to be joined straight.
+ * between them (`followed`), or the two feet where the line goes back or detours (see DETOUR_FACTOR;
+ * for a leg nobody saw, UNSEEN_FACTOR), to be joined straight.
  */
-function lineBetween(line: Point[], start: Foot, end: Foot, went: number, unseen: boolean): Point[] {
-  if (behind(end, start)) return [start.point, end.point]
+function lineBetween(line: Point[], start: Foot, end: Foot, went: number, unseen: boolean): { points: Point[]; followed: boolean } {
+  const cut = { points: [start.point, end.point], followed: false }
+  if (behind(end, start)) return cut
   const vertices = line.slice(start.segment + 1, end.segment + 1)
   const way = [start.point, ...vertices, end.point]
   const length = way.slice(1).reduce((sum, point, index) => sum + metres(way[index]!, point), 0)
-  return length > tooLong(went, unseen) ? [start.point, end.point] : vertices
+  return length > tooLong(went, unseen) ? cut : { points: vertices, followed: true }
 }
 
 /** How long a way between two points `went` metres apart may be before it's a detour. */

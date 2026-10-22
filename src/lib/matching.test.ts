@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { matchableWalks, stayHopKey, walkKey } from './matching.ts'
+import { MAX_POINTS_PER_WALK, matchableWalks, stayHopId, walkId } from './matching.ts'
 import { DEFAULT_TRAIL_PROFILE } from './segments.ts'
 import type { TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
@@ -29,7 +29,7 @@ describe('matchableWalks', () => {
     const move: TrailPiece = { kind: 'move', points: [fix(20, 0, 10), fix(50, 5, 11), fix(80, 0, 12)] }
     const walks = matchableWalks([stay(0, 0, 10), move, stay(80, 12, 30)])
     assert.equal(walks.length, 1)
-    assert.equal(walks[0]!.key, walkKey(move.points))
+    assert.equal(walks[0]!.id, walkId(move.points))
     assert.deepEqual(
       walks[0]!.points.map((point) => !!point.anchor),
       [true, false, false, false, true],
@@ -45,8 +45,8 @@ describe('matchableWalks', () => {
     const [home, park, bench] = [stay(0, 0, 10), stay(80, 14, 30), stay(100, 32, 40)]
     const walks = matchableWalks([home, park, bench])
     assert.deepEqual(
-      walks.map((walk) => walk.key),
-      [stayHopKey(home, park)],
+      walks.map((walk) => walk.id),
+      [stayHopId(home, park)],
     )
     assert.ok(walks[0]!.points.every((point) => point.anchor))
   })
@@ -85,5 +85,28 @@ describe('matchableWalks', () => {
       matchableWalks([move])[0]!.points.map((point) => !!point.unseen),
       [false, false, true, true, false, false],
     )
+  })
+
+  test('a walk is the same walk as it grows; each version of it is told apart', () => {
+    const points = Array.from({ length: 12 }, (_, step) => fix(step * 40, 0, step))
+    const [shorter] = matchableWalks([{ kind: 'move', points: points.slice(0, 10) }])
+    const [longer] = matchableWalks([{ kind: 'move', points }])
+    assert.equal(longer!.id, shorter!.id)
+    assert.notEqual(longer!.signature, shorter!.signature)
+    const [inPark] = matchableWalks([{ kind: 'move', points }], (point) => point.lon > points[5]!.lon)
+    assert.notEqual(inPark!.signature, longer!.signature, 'parks')
+    const fromHome = (east: number) => matchableWalks([stay(east, -20, -1), { kind: 'move', points }])[0]!
+    assert.notEqual(fromHome(0).signature, fromHome(-10).signature, 'where its stay is')
+    assert.equal(matchableWalks([{ kind: 'move', points }])[0]!.signature, longer!.signature, 'the same')
+  })
+
+  test('a walk with too many points is thinned evenly, from its first to its last', () => {
+    const points = Array.from({ length: 1000 }, (_, step) => fix(step * 20, 0, step))
+    const [walk] = matchableWalks([stay(-30, -20, -1), { kind: 'move', points }, stay(20_010, 1001, 1020)])
+    assert.equal(walk!.points.length, MAX_POINTS_PER_WALK)
+    assert.equal(walk!.points[1]!.time, points[0]!.time)
+    assert.equal(walk!.points.at(-2)!.time, points.at(-1)!.time)
+    const gaps = walk!.points.slice(2, -1).map((point, index) => point.time - walk!.points[index + 1]!.time)
+    assert.ok(Math.max(...gaps) - Math.min(...gaps) <= 30_000, 'evenly')
   })
 })

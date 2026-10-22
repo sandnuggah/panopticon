@@ -1,5 +1,5 @@
 import type { GeoJSONSource, MapLibreMap } from 'maplibre-gl'
-import type { LatLon } from '../../lib/segments'
+import type { SnappedLines } from '../../lib/snapLines'
 import { toTrailFeatures, type TrailViews } from '../../lib/trailGeometry'
 
 // The trail on the map, drawn by what the asset was doing (see segments.ts, and trailGeometry.ts for
@@ -14,8 +14,8 @@ const STAYS = 'trail-stays'
 const PAWS = 'paws'
 const PAW_IMAGE = 'paw-prints'
 
-/** Shows these trails (see useLiveAssets), snapping walks to paths where Snap to paths has them (see useSnappedWalks). */
-export function setTrails(map: MapLibreMap, trails: TrailViews, snappedWalks: Record<string, LatLon[]>) {
+/** Shows these trails (see useLiveAssets), along the lines Snap to paths has for their walks (see useSnappedWalks). */
+export function setTrails(map: MapLibreMap, trails: TrailViews, snappedWalks: SnappedLines) {
   const features = toTrailFeatures(trails, snappedWalks)
   void map.getSource<GeoJSONSource>(TRAILS)?.setData(features.trail)
   void map.getSource<GeoJSONSource>(PAWS)?.setData(features.paws)

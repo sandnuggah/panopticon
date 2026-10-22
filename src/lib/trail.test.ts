@@ -87,6 +87,26 @@ describe('history', () => {
       [245, 100, 10],
     )
     assert.equal(extendTrails(trails, [update(now - minutes(150))], 240, now), trails, 'older than the newest: ignored')
+    // From the future (a tracker's clock ahead): kept back from now.
+    assert.deepEqual(
+      extendTrails(trails, [update(now + minutes(30))], 240, now)[1]!.map((point) => (now - point.time) / 60_000),
+      [100, -30],
+    )
+  })
+
+  test('live positions keep what the trail reads of them', () => {
+    const update: LiveUpdate = {
+      kind: 'position',
+      id: 2,
+      location: { lat: 59, lon: 18, fixTime: new Date(now).toISOString(), accuracy: 12 },
+      valid: false,
+      cell: 25_637_899,
+      satellites: 0,
+      placeIds: [],
+    }
+    assert.deepEqual(extendTrails({}, [update], 240, now)[2], [
+      { lat: 59, lon: 18, time: now, valid: false, cell: 25_637_899, satellites: 0, accuracy: 12 },
+    ])
   })
 
   test('"Here since" goes by 3 hours, or the trail if longer, before the newest point', () => {

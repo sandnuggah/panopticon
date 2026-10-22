@@ -1,6 +1,7 @@
-import { stayHopKey, walkKey } from './matching.ts'
+import { stayHopId, walkId } from './matching.ts'
 import { trailPlaces, type Place } from './places.ts'
 import { classifyTrail, latestOutingStart, stayDots, type LatLon, type StayDot, type TrailPiece } from './segments.ts'
+import type { SnappedLine, SnappedLines } from './snapLines.ts'
 import { trailProfile, type TrackerKind } from './tracker.ts'
 import type { TrailPoint, Trails } from './trail.ts'
 
@@ -37,12 +38,13 @@ export type TrailViewCache = Map<
 
 /**
  * An asset's trail as drawn. `walks`: each move, from the dot of the stay before to the one after, and
- * each hop between the dots of two stays next to each other; with the key Snap to paths knows it by
- * (see matching.ts), and whether it follows the snapped line. `rides`: their legs, with GPS or without.
- * `opacity`: how faint a part of it is, by its time.
+ * each hop between the dots of two stays next to each other; with the id Snap to paths knows it by
+ * (see matching.ts), and whether it follows a snapped line (`snapped`), as answered for the walk as it
+ * is now (`current`; see snapLines.ts). `rides`: their legs, with GPS or without. `opacity`: how faint
+ * a part of it is, by its time.
  */
 export type DrawnTrail = {
-  walks: { key: string; points: TimedPoint[]; snapped: boolean; hop: boolean }[]
+  walks: { key: string; points: TimedPoint[]; snapped: boolean; current: boolean; hop: boolean }[]
   rides: { kind: 'vehicle' | 'underground'; points: TimedPoint[] }[]
   dots: StayDot[]
   opacity: (time: number) => number
@@ -139,8 +141,8 @@ function pieceEnd(piece: TrailPiece): number {
   return piece.kind === 'move' ? piece.points.at(-1)!.time : piece.kind === 'stay' ? piece.to : piece.to.time
 }
 
-/** Draws a trail, along the paths Snap to paths found for its walks (by key, see useSnappedWalks). */
-export function drawTrail({ pieces, oldest, newest, outing: latest }: TrailView, snappedWalks: Record<string, LatLon[]>): DrawnTrail {
+/** Draws a trail, along the lines Snap to paths has for its walks (by walk id, see snapLines.ts). */
+export function drawTrail({ pieces, oldest, newest, outing: latest }: TrailView, lines: Record<string, SnappedLine> = {}): DrawnTrail {
   // The latest outing from 0.55 at its start to 0.95 at its newest point; older ones from 0.12 to 0.25.
   const outing = latest ?? oldest
   const along = (time: number, from: number, to: number) => (to > from ? Math.min(1, Math.max(0, (time - from) / (to - from))) : 1)
@@ -158,14 +160,14 @@ export function drawTrail({ pieces, oldest, newest, outing: latest }: TrailView,
     if (piece.kind === 'move') {
       // From the dot of the stay before to the dot of the stay after, so the path is unbroken.
       const [before, after] = [dotAt(index - 1), dotAt(index + 1)]
-      const key = walkKey(piece.points)
-      const snapped = snappedWalks[key]
+      const key = walkId(piece.points)
+      const line = lineOf(lines, key)
       const points = [
         ...(before ? [{ ...before.center, time: piece.points[0]!.time }] : []),
-        ...alongPaths(piece.points, snapped),
+        ...(line?.points ?? piece.points),
         ...(after ? [{ ...after.center, time: piece.points.at(-1)!.time }] : []),
       ]
-      drawn.walks.push({ key, points, snapped: !!snapped, hop: false })
+      drawn.walks.push({ key, points, snapped: !!line, current: line?.current ?? false, hop: false })
     } else if (piece.kind === 'stay') {
       // Straight on from another stop, a few dozen metres off (pottering about a park): a line
       // between their dots, along the way Snap to paths routed, if it did.
@@ -175,10 +177,11 @@ export function drawTrail({ pieces, oldest, newest, outing: latest }: TrailView,
           { ...before.center, time: piece.from },
           { ...here.center, time: piece.from },
         ]
-        const key = stayHopKey(pieces[index - 1] as Extract<TrailPiece, { kind: 'stay' }>, piece)
-        const routed = snappedWalks[key]
+        const key = stayHopId(pieces[index - 1] as Extract<TrailPiece, { kind: 'stay' }>, piece)
+        const line = lineOf(lines, key)
         // From dot to dot, as walks are: a dot can be at another of its stays.
-        drawn.walks.push({ key, points: routed ? [hop[0]!, ...alongPaths(hop, routed), hop[1]!] : hop, snapped: !!routed, hop: true })
+        const points = line ? [hop[0]!, ...line.points, hop[1]!] : hop
+        drawn.walks.push({ key, points, snapped: !!line, current: line?.current ?? false, hop: true })
       }
     } else {
       // Through the fixes on the way; legs without GPS are straight lines, dotted.
@@ -202,12 +205,12 @@ export type TrailFeatures = { type: 'FeatureCollection'; features: TrailFeature[
  * GeoJSON for the trail layers. `paws` holds the walking only, in longer pieces than `trail`:
  * paw prints are spaced 44 px apart, so short pieces would show none.
  */
-export function toTrailFeatures(trails: TrailViews, snappedWalks: Record<string, LatLon[]>): { trail: TrailFeatures; paws: TrailFeatures } {
+export function toTrailFeatures(trails: TrailViews, lines: SnappedLines = {}): { trail: TrailFeatures; paws: TrailFeatures } {
   const trail: TrailFeature[] = []
   const paws: TrailFeature[] = []
   for (const [key, view] of Object.entries(trails)) {
     const id = Number(key)
-    const { walks, rides, dots, opacity } = drawTrail(view, snappedWalks)
+    const { walks, rides, dots, opacity } = drawTrail(view, lines[id])
     const line = (kind: string, points: TimedPoint[], time: number): TrailFeature => ({
       type: 'Feature',
       properties: { id, kind, opacity: opacity(time) },
@@ -237,17 +240,8 @@ export function toTrailFeatures(trails: TrailViews, snappedWalks: Record<string,
   }
 }
 
-/**
- * A walk as drawn: the snapped line when Snap to paths has one, else the fixes as recorded. The
- * snapped line has no times, so they're spread evenly between the walk's first and last fix, for fading.
- */
-export function alongPaths(points: TimedPoint[], snapped: LatLon[] | undefined): TimedPoint[] {
-  // A line of one point (a walk of strays, left out but for a stay at its end) is nothing to draw.
-  if (!snapped || snapped.length === 0) return points
-  if (snapped.length === 1) return [{ ...snapped[0]!, time: points.at(-1)!.time }]
-  const [from, to] = [points[0]!.time, points.at(-1)!.time]
-  return snapped.map((point, index) => ({
-    ...point,
-    time: from + ((to - from) * index) / (snapped.length - 1),
-  }))
+/** A walk's line to draw, if it has one with any points: a walk of strays left out is drawn as recorded. */
+function lineOf(lines: Record<string, SnappedLine>, key: string): SnappedLine | undefined {
+  const line = lines[key]
+  return line && line.points.length > 0 ? line : undefined
 }

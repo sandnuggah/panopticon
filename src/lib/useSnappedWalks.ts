@@ -1,34 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { matchWalks } from '../server/map.functions'
-import { MAX_WALKS_PER_REQUEST, matchableWalks, type MatchablePoint } from './matching'
+import { matchableWalks } from './matching'
 import { isInPark, type Park } from './parks'
 import type { LatLon } from './segments'
+import { nextTry, snappedLines, toAsk, withAnswers, type AssetWalk, type SnappedLines, type SnapState } from './snapLines'
 import { trailProfile, type TrackerKind } from './tracker'
 import type { TrailViews } from './trailGeometry'
 
-/** Waits this long after the trail changes before asking, so bursts of live updates make one request. */
-const DEBOUNCE_MS = 1_000
-
 /**
- * Snap to paths: the walks on these trails (as the map draws them, see useLiveAssets) snapped to
- * streets and paths, by walk key (see matching.ts). Walks the server can't snap closely enough are
- * simply missing, and drawn as recorded. `parks` (from the map, null until it's ready): fixes in them
- * are snapped more strictly, so walks wait for them. `trackers`: read as each asset's kind of tracker reports.
+ * Snap to paths: the lines to draw the walks on these trails along (as the map draws them, see
+ * useLiveAssets), by asset and walk (see snapLines.ts). A walk is asked for as soon as it changes,
+ * one request at a time; while a longer version of it is asked for, the line it had is kept. A walk
+ * the server can't snap closely enough has no line, and is drawn as recorded; one it couldn't ask
+ * Valhalla about is asked again, later and later. `parks` (from the map, null until it's ready):
+ * fixes in them are snapped more strictly, so walks wait for them. `trackers`: read as each asset's
+ * kind of tracker reports.
  */
 export function useSnappedWalks(
   trails: TrailViews,
   enabled: boolean,
   parks: Park[] | null,
   trackers: Record<number, TrackerKind | undefined>,
-): Record<string, LatLon[]> {
-  // null: asked, and it can't be snapped.
-  const [results, setResults] = useState<Record<string, LatLon[] | null>>({})
-  const asked = useRef(new Set<string>())
+): SnappedLines {
+  const [state, setState] = useState<SnapState>(new Map())
+  // A request is out: the next waits for it, so answers come in order.
+  const asking = useRef(false)
+  // Bumped when a request comes back or it's time to try again, to look for what to ask next.
+  const [wake, setWake] = useState(0)
   // Where fixes were seen to be in a park, kept for the session: the map's tiles only have what's in
   // view, and a walk shouldn't change back when the map moves away from it.
   const inParks = useRef(new Set<string>())
 
-  const walks = useMemo(() => {
+  const walks = useMemo((): AssetWalk[] => {
     if (!enabled || !parks) return []
     const inPark = (point: LatLon) => {
       const where = `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`
@@ -37,50 +40,45 @@ export function useSnappedWalks(
       inParks.current.add(where)
       return true
     }
-    return Object.entries(trails).flatMap(([id, view]) => matchableWalks(view.pieces, inPark, trailProfile(trackers[Number(id)])))
+    return Object.entries(trails).flatMap(([id, view]) =>
+      matchableWalks(view.pieces, inPark, trailProfile(trackers[Number(id)])).map((walk) => ({ ...walk, asset: Number(id) })),
+    )
   }, [trails, enabled, parks, trackers])
+  // The walks as they are when an answer comes, to forget those no longer on the map.
+  const walksRef = useRef(walks)
+  walksRef.current = walks
 
   useEffect(() => {
-    // Asked again when more of a walk's fixes turn out to be in a park: parks come from the tiles in
-    // view, so they fill in as the map moves.
-    const missing = walks.filter((walk) => !asked.current.has(askedKey(walk))).slice(0, MAX_WALKS_PER_REQUEST)
-    if (missing.length === 0) return
-    const timer = setTimeout(() => {
-      for (const walk of missing) asked.current.add(askedKey(walk))
-      matchWalks({ data: missing.map((walk) => walk.points) })
-        .then((lines) => {
-          const current = new Set(walks.map(askedKey))
-          setResults((previous) => {
-            // Keep only walks still on the trail; a growing walk replaces its earlier versions.
-            const keys = new Set(walks.map((walk) => walk.key))
-            const next: Record<string, LatLon[] | null> = {}
-            for (const [key, line] of Object.entries(previous)) if (keys.has(key)) next[key] = line
-            missing.forEach((walk, index) => (next[walk.key] = lines[index] ?? null))
-            return next
-          })
-          for (const key of asked.current) if (!current.has(key)) asked.current.delete(key)
-        })
-        .catch((error) => {
-          // Unreachable or signed out: forget these so they're asked again later.
-          for (const walk of missing) asked.current.delete(askedKey(walk))
-          console.warn('Could not snap walks to roads:', error)
-        })
-    }, DEBOUNCE_MS)
-    return () => clearTimeout(timer)
-    // `results` too: when a batch comes back, send the next if more than one batch's worth is waiting.
-  }, [walks, results])
-
-  return useMemo(() => {
-    const snapped: Record<string, LatLon[]> = {}
-    for (const walk of walks) {
-      const line = results[walk.key]
-      if (line) snapped[walk.key] = line
+    if (asking.current) return
+    const ask = toAsk(walks, state, Date.now())
+    if (ask.length === 0) {
+      // Nothing to ask now: maybe later, after a failure.
+      const next = nextTry(walks, state)
+      if (next === null) return
+      const timer = setTimeout(() => setWake((n) => n + 1), Math.max(0, next - Date.now()))
+      return () => clearTimeout(timer)
     }
-    return snapped
-  }, [walks, results])
-}
+    asking.current = true
+    matchWalks({ data: ask.map((walk) => walk.points) })
+      .then((answers) => setState((current) => withAnswers(current, ask, answers, Date.now(), walksRef.current)))
+      .catch((error) => {
+        // Unreachable or signed out: asked again later.
+        console.warn('Could not snap walks to roads:', error)
+        setState((current) =>
+          withAnswers(
+            current,
+            ask,
+            ask.map(() => 'unavailable' as const),
+            Date.now(),
+            walksRef.current,
+          ),
+        )
+      })
+      .finally(() => {
+        asking.current = false
+        setWake((n) => n + 1)
+      })
+  }, [walks, state, wake])
 
-/** A walk as asked for: which walk, and which of its fixes are in a park. */
-function askedKey(walk: { key: string; points: MatchablePoint[] }): string {
-  return `${walk.key}:${walk.points.map((point) => (point.park ? 'p' : '-')).join('')}`
+  return useMemo(() => snappedLines(walks, state), [walks, state])
 }

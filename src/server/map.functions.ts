@@ -16,7 +16,10 @@ export const getMapOptions = createServerFn({ method: 'GET' }).handler(() => ({
   canSearchAddresses: env().geocoderUrl !== undefined,
 }))
 
-/** Snaps walks to streets and paths; null for each walk that can't be snapped closely enough. */
+/**
+ * Snaps walks to streets and paths: for each, its line, null when it can't be snapped closely enough,
+ * or 'unavailable' when Valhalla can't be asked right now (see matchWalk).
+ */
 export const matchWalks = createServerFn({ method: 'POST' })
   .validator(parseWalks)
   .handler(({ data }) => withToken(() => Promise.all(data.map((walk) => matchWalk(walk)))))

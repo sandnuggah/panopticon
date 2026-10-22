@@ -9,6 +9,7 @@ import { parkFromRings, type Park } from '../../lib/parks'
 import type { Place } from '../../lib/places'
 import type { TrailViews } from '../../lib/trailGeometry'
 import type { LatLon } from '../../lib/segments'
+import type { SnappedLines } from '../../lib/snapLines'
 import { useMyPosition, type MyPosition } from '../../lib/useMyPosition'
 import { useNow } from '../../lib/useNow'
 import { resolveStyle, type MapStyle } from '../../lib/mapStyles'
@@ -44,8 +45,8 @@ type Props = {
   assets: Asset[]
   /** Each asset's trail to draw (see useLiveAssets). */
   trails: TrailViews
-  /** Snap to paths: walks snapped to streets and paths, by walk key; others are drawn as recorded. */
-  snappedWalks: Record<string, LatLon[]>
+  /** Snap to paths: the lines to draw walks along, by asset and walk (see useSnappedWalks); others are drawn as recorded. */
+  snappedWalks: SnappedLines
   /** The map styles to choose between (see mapStyles.ts), and the default. */
   styles: MapStyle[]
   defaultStyle: string

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { drawWalk, routeFits, snapAlong, strayCandidates, strayed, type Point } from './snap.ts'
+import { drawWalk, routeFits, snapAlong, strayCandidates, strayed, timedWalk, type Point } from './snap.ts'
 
 // Positions in metres east/north of a start point; the matched line is a path going east, then north.
 const START = { lat: 59.31, lon: 18.07 }
@@ -179,5 +179,49 @@ describe('drawWalk', () => {
   test('a route fits up to 4 times as far plus 50 m', () => {
     assert.equal(routeFits(at(0, 0), at(100, 0), 440), true)
     assert.equal(routeFits(at(0, 0), at(100, 0), 460), false)
+  })
+})
+
+describe('how it was drawn, and when', () => {
+  const home: Point = { ...at(0, -40), anchor: true }
+  const timed = (points: Point[]) => points.map((point, index) => ({ ...point, time: 1_000_000 + index * 30_000 }))
+
+  test('each point says how the way to it was drawn: along the line, as recorded, cut across', () => {
+    // Along the path, then on the grass and back to it; the second walk cuts a detour.
+    const grass = [at(0, 2), at(40, -3), at(80, 4), at(110, 60), at(150, 70), at(198, 120), at(201, 160), at(199, 190)]
+    // Along the path to the third fix, the two on the grass as recorded, then along the path again.
+    assert.deepEqual(drawWalk(grass, PATH).how, ['recorded', 'matched', 'recorded', 'recorded', 'recorded', 'matched'])
+    const detour = [at(0, 0), at(50, 0), at(65, -35), at(80, 0), at(150, 0)]
+    const walk = [at(10, 2), at(30, -3), at(50, 1), at(73, -12), at(95, 2), at(120, -1)]
+    const drawn = drawWalk(walk, detour)
+    assert.deepEqual(drawn.how, ['recorded', 'matched', 'cut', 'matched', 'matched'])
+    assert.deepEqual(drawn.source, [0, 2, 3, -1, 5], 'the fixes, or their feet, they stand for; -1 for the line')
+  })
+
+  test('a leg nobody saw is unseen, or routed where there was a route', () => {
+    const fixes: Point[] = [at(10, 2), at(30, -3), { ...at(90, 5), unseen: true }]
+    const walk = drawWalk([home, ...fixes], [])
+    assert.deepEqual(walk.how, ['recorded', 'unseen', 'recorded', 'unseen'])
+    const points = timedWalk(timed([home, ...fixes]), walk, [[at(5, -20)], null])
+    assert.deepEqual(
+      points.map((point) => point.how),
+      ['recorded', 'routed', 'routed', 'recorded', 'unseen'],
+    )
+  })
+
+  test('each point at its fix’s time; the line’s own points between, by how far along they are', () => {
+    // Fixes 30 s apart at 10, 50 and 150 m east along the path, which turns a corner at 100 m.
+    const walk = [at(10, 2), at(50, -3), at(150, 4)]
+    const points = timedWalk(timed(walk), drawWalk(walk, PATH), [])
+    assert.deepEqual(points.map(metres), [
+      [10, 0],
+      [100, 0],
+      [150, 0],
+    ])
+    // The path's corner at 100 m is between the second fix's foot (50 m, not drawn) and the third: by distance from the first.
+    assert.deepEqual(
+      points.map((point) => point.time),
+      [1_000_000, 1_000_000 + 60_000 * (90 / 140), 1_060_000].map(Math.round),
+    )
   })
 })

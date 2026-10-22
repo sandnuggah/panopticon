@@ -212,6 +212,12 @@ describe('shownLocation', () => {
     )
   })
 
+  test('back home by the fixes GPS confirmed, though the latest is far off: at home', () => {
+    const canal = [at(-320, 10, 7), at(-330, 11, 4)]
+    const shown = shownLocation([home], 30, location(canal[1]!), [...before, ...canal], DEFAULT_TRAIL_PROFILE)
+    assert.deepEqual(shown, { lat: 59.3, lon: 18.07, fixTime: location(canal[1]!).fixTime, accuracy: undefined })
+  })
+
   test('elsewhere, and without its points, as it is', () => {
     const away = at(200, 20, 18)
     assert.deepEqual(shownLocation([home], 30, location(away), [...before, away], DEFAULT_TRAIL_PROFILE), location(away))

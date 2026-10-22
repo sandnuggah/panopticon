@@ -1,6 +1,7 @@
 import type { AssetLocation } from './asset.ts'
-import { confirmedLocation, distance, type LatLon, type TrailPlace, type TrailProfile } from './segments.ts'
-import type { TrailPoint } from './trail.ts'
+import { confirmedLocation, currentStay, distance, type LatLon, type Stay, type TrailPlace, type TrailProfile } from './segments.ts'
+import { trailProfile, type TrackerKind } from './tracker.ts'
+import { stayPoints, type TrailLength, type TrailPoint, type Trails } from './trail.ts'
 
 // Places: areas like Home or Daycare, kept in Traccar as geofences (see places.server.ts). Traccar
 // works out which of an asset's places each position is inside (`geofenceIds`), and records arriving
@@ -163,6 +164,42 @@ export function shownLocation<L extends AssetLocation>(
   const confirmed = points ? confirmedLocation(location, points, profile) : location
   const place = placeAt(places, assetId, confirmed)
   return place ? { ...confirmed, ...placeCenter(place.area), accuracy: undefined } : confirmed
+}
+
+/**
+ * Each asset as the map shows it: at its location as shownLocation has it, with its trail's points
+ * and its kind of tracker's profile; the same object when that's where it is.
+ */
+export function shownAssets<A extends { id: number; location: AssetLocation | null; tracker?: TrackerKind }>(
+  assets: A[],
+  trails: Trails,
+  places: Place[],
+): A[] {
+  return assets.map((asset) => {
+    if (!asset.location) return asset
+    const location = shownLocation(places, asset.id, asset.location, trails[asset.id], trailProfile(asset.tracker))
+    return location === asset.location ? asset : { ...asset, location }
+  })
+}
+
+/**
+ * Each asset staying put right now ("Here since", see currentStay), as of `now`: on the points it goes
+ * by for this trail length (see stayPoints), with its places and its kind of tracker's profile.
+ */
+export function currentStays(
+  trails: Trails,
+  length: TrailLength,
+  now: number,
+  places: Place[],
+  trackers: Record<number, TrackerKind | undefined>,
+): Record<number, Stay> {
+  const stays: Record<number, Stay> = {}
+  for (const [key, points] of Object.entries(trails)) {
+    const id = Number(key)
+    const stay = currentStay(stayPoints(points, length), now, trailProfile(trackers[id]), trailPlaces(places, id))
+    if (stay) stays[id] = stay
+  }
+  return stays
 }
 
 /** Whether a point is inside the area, or at most `margin` metres outside it. */

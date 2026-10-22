@@ -1,7 +1,8 @@
 import type { MatchablePoint } from '../lib/matching'
 import type { LatLon } from '../lib/segments'
 import { distance } from '../lib/segments'
-import { drawWalk, routeFits, strayCandidates, strayed, type DrawnWalk, type Point } from '../lib/snap'
+import { drawWalk, routeFits, strayCandidates, strayed, timedWalk, type DrawnWalk, type Point, type SnappedPoint } from '../lib/snap'
+import type { SnapAnswer } from '../lib/snapLines'
 import { env } from './env.server'
 
 // Snaps walks to streets and paths with Valhalla's map matching (`trace_route`, pedestrian costing),
@@ -9,19 +10,21 @@ import { env } from './env.server'
 // The matched line is kept only where the fixes lie along it, and the walk is drawn as recorded
 // elsewhere, such as a dog running about on the grass (`drawWalk`, lib/snap.ts), and a fix or two that
 // jumped onto a way the line doesn't take are left out (`locate`). Legs nobody saw (from a stay to the
-// first fix, across long gaps) follow Valhalla's walking route (`route`).
+// first fix, across long gaps) follow Valhalla's walking route (`route`). Each point of the line says
+// when it was and how the way to it was drawn (timedWalk). When Valhalla can't be reached or fails,
+// the walk is 'unavailable', not cached, and the browser asks again later.
 
 const TIMEOUT_MS = 5_000
 /** Snapped walks are kept in memory; a walk that grows gets a new key. */
 const MAX_CACHED = 500
 
-const cache = new Map<string, LatLon[] | null>()
+const cache = new Map<string, SnappedPoint[] | null>()
 
 /**
- * The walk snapped to the street network where it went along it, with the legs nobody saw routed, or
- * null when Valhalla can't or none of it fits.
+ * The walk snapped to the street network where it went along it, with the legs nobody saw routed;
+ * null when none of it fits, or 'unavailable' when Valhalla can't be asked.
  */
-export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | null> {
+export async function matchWalk(points: MatchablePoint[]): Promise<SnapAnswer> {
   const url = env().mapMatchingUrl
   if (!url) return null
   const key = points
@@ -32,7 +35,7 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
     .join(';')
   if (cache.has(key)) return cache.get(key)!
 
-  let result: LatLon[] | null = null
+  let result: SnappedPoint[] | null
   try {
     const response = await fetch(`${url}/trace_route`, {
       method: 'POST',
@@ -57,16 +60,16 @@ export async function matchWalk(points: MatchablePoint[]): Promise<LatLon[] | nu
       const line = trips
         .sort((a, b) => firstPoint(a) - firstPoint(b))
         .flatMap((trip) => (trip.legs ?? []).flatMap((leg) => (leg.shape ? decodePolyline6(leg.shape) : [])))
-      result = await routeUnseen(url, drawWalk(points, line, await strays(url, points, line)))
+      result = await routeUnseen(url, points, drawWalk(points, line, await strays(url, points, line)))
     } else if (response.status === 400) {
       // No match (e.g. points far from any path): the legs nobody saw may still have a route.
-      result = await routeUnseen(url, drawWalk(points, []))
+      result = await routeUnseen(url, points, drawWalk(points, []))
     } else {
-      console.warn(`Map matching failed with HTTP ${response.status}`)
+      throw new Error(`HTTP ${response.status}`)
     }
   } catch (error) {
     console.warn('Map matching unavailable:', error instanceof Error ? error.message : error)
-    return null // not cached: try again next time
+    return 'unavailable' // not cached: asked again later
   }
 
   if (cache.size >= MAX_CACHED) cache.delete(cache.keys().next().value!)
@@ -88,7 +91,7 @@ async function strays(url: string, points: MatchablePoint[], line: LatLon[]): Pr
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   })
-  if (!response.ok) return new Set()
+  if (!response.ok) throw new Error(`locate: HTTP ${response.status}`)
   type Located = { edges?: { correlated_lat: number; correlated_lon: number }[] | null }
   const located = (await response.json()) as Located[]
   // No way found at all is as far as can be.
@@ -105,19 +108,14 @@ async function strays(url: string, points: MatchablePoint[], line: LatLon[]): Pr
 
 /**
  * The walk as drawn with its legs nobody saw along Valhalla's walking route where one fits (see
- * drawWalk). Null when nothing was snapped or routed: it's drawn as recorded.
+ * drawWalk), and when each of its points was (timedWalk). Null when nothing was snapped or routed:
+ * it's drawn as recorded.
  */
-async function routeUnseen(url: string, walk: DrawnWalk): Promise<LatLon[] | null> {
+async function routeUnseen(url: string, points: MatchablePoint[], walk: DrawnWalk): Promise<SnappedPoint[] | null> {
   const routes = await Promise.all(walk.unseen.map((k) => walkingRoute(url, walk.points[k]!, walk.points[k + 1]!)))
   // Nothing changed: drawn as recorded. With fixes left out, though, it's drawn without them.
   if (!walk.snapped && !walk.strayed && routes.every((route) => route === null)) return null
-  const result: LatLon[] = []
-  walk.points.forEach((point, k) => {
-    result.push({ lat: point.lat, lon: point.lon })
-    const route = routes[walk.unseen.indexOf(k)]
-    if (route) result.push(...route)
-  })
-  return result
+  return timedWalk(points, walk, routes)
 }
 
 /** Valhalla's walking route between two points, if it fits a leg nobody saw (see routeFits in snap.ts). */
@@ -129,7 +127,8 @@ async function walkingRoute(url: string, from: Point, to: Point): Promise<LatLon
     signal: AbortSignal.timeout(TIMEOUT_MS),
   })
   // 400: no route (e.g. a point far from any path).
-  if (!response.ok) return null
+  if (response.status === 400) return null
+  if (!response.ok) throw new Error(`route: HTTP ${response.status}`)
   const body = (await response.json()) as { trip?: { summary?: { length?: number }; legs?: { shape?: string }[] } }
   const metres = (body.trip?.summary?.length ?? Infinity) * 1000
   const shape = body.trip?.legs?.[0]?.shape

@@ -5,9 +5,10 @@
 // Trail → The replay). Dev only.
 //
 //   npm run replay -- <fixture folder> [--trail 60,360,1440] [--from <time>] [--to <time>]
-//     [--reload <minutes>] [--baseline <score.json>] [--json <score.json>] [--events]
+//     [--reload <minutes>] [--unavailable <share>] [--baseline <score.json>] [--json <score.json>] [--events]
 //
-// With MAP_MATCHING_URL set (a Valhalla, as for the app), Snap to paths is on, as in the browser.
+// With MAP_MATCHING_URL set (a Valhalla, as for the app), Snap to paths is on, as in the browser;
+// --unavailable makes that share of its answers 'unavailable', as when Valhalla is down or slow.
 //
 // The fixture folder: Traccar positions as its API returns them (any .json file holding an array of
 // them), the asset's places as Traccar geofences (geofences.json), and, if there are any, labels
@@ -21,20 +22,12 @@ import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { isStale, type Asset } from '../src/lib/asset.ts'
 import { applyUpdates } from '../src/lib/live.ts'
-import { MAX_WALKS_PER_REQUEST, matchableWalks, type MatchablePoint } from '../src/lib/matching.ts'
-import { placeCenter, placeOf, shownLocation, trailPlaces, type Place } from '../src/lib/places.ts'
-import { currentStay, type LatLon } from '../src/lib/segments.ts'
+import { matchableWalks } from '../src/lib/matching.ts'
+import { currentStays, placeCenter, placeOf, shownAssets, type Place } from '../src/lib/places.ts'
+import type { LatLon } from '../src/lib/segments.ts'
+import { answered, snappedLines, toAsk, withAnswers, type AssetWalk, type SnapAnswer, type SnapState } from '../src/lib/snapLines.ts'
 import { trailProfile } from '../src/lib/tracker.ts'
-import {
-  extendTrails,
-  historyMinutes,
-  historyStart,
-  stayPoints,
-  trailStart,
-  type TrailLength,
-  type TrailPoint,
-  type Trails,
-} from '../src/lib/trail.ts'
+import { extendTrails, historyMinutes, historyStart, trailStart, type TrailLength, type TrailPoint, type Trails } from '../src/lib/trail.ts'
 import { drawTrail, shownTrails, trailViews, type DrawnTrail, type TrailView, type TrailViewCache } from '../src/lib/trailGeometry.ts'
 import { matchWalk } from '../src/server/matching.server.ts'
 import { toPositionUpdate, toTrailPoint } from '../src/server/positions.server.ts'
@@ -46,8 +39,6 @@ process.env.SESSION_SECRET ??= 'replay-only-not-a-secret-'.repeat(2)
 
 /** The app's clock (useNow in useLiveAssets). */
 const TICK_MS = 15_000
-/** useSnappedWalks waits this long after the trail changes before asking. */
-const DEBOUNCE_MS = 1_000
 /** A part of the trail this long before the newest fix is settled: it shouldn't change any more. */
 const SETTLED_MS = 15 * 60 * 1000
 /** Drawn points this close are the same point: anything less doesn't show. */
@@ -66,10 +57,13 @@ const WALKING_METRES = 60
 const WALKING_WITHIN_MS = 5 * 60 * 1000
 /** Drawn this far from every fix, it's made up. */
 const FAR_METRES = 40
+/** A walk's line moving this far, but for its last LINE_HEAD_MS, when a longer version of it comes, shows. */
+const LINE_SHIFT_METRES = 10
+const LINE_HEAD_MS = 2 * 60 * 1000
 /**
- * A labelled fix this close to the trail drawn for its time (give or take LABEL_SLACK_MS: the times of
- * a snapped line's points are spread evenly along the walk) is drawn; a real outing with this share of
- * its fixes drawn is.
+ * A labelled fix this close to the trail drawn for its time (give or take LABEL_SLACK_MS: a snapped
+ * line's points between fixes have times by distance) is drawn; a real outing with this share of its
+ * fixes drawn is.
  */
 const DRAWN_METRES = 10
 const LABEL_SLACK_MS = 5 * 60 * 1000
@@ -79,14 +73,19 @@ type Label = { kind: 'error' | 'likely-error' | 'real'; from: number; to: number
 type Fixture = { positions: (TraccarPosition & { serverTime: number })[]; places: Place[]; labels: Label[]; deviceId: number }
 
 /** What was replayed: scores only compare when this is the same. */
-type Run = { reports: number; opened: string; closed: string; snapping: boolean; reload: number | null }
+type Run = { reports: number; opened: string; closed: string; snapping: boolean; reload: number | null; unavailable?: number }
 
 type Score = {
   frames: number
-  /** Snap to paths: walks asked for; a walk drawn along its line, then as recorded while its new version is asked for; or for good. */
+  /**
+   * Snap to paths: walks asked for; a walk drawn along its line, then as recorded while its new version
+   * is asked for, or for good; and a walk's line moving, but for its newest part, when a new version
+   * comes (how often, how far for 9 in 10, at most, and how often over LINE_SHIFT_METRES).
+   */
   snapRequests: number
   flashes: number
   linesLost: number
+  lineShifts?: { count: number; p90: number; max: number; over: number }
   /** The trail changing more than SETTLED_MS before the newest fix when a report comes: lines and dots. */
   pastChanges: { frames: number; metres: number; dots: number }
   /** The trail changing with no report (the clock alone), but for its old end dropping off; and its fading. */
@@ -107,8 +106,8 @@ type Score = {
 
 type XY = [number, number]
 type Segment = { a: XY; b: XY; t1: number; t2: number; opacity: number }
-/** A walk as drawn, with its time span: along its snapped line, and whether its version was asked for yet. */
-type Walk = { key: string; t1: number; t2: number; snapped: boolean; pending: boolean }
+/** A walk as drawn, with its time span: along a snapped line, and whether its version was answered yet; and its points. */
+type Walk = { key: string; t1: number; t2: number; snapped: boolean; pending: boolean; points: { at: XY; time: number }[] }
 
 /** One moment of the map: what it showed until the next. */
 type Frame = {
@@ -163,7 +162,7 @@ class Segments {
 }
 
 const USAGE =
-  'usage: npm run replay -- <fixture folder> [--trail 60,360,1440] [--from <time>] [--to <time>] [--reload <minutes>] [--baseline <file>] [--json <file>] [--events]'
+  'usage: npm run replay -- <fixture folder> [--trail 60,360,1440] [--from <time>] [--to <time>] [--reload <minutes>] [--unavailable <share>] [--baseline <file>] [--json <file>] [--events]'
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
@@ -171,6 +170,7 @@ const { values, positionals } = parseArgs({
     from: { type: 'string' },
     to: { type: 'string' },
     reload: { type: 'string' },
+    unavailable: { type: 'string' },
     baseline: { type: 'string' },
     json: { type: 'string' },
     events: { type: 'boolean', default: false },
@@ -178,11 +178,13 @@ const { values, positionals } = parseArgs({
 })
 const lengths = values.trail.split(',').map((value): TrailLength => (value === 'today' ? 'today' : Number(value)))
 const reload = values.reload === undefined ? null : Number(values.reload)
+const unavailable = values.unavailable === undefined ? undefined : Number(values.unavailable)
 const bad = (value: number | undefined) => value !== undefined && !(Number.isFinite(value) && value > 0)
 if (
   positionals.length !== 1 ||
-  lengths.some((length) => length !== 'today' && bad(length)) ||
+  lengths.some((length) => length !== 'today' && !(Number.isFinite(length) && length >= 0)) ||
   bad(reload ?? undefined) ||
+  (unavailable !== undefined && !(unavailable >= 0 && unavailable < 1)) ||
   (values.from !== undefined && Number.isNaN(Date.parse(values.from))) ||
   (values.to !== undefined && Number.isNaN(Date.parse(values.to)))
 ) {
@@ -207,11 +209,13 @@ const run: Run = {
   closed: new Date(closed).toISOString(),
   snapping,
   reload,
+  unavailable,
 }
 
 console.log(
   `${fixture.positions.length} reports, ${local(first)} to ${local(last)}; open ${local(opened)} to ${local(closed)}` +
-    `${reload ? `, opened again every ${reload} min` : ''}; Snap to paths ${snapping ? 'on' : 'off (no MAP_MATCHING_URL)'};` +
+    `${reload ? `, opened again every ${reload} min` : ''}; Snap to paths ${snapping ? 'on' : 'off (no MAP_MATCHING_URL)'}` +
+    `${unavailable ? `, ${unavailable * 100}% of its answers unavailable` : ''};` +
     ` no parks (they come from the map's tiles)`,
 )
 const scores: Record<string, Score> = {}
@@ -239,6 +243,7 @@ async function replay(length: TrailLength): Promise<Score> {
     snapRequests: 0,
     flashes: 0,
     linesLost: 0,
+    lineShifts: { count: 0, p90: 0, max: 0, over: 0 },
     pastChanges: { frames: 0, metres: 0, dots: 0 },
     idleChanges: { frames: 0, metres: 0, dots: 0, fade: 0 },
     reloadChanges: { frames: 0, metres: 0, dots: 0 },
@@ -273,16 +278,19 @@ async function replay(length: TrailLength): Promise<Score> {
   let assets = loaded.latest ? applyUpdates([empty], [toPositionUpdate(loaded.latest)]).assets : [empty]
   const arrivals = fixture.positions.filter((position) => position.serverTime > opened && position.serverTime <= closed)
 
-  // The browser's Snap to paths (useSnappedWalks): answers by walk key, and what it has asked for.
-  let results: Record<string, LatLon[] | null> = {}
-  const asked = new Set<string>()
-  const askedKey = (walk: { key: string; points: MatchablePoint[] }) =>
-    `${walk.key}:${walk.points.map((point) => (point.park ? 'p' : '-')).join('')}`
-  // Walks that were drawn along their line, by their time span; and walks drawn as recorded, by key,
-  // that were one of those (lost) or weren't (checked once each).
-  const hadLines = new Map<string, { t1: number; t2: number }>()
-  const lost = new Set<string>()
-  const neverHad = new Set<string>()
+  // The browser's Snap to paths (useSnappedWalks): what it knows of each walk; and the server's
+  // answers, 'unavailable' for a share of them (--unavailable), by walk version and attempt.
+  let snaps: SnapState = new Map()
+  const attempts = new Map<string, number>()
+  const ask = async (walk: AssetWalk): Promise<SnapAnswer> => {
+    const attempt = (attempts.get(walk.signature) ?? 0) + 1
+    attempts.set(walk.signature, attempt)
+    if (unavailable && hashShare(`${walk.signature}/${attempt}`) < unavailable) return 'unavailable'
+    return matchWalk(walk.points)
+  }
+  const shifts: number[] = []
+  // Walks drawn along a line, by their time span, and whether that line was lost since (drawn as recorded, answered).
+  const hadLines = new Map<string, { t1: number; t2: number; lost: boolean }>()
 
   const cache: TrailViewCache = new Map()
   let previous: Frame | null = null
@@ -293,8 +301,12 @@ async function replay(length: TrailLength): Promise<Score> {
   let said: number | null | undefined
   const lastSaid = new Map<number | null, number>()
   let nextPicture = Math.ceil(opened / 3_600_000) * 3_600_000
-  // The labelled fixes drawn, as of the drawing they were worked out on.
-  let drawnLabels: { drawing: DrawnTrail | null; shares: number[] } = { drawing: null, shares: labels.map(() => 0) }
+  // The labelled fixes drawn, as of the drawings they were worked out on.
+  let drawnLabels: { drawing: DrawnTrail | null; recorded: DrawnTrail | null; shares: number[] } = {
+    drawing: null,
+    recorded: null,
+    shares: labels.map(() => 0),
+  }
 
   let now = opened
   let nextTick = opened + TICK_MS
@@ -326,16 +338,15 @@ async function replay(length: TrailLength): Promise<Score> {
     // What the map shows (useLiveAssets → setTrails, useSnappedWalks, the marker, the details card).
     const from = trailStart(length, now)
     const view: TrailView | null = shownTrails(trailViews(trails, places, { [id]: asset.tracker }, cache), from)[id] ?? null
-    const walks = snapping && view ? matchableWalks(view.pieces, () => false, profile) : []
-    const snapped: Record<string, LatLon[]> = {}
-    for (const walk of walks) if (results[walk.key]) snapped[walk.key] = results[walk.key]!
-    const shown = view ? drawTrail(view, snapped) : null
+    const walks: AssetWalk[] =
+      snapping && view ? matchableWalks(view.pieces, () => false, profile).map((walk) => ({ ...walk, asset: id })) : []
+    const shown = view ? drawTrail(view, snappedLines(walks, snaps)[id]) : null
     const recorded = view ? drawTrail(view, {}) : null
     const location = asset.location
-    const marker = location ? shownLocation(places, id, location, trails[id], profile) : null
-    const since = currentStay(stayPoints(trails[id] ?? [], length), now, profile, trailPlaces(places, id))?.since ?? null
+    const marker = shownAssets(assets, trails, places)[0]!.location
+    const since = currentStays(trails, length, now, places, { [id]: asset.tracker })[id]?.since ?? null
 
-    const pending = new Set(walks.filter((walk) => !(walk.key in results)).map((walk) => walk.key))
+    const pending = new Set(walks.filter((walk) => !answered(walk, snaps)).map((walk) => walk.id))
     const frame: Frame = {
       time,
       kind,
@@ -345,10 +356,12 @@ async function replay(length: TrailLength): Promise<Score> {
       dots: (recorded?.dots ?? []).map((dot) => ({ at: xy(dot.center), to: dot.to })),
       walks: (shown?.walks ?? []).map((walk) => ({
         key: walk.key,
-        t1: walk.points[0]!.time,
-        t2: walk.points.at(-1)!.time,
+        // A hop between two stays is drawn at one time: its span is from the one stay to the other.
+        t1: walk.hop ? Number(walk.key.split('-')[1]) : walk.points[0]!.time,
+        t2: walk.hop ? Number(walk.key.split('-')[2]) : walk.points.at(-1)!.time,
         snapped: walk.snapped,
         pending: pending.has(walk.key),
+        points: walk.points.map((point) => ({ at: xy(point), time: point.time })),
       })),
     }
     s.frames++
@@ -357,7 +370,7 @@ async function replay(length: TrailLength): Promise<Score> {
     // Snap to paths: a walk drawn along its line, now drawn as recorded: while a new version of it is
     // asked for (a flash), or for good (a line lost), by when it was.
     const overlaps = (a: { t1: number; t2: number }, b: { t1: number; t2: number }) => a.t1 <= b.t2 && b.t1 <= a.t2
-    for (const walk of frame.walks) if (walk.snapped) hadLines.set(`${walk.t1}-${walk.t2}`, walk)
+    for (const walk of frame.walks) if (walk.snapped) hadLines.set(`${walk.t1}-${walk.t2}`, { t1: walk.t1, t2: walk.t2, lost: false })
     if (previous) {
       for (const before of previous.walks.filter((walk) => walk.snapped)) {
         if (frame.walks.some((walk) => walk.key === before.key && walk.snapped)) continue
@@ -367,16 +380,30 @@ async function replay(length: TrailLength): Promise<Score> {
         }
       }
     }
-    for (const walk of frame.walks) {
-      if (walk.snapped || walk.pending || lost.has(walk.key) || neverHad.has(walk.key)) continue
-      if (![...hadLines.values()].some((had) => overlaps(had, walk))) {
-        neverHad.add(walk.key)
-        continue
+    // A walk's line moving when a new version comes: how far its points move, but for its newest part.
+    if (previous) {
+      for (const walk of frame.walks.filter((walk) => walk.snapped)) {
+        const before = previous.walks.find((other) => other.key === walk.key && other.snapped)
+        if (!before || samePoints(before.points, walk.points)) continue
+        const settled = before.points.filter((point) => point.time <= before.t2 - LINE_HEAD_MS)
+        if (settled.length === 0) continue
+        const shift = Math.max(...settled.map((point) => toLine(point.at, walk.points)))
+        if (shift < 1) continue
+        shifts.push(shift)
+        if (shift > LINE_SHIFT_METRES) log(time, `line shift: the walk of ${local(walk.t1)} moved ${Math.round(shift)} m`)
       }
-      lost.add(walk.key)
-      s.linesLost++
-      log(time, `line lost: the walk of ${local(walk.t1)} drawn as recorded for good`)
     }
+    for (const walk of frame.walks) {
+      if (walk.snapped || walk.pending) continue
+      // Each version of the walk had its line: lost once.
+      const lines = [...hadLines.values()].filter((had) => !had.lost && overlaps(had, walk))
+      if (lines.length === 0) continue
+      for (const had of lines) had.lost = true
+      s.linesLost++
+      log(time, `line lost: the walk of ${local(walk.t1)} drawn as recorded, answered`)
+    }
+    // Spans long gone from the trail are no use.
+    for (const [key, had] of hadLines) if (had.t2 < frame.from - 3_600_000) hadLines.delete(key)
 
     // The trail changing: what's settled when a report comes; anything but its old end dropping off
     // with no report, or when the page is opened again.
@@ -467,16 +494,20 @@ async function replay(length: TrailLength): Promise<Score> {
       }
     }
 
-    // Which labelled fixes are drawn: within DRAWN_METRES of the trail as drawn, worked out again when
-    // the drawing changes.
-    if (!sameDrawing(drawnLabels.drawing, shown)) {
-      const lines = shown ? new Segments(shown).list : []
+    // Which labelled fixes are drawn: within DRAWN_METRES of the trail drawn for their time, worked out
+    // again when it changes. An error as the map shows it; a real outing as worked out, without Snap to
+    // paths, whose line can be some way from weak fixes that are drawn all the same.
+    if (!sameDrawing(drawnLabels.drawing, shown) || !sameDrawing(drawnLabels.recorded, recorded)) {
+      const [lines, recordedLines] = [shown ? new Segments(shown).list : [], recorded ? new Segments(recorded).list : []]
       drawnLabels = {
         drawing: shown,
+        recorded,
         shares: labelFixes.map((fixes, index) => {
           const label = labels[index]!
           if (fixes.length === 0 || !view || view.oldest > label.to || label.from > view.newest) return 0
-          const near = lines.filter((line) => line.t2 >= label.from - LABEL_SLACK_MS && line.t1 <= label.to + LABEL_SLACK_MS)
+          const near = (label.kind === 'real' ? recordedLines : lines).filter(
+            (line) => line.t2 >= label.from - LABEL_SLACK_MS && line.t1 <= label.to + LABEL_SLACK_MS,
+          )
           return fixes.filter((fix) => near.some((line) => toSegment(fix, line) <= DRAWN_METRES)).length / fixes.length
         }),
       }
@@ -503,27 +534,25 @@ async function replay(length: TrailLength): Promise<Score> {
     }
     previous = frame
 
-    // Snap to paths asks for the walks it hasn't, once the trail has been still for DEBOUNCE_MS; the
-    // answers are in by the next frame.
-    const next = Math.min(nextTick, nextReload, arrivals[k]?.serverTime ?? Infinity)
-    const missing = walks.filter((walk) => !asked.has(askedKey(walk))).slice(0, MAX_WALKS_PER_REQUEST)
-    if (missing.length && next - time >= DEBOUNCE_MS) {
-      for (const walk of missing) asked.add(askedKey(walk))
-      const lines = await Promise.all(missing.map((walk) => matchWalk(walk.points)))
-      s.snapRequests += missing.length
-      // Only walks still on the trail are kept; a growing walk replaces its earlier versions.
-      const keys = new Set(walks.map((walk) => walk.key))
-      const kept: typeof results = {}
-      for (const [key, line] of Object.entries(results)) if (keys.has(key)) kept[key] = line
-      missing.forEach((walk, index) => (kept[walk.key] = lines[index] ?? null))
-      results = kept
-      const current = new Set(walks.map(askedKey))
-      for (const key of asked) if (!current.has(key)) asked.delete(key)
+    // Snap to paths asks for the walks it hasn't answers for as they are, as soon as they change, one
+    // request at a time; the answers are in by the next frame.
+    const asking = toAsk(walks, snaps, time)
+    if (asking.length) {
+      const answers = await Promise.all(asking.map(ask))
+      s.snapRequests += asking.length
+      snaps = withAnswers(snaps, asking, answers, time, walks)
     }
   }
   if (previous) account?.((closed - previous.time) / 60_000)
 
   for (const changes of [s.pastChanges, s.idleChanges, s.reloadChanges]) changes.metres = Math.round(changes.metres)
+  shifts.sort((a, b) => a - b)
+  s.lineShifts = {
+    count: shifts.length,
+    p90: Math.round(shifts[Math.floor(shifts.length * 0.9)] ?? 0),
+    max: Math.round(shifts.at(-1) ?? 0),
+    over: shifts.filter((shift) => shift > LINE_SHIFT_METRES).length,
+  }
   s.card.walkingMinutes = Math.round(s.card.walkingMinutes)
   s.card.walkingShownMinutes = Math.round(s.card.walkingShownMinutes)
   s.greyMinutes = Math.round(s.greyMinutes)
@@ -541,10 +570,32 @@ function sameDrawing(a: DrawnTrail | null, b: DrawnTrail | null): boolean {
   if (!a || !b) return a === b
   const key = (drawn: DrawnTrail) =>
     [
-      ...drawn.walks.map((walk) => `${walk.key}${walk.snapped ? `:${walk.points.length}` : ''}`),
+      ...drawn.walks.map((walk) => `${walk.key}${walk.snapped ? `:${walk.points.length}:${walk.current}` : ''}`),
       ...drawn.rides.map((ride) => ride.points[0]!.time),
     ].join(' ')
   return key(a) === key(b)
+}
+
+/** Whether two walks' points are the same, as drawn. */
+function samePoints(a: { at: XY }[], b: { at: XY }[]): boolean {
+  return a.length === b.length && a.every((point, index) => metres(point.at, b[index]!.at) < 0.5)
+}
+
+/** How far a point is from a line through these points, in metres. */
+function toLine(point: XY, line: { at: XY }[]): number {
+  if (line.length === 1) return metres(point, line[0]!.at)
+  let nearest = Infinity
+  for (let i = 1; i < line.length; i++) {
+    nearest = Math.min(nearest, toSegment(point, { a: line[i - 1]!.at, b: line[i]!.at, t1: 0, t2: 0, opacity: 0 }))
+  }
+  return nearest
+}
+
+/** A share between 0 and 1 for a string, the same each time. */
+function hashShare(text: string): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193)
+  return (hash >>> 0) / 2 ** 32
 }
 
 /** How far a point is from a segment, in metres. */
@@ -608,6 +659,10 @@ function printScore(s: Score, ms: number) {
   const rows: [string, string][] = [
     ['frames', `${s.frames} (${Math.round(ms / 1000)} s)`],
     ['snap requests, flashes, lines lost', `${s.snapRequests}, ${s.flashes}, ${s.linesLost}`],
+    [
+      'lines moving (times; m for 9 in 10, at most; over 10 m)',
+      `${s.lineShifts?.count}; ${s.lineShifts?.p90}, ${s.lineShifts?.max}; ${s.lineShifts?.over}`,
+    ],
     ['past changes (frames, m, dots)', `${s.pastChanges.frames}, ${s.pastChanges.metres}, ${s.pastChanges.dots}`],
     [
       'idle changes (frames, m, dots; fading)',
@@ -655,9 +710,17 @@ function compare(baseline: { run?: Run; scores?: Record<string, Score> }): numbe
     if (!b) continue
     check(`${length}: flashes`, b.flashes, s.flashes)
     check(`${length}: lines lost`, b.linesLost, s.linesLost)
-    check(`${length}: past changes`, b.pastChanges.frames, s.pastChanges.frames)
-    check(`${length}: idle changes`, b.idleChanges.frames, s.idleChanges.frames)
-    check(`${length}: reload changes`, b.reloadChanges.frames, s.reloadChanges.frames)
+    if (b.lineShifts && s.lineShifts) check(`${length}: lines moving over ${LINE_SHIFT_METRES} m`, b.lineShifts.over, s.lineShifts.over)
+    for (const [name, before, after] of [
+      ['past', b.pastChanges, s.pastChanges],
+      ['idle', b.idleChanges, s.idleChanges],
+      ['reload', b.reloadChanges, s.reloadChanges],
+    ] as const) {
+      check(`${length}: ${name} changes`, before.frames, after.frames)
+      check(`${length}: ${name} changes (m)`, before.metres, after.metres, { slack: 10 })
+      check(`${length}: ${name} changes (dots)`, before.dots, after.dots)
+    }
+    check(`${length}: fading with no report`, b.idleChanges.fade, s.idleChanges.fade)
     check(`${length}: marker jumps`, b.marker.jumps, s.marker.jumps)
     check(`${length}: marker place toggles`, b.marker.placeToggles, s.marker.placeToggles)
     check(`${length}: here since backwards`, b.card.backwards, s.card.backwards)
