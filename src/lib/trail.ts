@@ -88,23 +88,26 @@ export function stayPoints(points: TrailPoint[], length: TrailLength): TrailPoin
 }
 
 /**
- * Where an asset's history starts: `from`, or, for one whose last fix is older than `from` allows
- * (a tracker asleep, see QUIET_MS in segments.ts), the HISTORY_MIN_MINUTES before that fix, so the
- * stay it went quiet in still shows ("Here since"). Not for one quiet over a day.
+ * Where an asset's history starts (ms since epoch): `minutes` before its latest report (as of `now`),
+ * as a page open all along keeps it (see extendTrails), so a page loaded now shows the same trail; for
+ * a tracker asleep (see QUIET_MS in segments.ts), that takes in the stay it went quiet in ("Here
+ * since"). For one quiet over a day, or never heard from, `minutes` before now.
  */
-export function historyStart(from: Date, to: Date, lastFix: number | undefined): Date {
-  const before = HISTORY_MIN_MINUTES * 60 * 1000
-  if (lastFix === undefined || lastFix < to.getTime() - MAX_TRAIL_MINUTES * 60 * 1000) return from
-  return new Date(Math.min(from.getTime(), lastFix - before))
+export function historyStart(minutes: number, now: number, lastReport: number | undefined): number {
+  const latest = lastReport === undefined || lastReport < now - MAX_TRAIL_MINUTES * 60 * 1000 ? now : Math.min(lastReport, now)
+  return latest - minutes * 60 * 1000
 }
 
-/** Adds live positions (with or without a GPS fix) to the trails and drops points older than `since`. */
-export function extendTrails(trails: Trails, updates: LiveUpdate[], since: number): Trails {
+/**
+ * Adds live positions (with or without a GPS fix) to the trails, keeping `minutes` of history before
+ * each asset's newest (as of `now`), as it's loaded (see historyStart).
+ */
+export function extendTrails(trails: Trails, updates: LiveUpdate[], minutes: number, now: number): Trails {
   let next = trails
   for (const update of updates) {
     if (update.kind !== 'position') continue
     const time = Date.parse(update.location.fixTime)
-    if (time < since) continue
+    const since = Math.min(time, now) - minutes * 60 * 1000
     const trail = next[update.id] ?? []
     const last = trail.at(-1)
     if (last && time <= last.time) continue

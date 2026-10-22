@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { walkKey } from './matching.ts'
+import { matchableWalks, walkKey } from './matching.ts'
 import type { Place } from './places.ts'
-import type { TrailPiece } from './segments.ts'
+import { latestOutingStart, type TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
-import { alongPaths, drawTrail, firstShown, toTrailFeatures, trailFrom, trailView, type TrailView } from './trailGeometry.ts'
+import {
+  alongPaths,
+  drawTrail,
+  firstShown,
+  shownKey,
+  shownTrails,
+  toTrailFeatures,
+  trailFrom,
+  trailView,
+  trailViews,
+  type TrailView,
+  type TrailViewCache,
+} from './trailGeometry.ts'
 
 // A made-up day in the shape of an ST-904L's: a fix every 30 s with good satellites, positions in
 // metres east and north of a start point.
@@ -92,13 +104,101 @@ describe('trailFrom', () => {
     }
   })
 
-  test('the latest outing is the whole trail’s, and the trail fades from its first piece drawn', () => {
-    // Out and back home, then out again: the latest outing began when the second stay at home ended.
-    const twice = new Trip().stay(30).walk(10).walk(10, -4).stay(25).walk(10)
-    const whole = view(twice)
-    const shown = shownFrom(whole, twice.at(70))!
+  test('the latest outing is the whole trail’s, though the long stay it began at is no longer drawn', () => {
+    // Home for half an hour, a walk, a 10-minute stop, another walk: one outing, since home.
+    const outing = new Trip().stay(30).walk(10).stay(10).walk(10)
+    const whole = view(outing)
+    const shown = shownFrom(whole, outing.at(55))!
+    assert.deepEqual(kinds(shown.pieces), ['stay', 'move'])
+    assert.notEqual(whole.outing, null)
     assert.equal(shown.outing, whole.outing)
-    assert.equal(shown.oldest, (shown.pieces[0] as Extract<TrailPiece, { kind: 'stay' }>).from)
+    assert.equal(latestOutingStart(shown.pieces), null, 'what the drawn pieces alone would say')
+    assert.equal(shown.oldest, (shown.pieces[0] as Extract<TrailPiece, { kind: 'stay' }>).from, 'fading from the first piece drawn')
+  })
+})
+
+describe('firstShown', () => {
+  // Pieces by hand, minutes from the start; positions don't matter here.
+  const point = (minutes: number): TrailPoint => ({ lat: START.lat, lon: START.lon, time: START.time + minutes * 60_000, valid: true })
+  const stay = (from: number, to: number): TrailPiece => ({
+    kind: 'stay',
+    center: { lat: START.lat, lon: START.lon },
+    radius: 10,
+    from: point(from).time,
+    to: point(to).time,
+  })
+  const move = (from: number, to: number): TrailPiece => ({ kind: 'move', points: [point(from), point(to)] })
+  const ride = (from: number, to: number): TrailPiece => ({ kind: 'vehicle', from: point(from), to: point(to), legs: [] })
+  const at = (minutes: number) => point(minutes).time
+
+  test('a walk or ride under way, with the stay it set off from', () => {
+    assert.equal(firstShown([stay(0, 10), move(12, 30)], at(15)), 0)
+    assert.equal(firstShown([stay(0, 10), ride(12, 30)], at(15)), 0)
+  })
+
+  test('a stay under way, without the stay before it; one begun since, with it (the hop between their dots)', () => {
+    assert.equal(firstShown([stay(0, 10), stay(12, 30)], at(15)), 1)
+    assert.equal(firstShown([stay(0, 10), stay(20, 30)], at(15)), 0)
+  })
+
+  test('not what came before a stay under way, or a walk that ended before the start', () => {
+    assert.equal(firstShown([move(0, 10), stay(12, 30)], at(15)), 1)
+    assert.equal(firstShown([move(0, 10), stay(20, 30)], at(15)), 1, 'a stay begun since, after a walk')
+    assert.equal(firstShown([stay(0, 5), move(6, 10), stay(12, 30)], at(15)), 2)
+  })
+
+  test('nothing ends after the start: none', () => {
+    assert.equal(firstShown([stay(0, 10), move(12, 14)], at(15)), 2)
+    assert.equal(trailFrom({ pieces: [stay(0, 10)], oldest: at(0), newest: at(10), outing: null }, 1), null)
+  })
+})
+
+describe('trailViews and shownTrails', () => {
+  const trip = new Trip().stay(30).walk(20).stay(10)
+  const home: Place = {
+    id: 1,
+    name: 'Home',
+    area: { kind: 'circle', center: { lat: START.lat, lon: START.lon }, radius: 50 },
+    assetIds: [1],
+  }
+
+  test('a walk under way when the trail starts is drawn whole: worked out from all the points, not those after the start', () => {
+    const views = trailViews({ 1: trip.points }, [home], { 1: 'sinotrack' })
+    const shown = shownTrails(views, trip.at(40))[1]!
+    assert.deepEqual(kinds(shown.pieces), ['stay', 'move', 'stay'])
+    assert.ok((shown.pieces[1] as Extract<TrailPiece, { kind: 'move' }>).points[0]!.time < trip.at(40))
+    const after = trip.points.filter((point) => point.time >= trip.at(40))
+    assert.notDeepEqual(
+      kinds(trailView(after, [home], 1, 'sinotrack')!.pieces),
+      kinds(shown.pieces),
+      'what the points after it alone would say',
+    )
+  })
+
+  test('with trails off, none', () => {
+    assert.deepEqual(shownTrails(trailViews({ 1: trip.points }, [], {}), null), {})
+    assert.equal(shownKey(trailViews({ 1: trip.points }, [], {}), null), 'off')
+  })
+
+  test("an asset whose points, places and tracker haven't changed isn't worked out again; one gone is forgotten", () => {
+    const cache: TrailViewCache = new Map()
+    const [places, trails] = [[home], { 1: trip.points, 2: new Trip().stay(10).points }]
+    const first = trailViews(trails, places, {}, cache)[1]
+    assert.equal(trailViews({ ...trails }, places, {}, cache)[1], first, 'the same')
+    const otherPlaces = [home]
+    const placed = trailViews(trails, otherPlaces, {}, cache)[1]
+    assert.notEqual(placed, first, 'other places')
+    const tracked = trailViews(trails, otherPlaces, { 1: 'phone' }, cache)[1]
+    assert.notEqual(tracked, placed, 'another kind of tracker')
+    assert.notEqual(trailViews({ ...trails, 1: [...trip.points] }, otherPlaces, { 1: 'phone' }, cache)[1], tracked, 'new points')
+    trailViews({ 1: trip.points }, places, {}, cache)
+    assert.deepEqual([...cache.keys()], [1])
+  })
+
+  test('shownKey changes only when a piece drops off the old end', () => {
+    const views = trailViews({ 1: trip.points }, [], {})
+    assert.equal(shownKey(views, trip.at(35)), shownKey(views, trip.at(45)), 'the walk under way all along')
+    assert.notEqual(shownKey(views, trip.at(45)), shownKey(views, trip.at(55)), 'the walk over')
   })
 })
 
@@ -128,6 +228,43 @@ describe('drawTrail', () => {
     )
   })
 
+  test('two stays next to each other: a hop from dot to dot, as Snap to paths knows it, routed or straight', () => {
+    const at = (east: number) => ({ lat: START.lat, lon: START.lon + east / METERS_PER_DEGREE_LON })
+    const stays = (east: number): TrailView => ({
+      pieces: [
+        { kind: 'stay', center: at(0), radius: 10, from: START.time, to: START.time + 30 * 60_000, atPlace: true },
+        { kind: 'stay', center: at(east), radius: 10, from: START.time + 31 * 60_000, to: START.time + 60 * 60_000 },
+      ],
+      oldest: START.time,
+      newest: START.time + 60 * 60_000,
+      outing: null,
+    })
+    const apart = stays(100)
+    const [hop] = drawTrail(apart, {}).walks
+    assert.equal(hop!.hop, true)
+    assert.deepEqual(
+      hop!.points.map(({ lat, lon }) => ({ lat, lon })),
+      [at(0), at(100)],
+    )
+    assert.deepEqual(
+      drawTrail(apart, {}).walks.map((walk) => walk.key),
+      matchableWalks(apart.pieces).map((walk) => walk.key),
+    )
+    const routed = drawTrail(apart, { [hop!.key]: [at(0), at(50), at(100)] })
+    assert.equal(routed.walks[0]!.points.length, 5)
+    assert.equal(
+      toTrailFeatures({ 1: apart }, { [hop!.key]: [at(0), at(50), at(100)] }).trail.features.filter((f) => f.properties.kind === 'move')
+        .length,
+      1,
+    )
+    assert.deepEqual(drawTrail(stays(30), {}).walks, [], 'one dot: no hop')
+  })
+
+  test('no long stay: it is all the latest outing', () => {
+    const drawn = drawTrail(view(new Trip().stay(10).walk(10).stay(5)), {})
+    assert.ok(drawn.walks.every((walk) => walk.points.every((point) => drawn.opacity(point.time) >= 0.55)))
+  })
+
   test('the latest outing is drawn in front, older ones faint', () => {
     const twice = new Trip().stay(30).walk(10).walk(10, -4).stay(25).walk(10)
     const drawn = drawTrail(view(twice), {})
@@ -139,17 +276,29 @@ describe('drawTrail', () => {
 })
 
 describe('toTrailFeatures', () => {
-  test('walks in pieces of three hops for fading, and whole for paw prints; stays as dots', () => {
+  test('walks in pieces of three hops for fading, joined end to end, and whole for paw prints; stays as dots', () => {
     const trail = view(new Trip().stay(10).walk(10).stay(10))
     const { trail: features, paws } = toTrailFeatures({ 1: trail }, {})
     const walk = drawTrail(trail, {}).walks[0]!
-    const lines = features.features.filter((feature) => feature.properties.kind === 'move')
+    const lines = features.features
+      .filter((feature) => feature.properties.kind === 'move')
+      .map((feature) => feature.geometry.coordinates as number[][])
     assert.equal(lines.length, Math.ceil((walk.points.length - 1) / 3))
+    lines.slice(1).forEach((line, index) => assert.deepEqual(line[0], lines[index]!.at(-1)))
+    assert.deepEqual(lines[0]![0], [walk.points[0]!.lon, walk.points[0]!.lat], 'longitude first')
     assert.equal(paws.features.length, 1)
     assert.equal(paws.features[0]!.geometry.coordinates.length, walk.points.length)
     const dots = features.features.filter((feature) => feature.properties.kind === 'stay')
     assert.equal(dots.length, 2)
-    assert.ok(dots.every((dot) => dot.properties.minutes! > 9))
+    assert.ok(
+      dots.every((dot) => dot.properties.minutes! > 9 && dot.properties.minutes! < 11),
+      'minutes',
+    )
+  })
+
+  test('a ride through its fixes, as a vehicle', () => {
+    const { trail: features } = toTrailFeatures({ 1: view(new Trip().stay(10).walk(3, 60).stay(10)) }, {})
+    assert.equal(features.features.filter((feature) => feature.properties.kind === 'vehicle').length, 1)
   })
 })
 
@@ -261,10 +410,15 @@ describe('the trail as reports come', () => {
     })
   })
 
-  test('whenever the trail starts, it is the whole trail from one of its pieces on', () => {
+  test('whenever the trail starts, it is the whole trail from one of its pieces on: those that end after it, and the stay it set off from', () => {
     for (let from = START.time; from <= points.at(-1)!.time; from += 5 * 60_000) {
       const shown = shownFrom(final, from)
-      if (shown) assert.deepEqual(shown.pieces, final.pieces.slice(final.pieces.indexOf(shown.pieces[0]!)))
+      if (!shown) continue
+      assert.deepEqual(shown.pieces, final.pieces.slice(final.pieces.indexOf(shown.pieces[0]!)))
+      const [first, next] = shown.pieces
+      if (end(first!) >= from) continue
+      assert.equal(first!.kind, 'stay', `at ${new Date(from).toISOString()}`)
+      assert.ok(next!.kind !== 'stay' || start(next!) >= from)
     }
   })
 })

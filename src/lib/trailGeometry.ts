@@ -2,7 +2,7 @@ import { stayHopKey, walkKey } from './matching.ts'
 import { trailPlaces, type Place } from './places.ts'
 import { classifyTrail, latestOutingStart, stayDots, type LatLon, type StayDot, type TrailPiece } from './segments.ts'
 import { trailProfile, type TrackerKind } from './tracker.ts'
-import type { Trails } from './trail.ts'
+import type { TrailPoint, Trails } from './trail.ts'
 
 // What the map draws of the trail (see trailLayers.ts), worked out here without maplibre, so Node can
 // run it: the tests, and the trail replay (dev/replay.ts) that scores what the map shows over time.
@@ -25,6 +25,15 @@ export type TrailView = { pieces: TrailPiece[]; oldest: number; newest: number; 
 
 /** Each asset's trail to draw, by asset id. */
 export type TrailViews = Record<number, TrailView>
+
+/**
+ * What trailViews remembers of each asset's trail, so one whose points, places and tracker haven't
+ * changed isn't worked out again.
+ */
+export type TrailViewCache = Map<
+  number,
+  { points: TrailPoint[]; places: Place[]; tracker: TrackerKind | undefined; view: TrailView | null }
+>
 
 /**
  * An asset's trail as drawn. `walks`: each move, from the dot of the stay before to the one after, and
@@ -51,6 +60,53 @@ export function trailView(points: Trails[number], places: Place[], id: number, t
   if (fixes.length === 0) return null
   const pieces = classifyTrail(points, { showWandering: true, places: trailPlaces(places, id), profile: trailProfile(tracker) })
   return { pieces, oldest: fixes[0]!.time, newest: fixes.at(-1)!.time, outing: latestOutingStart(pieces) }
+}
+
+/**
+ * Each asset's trail worked out from all of its points (see trailView), as the trails are now: only
+ * an asset whose points (a new array when they change, see extendTrails), places or kind of tracker
+ * changed is worked out again; the rest come from `cache`, which forgets assets no longer there.
+ */
+export function trailViews(
+  trails: Trails,
+  places: Place[],
+  trackers: Record<number, TrackerKind | undefined>,
+  cache: TrailViewCache = new Map(),
+): TrailViews {
+  const views: TrailViews = {}
+  for (const id of cache.keys()) if (!(id in trails)) cache.delete(id)
+  for (const [key, points] of Object.entries(trails)) {
+    const id = Number(key)
+    let entry = cache.get(id)
+    if (entry?.points !== points || entry.places !== places || entry.tracker !== trackers[id]) {
+      entry = { points, places, tracker: trackers[id], view: trailView(points, places, id, trackers[id]) }
+      cache.set(id, entry)
+    }
+    if (entry.view) views[id] = entry.view
+  }
+  return views
+}
+
+/** Each trail drawn from `start` on (see trailFrom); none when trails are off (`start` null). */
+export function shownTrails(views: TrailViews, start: number | null): TrailViews {
+  const shown: TrailViews = {}
+  if (start === null) return shown
+  for (const [id, view] of Object.entries(views)) {
+    const trail = trailFrom(view, firstShown(view.pieces, start))
+    if (trail) shown[Number(id)] = trail
+  }
+  return shown
+}
+
+/**
+ * What shownTrails depends on, as a string, for keeping its result while the trail's start moves on
+ * but the same pieces are drawn (see firstShown): each asset's first piece drawn.
+ */
+export function shownKey(views: TrailViews, start: number | null): string {
+  if (start === null) return 'off'
+  return Object.entries(views)
+    .map(([id, view]) => `${id}:${firstShown(view.pieces, start)}`)
+    .join(' ')
 }
 
 /**

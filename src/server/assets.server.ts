@@ -23,15 +23,15 @@ export async function loadAssets(token: string): Promise<Asset[]> {
 }
 
 /**
- * Reports from the last `minutes`, per asset, including those without a GPS fix: they're evidence
- * of travel without GPS (see segments.ts). An asset whose history fails just gets no trail.
+ * Reports from `minutes` before each asset's latest (see historyStart), including those without a GPS
+ * fix: they're evidence of travel without GPS (see segments.ts). An asset whose history fails just
+ * gets no trail.
  */
 export async function loadTrails(token: string, assetIds: number[], minutes: number): Promise<Trails> {
   const to = new Date()
-  const from = new Date(to.getTime() - minutes * 60 * 1000)
-  const quietSince = await lastFixes(token)
+  const latest = await latestReports(token)
   const results = await Promise.allSettled(
-    assetIds.map((id) => getPositionHistory(token, id, historyStart(from, to, quietSince.get(id)), to)),
+    assetIds.map((id) => getPositionHistory(token, id, new Date(historyStart(minutes, to.getTime(), latest.get(id))), to)),
   )
   const trails: Trails = {}
   results.forEach((result, index) => {
@@ -46,8 +46,8 @@ export async function loadTrails(token: string, assetIds: number[], minutes: num
   return trails
 }
 
-/** Each device's latest fix time; none if Traccar can't say, which only costs the extra history. */
-async function lastFixes(token: string): Promise<Map<number, number>> {
+/** Each device's latest report's time; none if Traccar can't say, so its history ends now. */
+async function latestReports(token: string): Promise<Map<number, number>> {
   try {
     return new Map((await getLatestPositions(token)).map((position) => [position.deviceId, Date.parse(position.fixTime)]))
   } catch (error) {

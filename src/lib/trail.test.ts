@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { nearestTrail, trailMinutes, trailStart } from './trail.ts'
+import type { LiveUpdate } from './live.ts'
+import {
+  extendTrails,
+  historyMinutes,
+  historyStart,
+  MAX_HISTORY_MINUTES,
+  nearestTrail,
+  stayPoints,
+  trailMinutes,
+  trailStart,
+  type TrailPoint,
+} from './trail.ts'
 
 describe('nearestTrail', () => {
   test('keeps offered lengths', () => {
@@ -37,4 +48,51 @@ describe('trailStart', () => {
 test('today loads a day of history', () => {
   assert.equal(trailMinutes('today'), 1440)
   assert.equal(trailMinutes(360), 360)
+})
+
+describe('history', () => {
+  const now = Date.parse('2026-10-20T12:00:00Z')
+  const minutes = (n: number) => n * 60_000
+
+  test('the trail and 3 hours before it; 3 hours with trails off', () => {
+    assert.deepEqual([0, 60, 360, 'today' as const].map(historyMinutes), [180, 240, 540, 1620])
+    assert.equal(historyMinutes('today'), MAX_HISTORY_MINUTES)
+  })
+
+  test('loaded from that long before the latest report, as a page open all along keeps it', () => {
+    assert.equal(historyStart(240, now, now - minutes(2)), now - minutes(242))
+    // Asleep for five hours: the stay it went quiet in.
+    assert.equal(historyStart(240, now, now - minutes(300)), now - minutes(540))
+  })
+
+  test('quiet for over a day, never heard from, or reporting from the future: from now', () => {
+    for (const last of [now - minutes(25 * 60), undefined]) assert.equal(historyStart(240, now, last), now - minutes(240))
+    assert.equal(historyStart(240, now, now + minutes(10)), now - minutes(240))
+  })
+
+  test('live positions keep the same: that long before the newest', () => {
+    const at = (time: number): TrailPoint => ({ lat: 59, lon: 18, time, valid: true })
+    const update = (time: number): LiveUpdate => ({
+      kind: 'position',
+      id: 1,
+      location: { lat: 59, lon: 18, fixTime: new Date(time).toISOString() },
+      valid: true,
+      placeIds: [],
+    })
+    // Reported 10 minutes ago, arriving now: kept back from when it was, not from now.
+    const trails = { 1: [at(now - minutes(300)), at(now - minutes(245)), at(now - minutes(100))] }
+    const next = extendTrails(trails, [update(now - minutes(10))], 240, now)
+    assert.deepEqual(
+      next[1]!.map((point) => (now - point.time) / 60_000),
+      [245, 100, 10],
+    )
+    assert.equal(extendTrails(trails, [update(now - minutes(150))], 240, now), trails, 'older than the newest: ignored')
+  })
+
+  test('"Here since" goes by 3 hours, or the trail if longer, before the newest point', () => {
+    const points = Array.from({ length: 31 }, (_, hour) => ({ lat: 59, lon: 18, time: now - minutes(60 * (30 - hour)), valid: true }))
+    const back = (length: 0 | 60 | 360 | 'today') => (now - stayPoints(points, length)[0]!.time) / 60_000
+    assert.deepEqual([back(0), back(60), back(360), back('today')], [180, 180, 360, 1440])
+    assert.equal(stayPoints(points.slice(-2), 360).length, 2)
+  })
 })

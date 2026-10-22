@@ -7,9 +7,9 @@ import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
 import { shownLocation, trailPlaces, type Place, type PlaceVisit } from './places'
 import { currentActivity, currentStay, type Activity, type Stay } from './segments'
-import { trackersOf, trailProfile, type TrackerKind } from './tracker'
-import { extendTrails, historyMinutes, stayPoints, trailStart, type TrailLength, type TrailPoint, type Trails } from './trail'
-import { firstShown, trailFrom, trailView, type TrailView, type TrailViews } from './trailGeometry'
+import { trackersOf, trailProfile } from './tracker'
+import { extendTrails, historyMinutes, stayPoints, trailStart, type TrailLength, type Trails } from './trail'
+import { shownKey, shownTrails, trailViews, type TrailViewCache } from './trailGeometry'
 import { useNow } from './useNow'
 
 export type LiveStatus = 'connecting' | 'live' | 'offline'
@@ -100,8 +100,7 @@ export function useLiveAssets(
       // A tracker was added in Traccar; reload the full list.
       if (result.unknown) void router.invalidate()
       if (result.visits.length > 0) onVisitsRef.current?.(result.visits)
-      const since = Date.now() - historyLengthRef.current * 60 * 1000
-      setTrails((current) => extendTrails(current, updates, since))
+      setTrails((current) => extendTrails(current, updates, historyLengthRef.current, Date.now()))
     }
 
     const connect = () => {
@@ -168,38 +167,12 @@ export function useLiveAssets(
   const trackers = useMemo(() => trackersOf(assets), [trackerKey])
 
   // Each asset's trail, worked out from all of its points as they come, not as the clock ticks (see
-  // trailView); only an asset whose points changed is worked out again.
-  const worked = useRef(
-    new Map<number, { points: TrailPoint[]; places: Place[]; tracker: TrackerKind | undefined; view: TrailView | null }>(),
-  )
-  const views = useMemo(() => {
-    const result: TrailViews = {}
-    for (const [key, points] of Object.entries(trails)) {
-      const id = Number(key)
-      let entry = worked.current.get(id)
-      if (entry?.points !== points || entry.places !== places || entry.tracker !== trackers[id]) {
-        entry = { points, places, tracker: trackers[id], view: trailView(points, places, id, trackers[id]) }
-        worked.current.set(id, entry)
-      }
-      if (entry.view) result[id] = entry.view
-    }
-    return result
-  }, [trails, places, trackers])
-
-  // Drawn from where the trail starts: the same until a whole piece drops off its old end (see firstShown).
+  // trailViews), and drawn from where the trail starts: the same until a whole piece drops off its old
+  // end (see firstShown), so kept until then.
+  const worked = useRef<TrailViewCache>(new Map())
+  const views = useMemo(() => trailViews(trails, places, trackers, worked.current), [trails, places, trackers])
   const start = trailStart(trail ?? 0, now)
-  const firsts = Object.entries(views).map(
-    ([id, view]) => [Number(id), start === null ? Infinity : firstShown(view.pieces, start)] as const,
-  )
-  const firstsKey = firsts.map(([id, first]) => `${id}:${first}`).join(' ')
-  const shownTrails = useMemo(() => {
-    const result: TrailViews = {}
-    for (const [id, first] of firsts) {
-      const shown = trailFrom(views[id]!, first)
-      if (shown) result[id] = shown
-    }
-    return result
-  }, [views, firstsKey])
+  const shown = useMemo(() => shownTrails(views, start), [views, shownKey(views, start)])
 
   const activities = useMemo(() => {
     const result: Record<number, Activity> = {}
@@ -230,5 +203,5 @@ export function useLiveAssets(
     [assets, trails, places],
   )
 
-  return { assets: shownAssets, trails: shownTrails, trailsLoaded, activities, stays, status, updateAvailable }
+  return { assets: shownAssets, trails: shown, trailsLoaded, activities, stays, status, updateAvailable }
 }
