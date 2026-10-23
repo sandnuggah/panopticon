@@ -82,6 +82,11 @@ export function setPlaces(map: MapLibreMap, places: Place[], hiddenId: number | 
   showLabelsBySize(map)
 }
 
+/** Places with a capsule of assets on their pin (markers.ts), which names the place: their own label steps aside. */
+export function setCapsulePlaces(map: MapLibreMap, placeIds: ReadonlySet<number>) {
+  for (const [id, label] of labelsByMap.get(map) ?? []) label.getElement().classList.toggle('place-label-capsuled', placeIds.has(id))
+}
+
 /** A place's pin: the map pin glyph on a disc in the place's colour, decorative (the name says what it is). */
 function pinElement(): HTMLElement {
   const element = document.createElement('div')

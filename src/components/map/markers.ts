@@ -6,27 +6,22 @@ import { PIN_PATH } from './placeLayers'
 // The assets' markers: maplibre DOM markers (enough for ≤5), a dot with the asset's picture or
 // initial and a name label, styled in styles.css (.marker). Greyed out when stale, ringed when
 // selected, and wearing a place's pin as a badge when the asset is at a place too small on screen to
-// show its own (see showsPin in placeLayers.ts).
+// show its own (see showsPin in placeLayers.ts). Two or more at one place sit in a row in a capsule
+// on its pin, each tappable (createCapsule).
 
 /** A marker moving farther than this goes there at once: a jump, not a glide across the map. */
 const GLIDE_MAX_METERS = 150
 /**
- * In a stack, how far (px) each marker behind the top one peeks out to the right, and a little up:
- * enough to show past the top one's selection ring, even when it's the bigger, picture kind.
+ * Assets at the same place sit in a capsule on its pin (see createCapsule): its own pin over the
+ * place's, then each asset's marker in a slot this wide (px), the bigger picture kind with its ring
+ * included, then the place's name.
  */
-const STACK_STEP = { x: 18, y: -6 }
-/** Fanned out, how far apart (px) the markers stand in their row. */
-const FAN_STEP = 64
-/** A stack's label names as many of its assets as fit in this width (px), and "+2" for the rest. */
-const STACK_LABEL_PX = 140
+export const CAPSULE_SLOT = 48
+/** From the capsule's pin, over the spot, to the middle of its first slot (px): half the pin, a gap, half a slot. */
+export const CAPSULE_FIRST = 15 + 6 + CAPSULE_SLOT / 2
 
-/**
- * Where a marker sits among others at the same spot (assets at one place share its pin, see
- * shownLocation in presence.ts): `index` 0 on top. Stacked, the others peek out behind it and its
- * label names them all, as many as fit (`names`, top first); fanned out, they stand in a row, each
- * with its own name, to be tapped.
- */
-export type Stack = { index: number; size: number; fanned: boolean; names: string[] }
+/** Where a marker sits in its place's capsule: `index` from the left. */
+export type InCapsule = { index: number }
 
 /** How the camera eases (maplibre's own default), so a followed marker and the map move as one. */
 export function ease(t: number): number {
@@ -72,29 +67,24 @@ export function glideMarker(marker: Marker, to: [number, number], ms: number) {
   glides.set(marker, { frame: requestAnimationFrame(step), to })
 }
 
-/** "Betty, Sixten", or "Betty, Sixten +2" when the rest wouldn't fit in STACK_LABEL_PX, at least the first name. */
-function stackLabel(names: string[], label: HTMLElement): string {
-  const width = textWidth(label)
-  for (let shown = names.length; shown > 1; shown--) {
-    const text = names.slice(0, shown).join(', ') + (shown < names.length ? ` +${names.length - shown}` : '')
-    if (width(text) <= STACK_LABEL_PX) return text
-  }
-  return `${names[0]} +${names.length - 1}`
+/**
+ * A capsule for assets at one place: a pill with the place's pin, room for their markers (which sit
+ * over it, see CAPSULE_SLOT), and the place's name. Decorative: each marker says where its asset is.
+ * Anchored at its left, so its pin is over the place's own.
+ */
+export function createCapsule(): HTMLElement {
+  const element = document.createElement('div')
+  element.className = 'place-capsule'
+  element.setAttribute('aria-hidden', 'true')
+  element.innerHTML =
+    `<span class="place-capsule-pin"><svg viewBox="0 0 24 24"><path d="${PIN_PATH}" fill="currentColor" fill-rule="evenodd"/></svg></span>` +
+    '<span class="place-capsule-slots"></span><span class="place-capsule-name"></span>'
+  return element
 }
 
-/** "Betty and Sixten", "Betty, Sixten and Bamse". */
-function listed(names: string[]): string {
-  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
-}
-
-let measure: CanvasRenderingContext2D | null = null
-
-/** How wide text is in an element's font, in px. */
-function textWidth(element: HTMLElement): (text: string) => number {
-  measure ??= document.createElement('canvas').getContext('2d')
-  const style = getComputedStyle(element)
-  if (measure) measure.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
-  return (text) => measure?.measureText(text).width ?? text.length * 7
+export function updateCapsule(element: HTMLElement, count: number, placeName: string) {
+  element.querySelector<HTMLElement>('.place-capsule-slots')!.style.width = `${count * CAPSULE_SLOT}px`
+  element.querySelector('.place-capsule-name')!.textContent = placeName
 }
 
 /** A marker's element; tapping it calls `onTapRef.current` with the asset's id. */
@@ -129,26 +119,20 @@ export function createMarkerElement(assetId: number, onTapRef: { current: (id: n
 export function updateMarkerElement(
   element: HTMLElement,
   asset: Asset,
-  state: { stale: boolean; selected: boolean; atPlace?: string; stack?: Stack },
+  state: { stale: boolean; selected: boolean; atPlace?: string; capsule?: InCapsule },
 ) {
-  const { index = 0, size = 1, fanned = false, names = [] } = state.stack ?? {}
-  const stacked = size > 1 && !fanned
-  const top = stacked && index === 0
+  const inCapsule = state.capsule !== undefined
   element.classList.toggle('marker-stale', state.stale)
   element.classList.toggle('marker-selected', state.selected)
-  element.classList.toggle('marker-behind', stacked && index > 0)
-  const where = state.atPlace ? `, at ${state.atPlace}` : ''
-  element.setAttribute('aria-label', top ? `${listed(names)}${where}: show them all` : `Show ${asset.name}${where}`)
-  element.setAttribute('aria-expanded', String(size > 1 ? fanned : false))
-  if (size < 2) element.removeAttribute('aria-expanded')
-  element.querySelector<HTMLElement>('.marker-badge')!.hidden = !state.atPlace
+  // In a capsule, the capsule shows the place, and the card the name.
+  element.classList.toggle('marker-in-capsule', inCapsule)
+  element.setAttribute('aria-label', state.atPlace ? `Show ${asset.name}, at ${state.atPlace}` : `Show ${asset.name}`)
+  element.querySelector<HTMLElement>('.marker-badge')!.hidden = !state.atPlace || inCapsule
   element.querySelector('.marker-initial')!.textContent = assetInitial(asset.name)
-  const label = element.querySelector<HTMLElement>('.marker-label')!
-  label.textContent = top ? stackLabel(names, label) : asset.name
-  // Stacked: to the right behind the top one; fanned out: in a row centred on the spot.
-  const [x, y] = size < 2 ? [0, 0] : fanned ? [(index - (size - 1) / 2) * FAN_STEP, 0] : [index * STACK_STEP.x, index * STACK_STEP.y]
-  element.style.translate = x || y ? `${x}px ${y}px` : ''
-  element.style.zIndex = size < 2 ? '' : String(10 + size - index)
+  element.querySelector('.marker-label')!.textContent = asset.name
+  const x = inCapsule ? CAPSULE_FIRST + state.capsule!.index * CAPSULE_SLOT : 0
+  element.style.translate = x ? `${x}px 0` : ''
+  element.style.zIndex = inCapsule ? '10' : ''
 
   const image = element.querySelector<HTMLImageElement>('.marker-image')!
   if (image.dataset.src !== asset.imageUrl) {

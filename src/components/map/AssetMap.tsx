@@ -19,9 +19,9 @@ import { resolveStyle, type MapStyle } from '../../lib/mapStyles'
 import { useSettings } from '../../lib/settings'
 import { addMyPositionLayer, createMyPositionDot, setAccuracyCircle } from './myPosition'
 import { circle } from './geometry'
-import { createMarkerElement, ease, glideMarker, updateMarkerElement } from './markers'
+import { createCapsule, createMarkerElement, ease, glideMarker, updateCapsule, updateMarkerElement } from './markers'
 import { addTrailLayers, recolourTrails, setTrails } from './trailLayers'
-import { addPlaceLayers, recolourPlaces, setPlaces, showsPin } from './placeLayers'
+import { addPlaceLayers, recolourPlaces, setCapsulePlaces, setPlaces, showsPin } from './placeLayers'
 import { NO_COVER, type Cover } from '../cards'
 import { MapButtons } from './MapButtons'
 import { PlacePicker, type PickerProps } from './PlacePicker'
@@ -126,13 +126,8 @@ export default function AssetMap({
   const updateMarkersRef = useRef(() => {})
   const cameraPlacedRef = useRef(false)
   const [styleLoaded, setStyleLoaded] = useState(false)
-  // Assets at the same spot (at one place, on its pin) are a stack; tapping it fans them out, and
-  // tapping one of them, or the map, folds it again. The stack fanned out, by its spot.
-  const [fanned, setFanned] = useState<string | null>(null)
-  /** Each asset's stack: its spot, and how many share it. */
-  const stacksRef = useRef(new Map<number, { spot: string; size: number }>())
-  // Selecting another asset (in the bottom bar too) folds it.
-  useEffect(() => setFanned(null), [selectedId])
+  /** The capsules of assets at one place (markers.ts), by place id. */
+  const capsulesRef = useRef(new Map<number, Marker>())
   const now = useNow(30_000)
 
   // Following the selected asset: the map keeps its latest position centred. Dragging the map pauses
@@ -186,14 +181,7 @@ export default function AssetMap({
   const framedRef = useRef(false)
 
   useEffect(() => {
-    onMarkerTapRef.current = (id) => {
-      const stack = stacksRef.current.get(id)
-      // A folded stack opens first, so each of its assets can be tapped.
-      if (stack && stack.size > 1 && fanned !== stack.spot) return setFanned(stack.spot)
-      setFanned(null)
-      if (id === selectedId && target) onSelectedTap(id)
-      else onSelect(id)
-    }
+    onMarkerTapRef.current = (id) => (id === selectedId && target ? onSelectedTap(id) : onSelect(id))
     if (centred) {
       centred.current = () => {
         const map = mapRef.current
@@ -298,11 +286,11 @@ export default function AssetMap({
     mapRef.current = map
     // From the start: the first move to a place (the place editor's jump to it) can come before the tiles.
     map.on('zoom', () => updateMarkersRef.current())
-    // Tapping the map (not a marker: they stop the tap there) folds a fanned-out stack.
-    map.on('click', () => setFanned(null))
     const markers = markersRef.current
+    const capsules = capsulesRef.current
     return () => {
       markers.clear()
+      capsules.clear()
       meMarkerRef.current = null
       map.remove()
       mapRef.current = null
@@ -385,26 +373,36 @@ export default function AssetMap({
         markers.delete(id)
       }
     }
-    // Stacks: assets shown at the same spot, the selected one on top, then in the bottom bar's order.
-    const spots = new Map<string, number[]>()
+    // Two or more at one place (shown at its centre, see shownLocation): a capsule on its pin with
+    // them in a row, in the bottom bar's order, each tappable.
+    const atPlaces = new Map<number, number[]>()
     for (const asset of assets) {
-      if (!asset.location) continue
-      const spot = `${asset.location.lat},${asset.location.lon}`
-      spots.set(spot, [...(spots.get(spot) ?? []), asset.id])
+      const place = presence[asset.id]?.place
+      if (asset.location && place !== null && place !== undefined) atPlaces.set(place, [...(atPlaces.get(place) ?? []), asset.id])
     }
-    const stacks = stacksRef.current
-    stacks.clear()
-    for (const [spot, ids] of spots) {
-      ids.sort((a, b) => Number(b === selectedId) - Number(a === selectedId))
-      for (const id of ids) stacks.set(id, { spot, size: ids.length })
+    const capsuled = new Map<number, { index: number }>()
+    const capsules = capsulesRef.current
+    for (const [placeId, ids] of atPlaces) {
+      const place = places.find((candidate) => candidate.id === placeId)
+      if (ids.length < 2 || !place) continue
+      ids.forEach((id, index) => capsuled.set(id, { index }))
+      let capsule = capsules.get(placeId)
+      if (!capsule) {
+        // Its pin (half of 30 px in from its 4 px edge) over the place's.
+        const at = assets.find((asset) => asset.id === ids[0])!.location!
+        capsule = new Marker({ element: createCapsule(), anchor: 'left', offset: [-19, 0] }).setLngLat([at.lon, at.lat]).addTo(map)
+        capsules.set(placeId, capsule)
+      }
+      const at = assets.find((asset) => asset.id === ids[0])!.location!
+      capsule.setLngLat([at.lon, at.lat])
+      updateCapsule(capsule.getElement(), ids.length, place.name)
     }
-    const stackOf = (id: number) => {
-      const stack = stacks.get(id)
-      if (!stack || stack.size < 2) return undefined
-      const ids = spots.get(stack.spot)!
-      const names = ids.map((other) => assets.find((asset) => asset.id === other)?.name ?? '')
-      return { index: ids.indexOf(id), size: stack.size, fanned: fanned === stack.spot, names }
+    for (const [placeId, capsule] of capsules) {
+      if ((atPlaces.get(placeId)?.length ?? 0) >= 2 && places.some((place) => place.id === placeId)) continue
+      capsule.remove()
+      capsules.delete(placeId)
     }
+    setCapsulePlaces(map, new Set(capsules.keys()))
     updateMarkersRef.current = () => {
       for (const asset of assets) {
         const marker = markers.get(asset.id)
@@ -416,12 +414,12 @@ export default function AssetMap({
           stale: isGrey(status),
           selected: asset.id === selectedId,
           atPlace,
-          stack: stackOf(asset.id),
+          capsule: capsuled.get(asset.id),
         })
       }
     }
     updateMarkersRef.current()
-  }, [assets, selectedId, now, places, presence, statuses, fanned])
+  }, [assets, selectedId, now, places, presence, statuses])
 
   // First render: show the selected asset, or fit all assets. Afterwards: fly to each new selection.
   useEffect(() => {
