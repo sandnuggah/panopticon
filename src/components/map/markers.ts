@@ -10,6 +10,20 @@ import { PIN_PATH } from './placeLayers'
 
 /** A marker moving farther than this goes there at once: a jump, not a glide across the map. */
 const GLIDE_MAX_METERS = 150
+/**
+ * In a stack, how far (px) each marker behind the top one peeks out to the right, and a little up:
+ * enough to show past the top one's selection ring, even when it's the bigger, picture kind.
+ */
+const STACK_STEP = { x: 18, y: -6 }
+/** Fanned out, how far apart (px) the markers stand in their row. */
+const FAN_STEP = 64
+
+/**
+ * Where a marker sits among others at the same spot (assets at one place share its pin, see
+ * shownLocation in presence.ts): `index` 0 on top. Stacked, the others peek out behind it and its
+ * name says how many more; fanned out, they stand in a row, each with its name, to be tapped.
+ */
+export type Stack = { index: number; size: number; fanned: boolean }
 
 /** How the camera eases (maplibre's own default), so a followed marker and the map move as one. */
 export function ease(t: number): number {
@@ -84,13 +98,28 @@ export function createMarkerElement(assetId: number, onTapRef: { current: (id: n
  * Brings a marker up to date with its asset: name, picture, stale and selected, and `atPlace`, the
  * name of the place it's at when that place's own pin isn't showing.
  */
-export function updateMarkerElement(element: HTMLElement, asset: Asset, state: { stale: boolean; selected: boolean; atPlace?: string }) {
+export function updateMarkerElement(
+  element: HTMLElement,
+  asset: Asset,
+  state: { stale: boolean; selected: boolean; atPlace?: string; stack?: Stack },
+) {
+  const { index = 0, size = 1, fanned = false } = state.stack ?? {}
+  const stacked = size > 1 && !fanned
+  const more = stacked && index === 0 ? size - 1 : 0
   element.classList.toggle('marker-stale', state.stale)
   element.classList.toggle('marker-selected', state.selected)
-  element.setAttribute('aria-label', state.atPlace ? `Show ${asset.name}, at ${state.atPlace}` : `Show ${asset.name}`)
+  element.classList.toggle('marker-behind', stacked && index > 0)
+  const where = state.atPlace ? `, at ${state.atPlace}` : ''
+  element.setAttribute('aria-label', more ? `${asset.name} and ${more} more${where}: show them all` : `Show ${asset.name}${where}`)
+  element.setAttribute('aria-expanded', String(size > 1 ? fanned : false))
+  if (size < 2) element.removeAttribute('aria-expanded')
   element.querySelector<HTMLElement>('.marker-badge')!.hidden = !state.atPlace
   element.querySelector('.marker-initial')!.textContent = assetInitial(asset.name)
-  element.querySelector('.marker-label')!.textContent = asset.name
+  element.querySelector('.marker-label')!.textContent = more ? `${asset.name} +${more}` : asset.name
+  // Stacked: to the right behind the top one; fanned out: in a row centred on the spot.
+  const [x, y] = size < 2 ? [0, 0] : fanned ? [(index - (size - 1) / 2) * FAN_STEP, 0] : [index * STACK_STEP.x, index * STACK_STEP.y]
+  element.style.translate = x || y ? `${x}px ${y}px` : ''
+  element.style.zIndex = size < 2 ? '' : String(10 + size - index)
 
   const image = element.querySelector<HTMLImageElement>('.marker-image')!
   if (image.dataset.src !== asset.imageUrl) {

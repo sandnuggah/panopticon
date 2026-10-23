@@ -78,7 +78,7 @@ function SharedLive({ link, view, styles, defaultStyle }: LiveProps) {
               selectedId={asset.id}
               focusToken={0}
               onSelect={nothing}
-              onDeselect={nothing}
+              onSelectedTap={nothing}
               buttons="top-right"
               showMe={showMe}
               onShowMeChange={setShowMe}

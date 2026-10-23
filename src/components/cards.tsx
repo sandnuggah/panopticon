@@ -36,16 +36,13 @@ export function moveFocus(element: HTMLElement | null | undefined) {
   element?.focus({ preventScroll: true, focusVisible: false } as FocusOptions)
 }
 
+/** A round button in a card's top corner, like ✕. */
+export const ROUND_BUTTON = 'grid size-11 shrink-0 place-items-center rounded-full bg-black/5 active:opacity-60 dark:bg-white/10'
+
 /** The round ✕ in a card's corner. */
 export function CloseButton({ ref, className = '', onClick }: { ref?: Ref<HTMLButtonElement>; className?: string; onClick: () => void }) {
   return (
-    <button
-      ref={ref}
-      type="button"
-      className={`grid size-11 shrink-0 place-items-center rounded-full bg-black/5 active:opacity-60 dark:bg-white/10 ${className}`}
-      aria-label="Close"
-      onClick={onClick}
-    >
+    <button ref={ref} type="button" className={`${ROUND_BUTTON} ${className}`} aria-label="Close" onClick={onClick}>
       <CloseIcon />
     </button>
   )

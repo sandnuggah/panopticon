@@ -8,7 +8,7 @@ import { LIVE_LINK_HOURS, liveLinkShare, locationShare } from '../lib/share'
 import { shareOrCopy } from '../lib/shareSheet'
 import { useNow } from '../lib/useNow'
 import { createLink } from '../server/liveLinks.functions'
-import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass, ROWS } from './cards'
+import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass, ROUND_BUTTON, ROWS } from './cards'
 import { ShareIcon } from './icons'
 
 type Props = {
@@ -16,7 +16,7 @@ type Props = {
   address: string | undefined
   /** False once the card holding Share has closed, which closes the Share card too. */
   active: boolean
-  /** A button beside Share (Stats); Sharing live goes under them. */
+  /** A button in the row under the card's header (Stats), beside Sharing live when there's a live link. */
   beside?: ReactNode
 }
 
@@ -100,70 +100,76 @@ export function Share({ asset, address, active, beside }: Props) {
       }
     })
 
+  // The row under the header: a link waiting to be sent, `beside` (Stats), Sharing live; one alone
+  // takes the whole row, three put Sharing live under the other two.
+  const buttons = (unsent ? 1 : 0) + (beside ? 1 : 0) + (live ? 1 : 0)
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-2">
-        {unsent ? (
-          <Button rounded onClick={() => void sendLink(unsent)}>
-            <ShareIcon />
-            Send link
-          </Button>
-        ) : (
-          <Button
-            ref={shareButton}
-            rounded
-            disabled={busy}
-            onClick={() => {
-              setManual(undefined)
-              setOpen(true)
-            }}
-          >
-            <ShareIcon />
-            Share
-          </Button>
+    <>
+      {/* Share, round beside ✕ at the top of the card (the card is its positioned parent), as in Apple Maps. */}
+      <button
+        ref={shareButton}
+        type="button"
+        className={`${ROUND_BUTTON} absolute right-[68px] top-4 disabled:opacity-40`}
+        aria-label="Share"
+        disabled={busy}
+        onClick={() => {
+          setManual(undefined)
+          setOpen(true)
+        }}
+      >
+        <ShareIcon className="size-5" />
+      </button>
+      <div className="space-y-2">
+        <div className={`grid gap-2 ${buttons > 1 ? 'grid-cols-2' : ''}`}>
+          {unsent && (
+            <Button rounded onClick={() => void sendLink(unsent)}>
+              <ShareIcon />
+              Send link
+            </Button>
+          )}
+          {beside}
+          {live && (
+            <Button
+              rounded
+              outline
+              className={buttons === 3 ? 'col-span-2' : ''}
+              onClick={() => void navigate({ to: '/', search: (prev) => ({ ...prev, settings: 'live-links' }) })}
+            >
+              <span className="mr-1.5 size-2 rounded-full bg-[var(--online)]" aria-hidden="true" />
+              Sharing live
+            </Button>
+          )}
+        </div>
+        {notice && (
+          <p className="text-sm opacity-60" role="status">
+            {notice}
+          </p>
         )}
-        {beside}
-        {live && (
-          <Button
-            rounded
-            outline
-            className="col-span-2"
-            onClick={() => void navigate({ to: '/', search: (prev) => ({ ...prev, settings: 'live-links' }) })}
-          >
-            <span className="mr-1.5 size-2 rounded-full bg-[var(--online)]" aria-hidden="true" />
-            Sharing live
-          </Button>
+        {manual && (
+          <input
+            className="w-full rounded-xl bg-black/5 px-3 py-2 text-base dark:bg-white/10"
+            readOnly
+            value={manual}
+            aria-label="Live link: select and copy it"
+            onFocus={(event) => event.currentTarget.select()}
+          />
         )}
+        {host &&
+          createPortal(
+            <ShareCard
+              asset={asset}
+              open={open}
+              onSendLocation={() => void sendLocation()}
+              onShareLive={(hours) => void shareLive(hours)}
+              onClose={() => {
+                setOpen(false)
+                moveFocus(shareButton.current)
+              }}
+            />,
+            host,
+          )}
       </div>
-      {notice && (
-        <p className="text-sm opacity-60" role="status">
-          {notice}
-        </p>
-      )}
-      {manual && (
-        <input
-          className="w-full rounded-xl bg-black/5 px-3 py-2 text-base dark:bg-white/10"
-          readOnly
-          value={manual}
-          aria-label="Live link: select and copy it"
-          onFocus={(event) => event.currentTarget.select()}
-        />
-      )}
-      {host &&
-        createPortal(
-          <ShareCard
-            asset={asset}
-            open={open}
-            onSendLocation={() => void sendLocation()}
-            onShareLive={(hours) => void shareLive(hours)}
-            onClose={() => {
-              setOpen(false)
-              moveFocus(shareButton.current)
-            }}
-          />,
-          host,
-        )}
-    </div>
+    </>
   )
 }
 

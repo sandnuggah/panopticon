@@ -117,7 +117,8 @@ function Details({
   const status = assetStatus(asset, { presence, stay, activity }, now)
   return (
     <>
-      <div className="flex items-center gap-3 pr-12">
+      {/* Room for Share and ✕ at the top right. */}
+      <div className="flex items-center gap-3 pr-25">
         <AssetAvatar asset={asset} stale={isGrey(status)} />
         <div className="min-w-0 flex-1">
           <h2 className="text-2xl font-bold break-words">{asset.name}</h2>

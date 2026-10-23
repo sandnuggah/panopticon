@@ -7,6 +7,7 @@
 // Event forwarding, for alerts: FORWARD_URL=http://localhost:3001/hooks/traccar-events and
 // FORWARD_HEADER='Authorization: Bearer <TRACCAR_EVENTS_SECRET>' post live events there, as
 // Traccar's event.forward.url and event.forward.header do. DELAY_MS=800 makes it a slow Traccar.
+// SIXTEN_AT_HOME=1 has Sixten walk to Home instead of daycare, so two assets share Home's pin.
 // HISTORY_HOURS=720 gives Betty a month of walks for the Stats card (6 hours by default), with
 // a rest day now and then.
 // Assets: Betty (photo, lives at Home and goes for a walk round Södermalm every three hours; the
@@ -89,6 +90,7 @@ const ADDRESSES = [
 ]
 /** Device-geofence links, as "deviceId:geofenceId". */
 const links = new Set(['30:2', '10:1'])
+if (process.env.SIXTEN_AT_HOME) links.add('10:2')
 const events = []
 let nextEventId = 1
 /** Each device's geofences at its latest position, to notice arriving and leaving. */
@@ -186,6 +188,8 @@ function report(deviceId, time, lat, lon, valid = true) {
 const history = new Map(devices.map((device) => [device.id, []]))
 const DAYCARE = [59.3577, 18.0912]
 const HOME = [59.3132, 18.0785]
+/** Where Sixten ends up: daycare, or Home with SIXTEN_AT_HOME. */
+const SIXTEN_SPOT = process.env.SIXTEN_AT_HOME ? HOME : DAYCARE
 const jitter = () => (Math.random() - 0.5) * 0.0003
 /** A still tracker (asleep, or indoors) reports this often. */
 const STILL_MS = 60_000
@@ -196,7 +200,8 @@ const STILL_MS = 60_000
   const walkStart = start - 3 * 3600_000
   for (let t = walkStart; t < start; t += 30_000) {
     const progress = Math.min(1, (t - walkStart) / 3600_000)
-    const [lat, lon] = progress < 1 ? [from[0] + (DAYCARE[0] - from[0]) * progress, from[1] + (DAYCARE[1] - from[1]) * progress] : DAYCARE
+    const [lat, lon] =
+      progress < 1 ? [from[0] + (SIXTEN_SPOT[0] - from[0]) * progress, from[1] + (SIXTEN_SPOT[1] - from[1]) * progress] : SIXTEN_SPOT
     history.get(10).push(report(10, t, lat + jitter() * (progress < 1 ? 0.3 : 1), lon + jitter() * (progress < 1 ? 0.3 : 1)))
   }
 }
@@ -674,7 +679,7 @@ setInterval(() => {
   const still = tick++ % Math.max(1, Math.round(STILL_MS / STEP_MS)) === 0
   const positions = []
   if (betty.walking || still) positions.push(report(30, now, ...betty.at))
-  if (still) positions.push(report(10, now, DAYCARE[0] + jitter(), DAYCARE[1] + jitter()))
+  if (still) positions.push(report(10, now, SIXTEN_SPOT[0] + jitter(), SIXTEN_SPOT[1] + jitter()))
   for (const position of positions) {
     history.get(position.deviceId)?.push(position)
     const device = devices.find((candidate) => candidate.id === position.deviceId)

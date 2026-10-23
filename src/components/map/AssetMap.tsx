@@ -57,7 +57,13 @@ type Props = {
   /** Changes on every selection, so selecting the already-selected asset again re-centres on it. */
   focusToken: number
   onSelect: (id: number) => void
-  onDeselect: () => void
+  /** The selected asset's marker was tapped; the page decides what that does (see `centred`). */
+  onSelectedTap: (id: number) => void
+  /**
+   * Filled in by the map: whether the selected asset is centred (within 12 px of the middle of the
+   * visible map, or being followed), for taps on it here or in the bottom bar.
+   */
+  centred?: { current: (() => boolean) | null }
   /** Where the map's buttons go (see MapButtons): above the bottom bar, or top right with your position. */
   buttons: 'above-bar' | 'top-right'
   /** Your own position on the map, turned on and off by the bottom bar or the map's buttons. */
@@ -97,7 +103,8 @@ export default function AssetMap({
   selectedId,
   focusToken,
   onSelect,
-  onDeselect,
+  onSelectedTap,
+  centred,
   buttons,
   showMe,
   onShowMeChange,
@@ -118,6 +125,13 @@ export default function AssetMap({
   const updateMarkersRef = useRef(() => {})
   const cameraPlacedRef = useRef(false)
   const [styleLoaded, setStyleLoaded] = useState(false)
+  // Assets at the same spot (at one place, on its pin) are a stack; tapping it fans them out, and
+  // tapping one of them, or the map, folds it again. The stack fanned out, by its spot.
+  const [fanned, setFanned] = useState<string | null>(null)
+  /** Each asset's stack: its spot, and how many share it. */
+  const stacksRef = useRef(new Map<number, { spot: string; size: number }>())
+  // Selecting another asset (in the bottom bar too) folds it.
+  useEffect(() => setFanned(null), [selectedId])
   const now = useNow(30_000)
 
   // Following the selected asset: the map keeps its latest position centred. Dragging the map pauses
@@ -172,15 +186,22 @@ export default function AssetMap({
 
   useEffect(() => {
     onMarkerTapRef.current = (id) => {
-      const map = mapRef.current
-      if (id !== selectedId || !map || !target) return onSelect(id)
-      // The selected asset: deselect it when it's centred (or being followed); otherwise centre it
-      // again, which also resumes following.
-      const point = map.project([target.lon, target.lat])
-      const middle = visibleMiddle(map)
-      const offCentre = Math.hypot(point.x - middle.x, point.y - middle.y)
-      if (following || offCentre <= CENTRED_PX) onDeselect()
+      const stack = stacksRef.current.get(id)
+      // A folded stack opens first, so each of its assets can be tapped.
+      if (stack && stack.size > 1 && fanned !== stack.spot) return setFanned(stack.spot)
+      setFanned(null)
+      if (id === selectedId && target) onSelectedTap(id)
       else onSelect(id)
+    }
+    if (centred) {
+      centred.current = () => {
+        const map = mapRef.current
+        if (!map || !target) return false
+        if (following) return true
+        const point = map.project([target.lon, target.lat])
+        const middle = visibleMiddle(map)
+        return Math.hypot(point.x - middle.x, point.y - middle.y) <= CENTRED_PX
+      }
     }
     focusTokenRef.current = focusToken
     targetRef.current = following ? [targetLon, targetLat] : null
@@ -276,6 +297,8 @@ export default function AssetMap({
     mapRef.current = map
     // From the start: the first move to a place (the place editor's jump to it) can come before the tiles.
     map.on('zoom', () => updateMarkersRef.current())
+    // Tapping the map (not a marker: they stop the tap there) folds a fanned-out stack.
+    map.on('click', () => setFanned(null))
     const markers = markersRef.current
     return () => {
       markers.clear()
@@ -363,6 +386,24 @@ export default function AssetMap({
         markers.delete(id)
       }
     }
+    // Stacks: assets shown at the same spot, the selected one on top, then in the bottom bar's order.
+    const spots = new Map<string, number[]>()
+    for (const asset of assets) {
+      if (!asset.location) continue
+      const spot = `${asset.location.lat},${asset.location.lon}`
+      spots.set(spot, [...(spots.get(spot) ?? []), asset.id])
+    }
+    const stacks = stacksRef.current
+    stacks.clear()
+    for (const [spot, ids] of spots) {
+      ids.sort((a, b) => Number(b === selectedId) - Number(a === selectedId))
+      for (const id of ids) stacks.set(id, { spot, size: ids.length })
+    }
+    const stackOf = (id: number) => {
+      const stack = stacks.get(id)
+      if (!stack || stack.size < 2) return undefined
+      return { index: spots.get(stack.spot)!.indexOf(id), size: stack.size, fanned: fanned === stack.spot }
+    }
     updateMarkersRef.current = () => {
       for (const asset of assets) {
         const marker = markers.get(asset.id)
@@ -370,11 +411,16 @@ export default function AssetMap({
         // At a place too small on screen to show its own pin: the asset wears it.
         const atPlace = places.find((place) => place.id === presence[asset.id]?.place && !showsPin(map, place))?.name
         const status = statuses?.[asset.id] ?? assetStatus(asset, { presence: presence[asset.id] }, now)
-        updateMarkerElement(marker.getElement(), asset, { stale: isGrey(status), selected: asset.id === selectedId, atPlace })
+        updateMarkerElement(marker.getElement(), asset, {
+          stale: isGrey(status),
+          selected: asset.id === selectedId,
+          atPlace,
+          stack: stackOf(asset.id),
+        })
       }
     }
     updateMarkersRef.current()
-  }, [assets, selectedId, now, places, presence, statuses])
+  }, [assets, selectedId, now, places, presence, statuses, fanned])
 
   // First render: show the selected asset, or fit all assets. Afterwards: fly to each new selection.
   useEffect(() => {

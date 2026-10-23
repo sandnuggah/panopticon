@@ -664,6 +664,20 @@ html.dark:has(.k-material) {
   padding: 0;
   border: 0;
   background: none;
+  /* Stacking and fanning out (markers.ts): `translate` adds to the transform maplibre positions it with. */
+  transition: translate 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marker {
+    transition: none;
+  }
+}
+
+/* Behind the top marker of a stack: only its edge shows, without a name or badge of its own. */
+.marker-behind .marker-label,
+.marker-behind .marker-badge {
+  visibility: hidden;
 }
 
 .marker-dot {

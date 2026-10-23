@@ -338,11 +338,24 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
     if (selectedId !== undefined) void navigate({ search: {}, replace: true })
   }
 
-  /** A picture in the bottom bar: the first tap selects and centres the asset, the next re-centres it and opens its details. */
+  /** Whether the selected asset is centred on the map (AssetMap fills it in). */
+  const centred = useRef<(() => boolean) | null>(null)
+
+  /**
+   * A tap on the selected asset, its picture in the bottom bar or its marker: off-centre (the map
+   * was dragged), it's centred again; centred, its details open; with them open, the marker
+   * deselects it and the picture centres it again.
+   */
+  function tapSelected(onMap: boolean) {
+    if (!(centred.current?.() ?? true) || (details && !onMap)) return setFocusToken((token) => token + 1)
+    if (!details) return cards.open('details', (prev) => ({ ...prev, details: true }))
+    deselect()
+  }
+
+  /** A picture in the bottom bar: the first tap selects and centres the asset, then see tapSelected. */
   function tapAsset(id: number) {
     if (id !== selectedId) return select(id)
-    setFocusToken((token) => token + 1)
-    if (!details) cards.open('details', (prev) => ({ ...prev, details: true }))
+    tapSelected(false)
   }
 
   const closeDetails = () => cards.close('details', ({ details: _, ...rest }) => rest)
@@ -386,7 +399,8 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
               selectedId={editing ? undefined : selectedId}
               focusToken={focusToken}
               onSelect={select}
-              onDeselect={deselect}
+              onSelectedTap={() => tapSelected(true)}
+              centred={centred}
               buttons="above-bar"
               showMe={showMe}
               onShowMeChange={setShowMe}
