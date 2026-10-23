@@ -72,6 +72,13 @@ describe('matchableWalks', () => {
     assert.notEqual(walkSignature(points), walkSignature(points.map(({ stood, ...point }) => point)))
   })
 
+  test("a walk runs from its stay's dot, where the map draws it", () => {
+    const move: TrailPiece = { kind: 'move', points: [fix(20, 0, 10), fix(60, 0, 11), fix(100, 0, 12)] }
+    const home = { ...stay(0, 0, 10), dot: fix(-30, 0, 0) }
+    const points = matchableWalks([home, move])[0]!.points
+    assert.deepEqual([points[0]!.lat, points[0]!.lon], [home.dot.lat, home.dot.lon])
+  })
+
   test('wandering about without going anywhere is no walk', () => {
     const move: TrailPiece = { kind: 'move', points: [fix(0, 0, 0), fix(20, 5, 1), fix(40, 0, 2), fix(10, 5, 3)] }
     assert.deepEqual(matchableWalks([move]), [])

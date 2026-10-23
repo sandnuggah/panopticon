@@ -176,8 +176,12 @@ export type PlaceStay = { from: number; to: number | null; center: LatLon }
 export type TrailPiece =
   /** On foot: the GPS fixes in order. */
   | { kind: 'move'; points: TrailPoint[] }
-  /** In one place for a while: where, and roughly how big an area. `atPlace`: at one of the asset's places, at its middle. */
-  | { kind: 'stay'; center: LatLon; radius: number; from: number; to: number; atPlace?: boolean }
+  /**
+   * In one place for a while: where, and roughly how big an area. `atPlace`: at one of the asset's
+   * places, at its middle. `dot`: where its dot is drawn, and its walks run to (see stayDots);
+   * `dotAtPlace`: that's a place's, whose pin is drawn there instead.
+   */
+  | { kind: 'stay'; center: LatLon; radius: number; from: number; to: number; atPlace?: boolean; dot?: LatLon; dotAtPlace?: boolean }
   /**
    * Riding: from the last fix before to the first fix after, through the fixes on the way. Each
    * leg is with GPS or without (underground, drawn straight). The ride is what it was for most of
@@ -217,32 +221,62 @@ export function latestOutingStart(pieces: TrailPiece[]): number | null {
 export type StayDot = { center: LatLon; to: number; ms: number; atPlace?: boolean }
 
 /**
- * Stays as dots on the map. A stay this close to a longer one's dot (back at the same place later,
- * home on two days) joins it, whenever it was; the dot is at the longest stay of its group, or at one of
- * the asset's places, and fades by the latest. Returns the dots and, for each stay, the index of its
- * dot, so the walks can run to it. This is only for drawing: the trail keeps each visit, so "Here
- * since" is the current one.
+ * Stays as dots on the map, oldest first. A stay this close to one of the asset's places is at its
+ * dot, whenever it was (home on two days). Any other stay this close to an earlier one's dot joins it
+ * within one outing (no visit to a place, or stay of BASE_STAY_MS, between them: a stop in the park,
+ * and back at it on the way home), and a dot stays where its first stay is: a dot that moved to its
+ * longest stay hopped up to 30 m when a later one outgrew it, with the walks to it, and between days
+ * a dot can't tell the morning's bench from the evening's. Each dot fades by its latest stay. Returns
+ * the dots and, for each stay, the index of its dot, so the walks can run to it. This is only for
+ * drawing: the trail keeps each visit, so "Here since" is the current one.
  */
 export function stayDots(stays: { center: LatLon; from: number; to: number; atPlace?: boolean }[]): { dots: StayDot[]; dotOf: number[] } {
   const dots: StayDot[] = []
   const dotOf: number[] = []
-  const length = (index: number) => stays[index]!.to - stays[index]!.from
-  const rank = (index: number) => (stays[index]!.atPlace ? 1 : 0)
-  const longestFirst = stays.map((_, index) => index).sort((a, b) => rank(b) - rank(a) || length(b) - length(a))
-  for (const index of longestFirst) {
-    const stay = stays[index]!
-    const near = dots.findIndex((dot) => distance(dot.center, stay.center) <= STAY_DOT_JOIN_METERS)
-    if (near < 0) {
-      const dot: StayDot = { center: stay.center, to: stay.to, ms: stay.to - stay.from }
-      if (stay.atPlace) dot.atPlace = true
-      dotOf[index] = dots.push(dot) - 1
-    } else {
-      const dot = dots[near]!
-      dots[near] = { ...dot, to: Math.max(dot.to, stay.to), ms: dot.ms + stay.to - stay.from }
-      dotOf[index] = near
-    }
+  const join = (index: number, near: number) => {
+    const [stay, dot] = [stays[index]!, dots[near]!]
+    dots[near] = { ...dot, to: Math.max(dot.to, stay.to), ms: dot.ms + stay.to - stay.from }
+    dotOf[index] = near
   }
+  const add = (index: number) => {
+    const stay = stays[index]!
+    const dot: StayDot = { center: stay.center, to: stay.to, ms: stay.to - stay.from }
+    if (stay.atPlace) dot.atPlace = true
+    return (dotOf[index] = dots.push(dot) - 1)
+  }
+  const near = (index: number, among: number[]) =>
+    among.find((dot) => distance(dots[dot]!.center, stays[index]!.center) <= STAY_DOT_JOIN_METERS)
+  // The places' dots first, so a stay near one is at it.
+  const places: number[] = []
+  stays.forEach((stay, index) => {
+    if (!stay.atPlace) return
+    const at = near(index, places)
+    if (at === undefined) places.push(add(index))
+    else join(index, at)
+  })
+  // The dots the outing so far has: a visit to a place, or a long stay, begins another.
+  let open: number[] = []
+  stays.forEach((stay, index) => {
+    if (!stay.atPlace) {
+      const at = near(index, places) ?? near(index, open)
+      if (at === undefined) open.push(add(index))
+      else join(index, at)
+    }
+    if (stay.atPlace || stay.to - stay.from >= BASE_STAY_MS) open = stay.atPlace ? [] : [dotOf[index]!]
+  })
   return { dots, dotOf }
+}
+
+/** The pieces with each stay's dot (see stayDots), worked out over all of them, so it's the same in any window. */
+export function withDots(pieces: TrailPiece[]): TrailPiece[] {
+  const stays = pieces.filter((piece): piece is StayPiece => piece.kind === 'stay')
+  const { dots, dotOf } = stayDots(stays)
+  let index = 0
+  return pieces.map((piece) => {
+    if (piece.kind !== 'stay') return piece
+    const dot = dots[dotOf[index++]!]!
+    return { ...piece, dot: dot.center, ...(dot.atPlace && { dotAtPlace: true }) }
+  })
 }
 
 /** Great-circle distance in metres. */

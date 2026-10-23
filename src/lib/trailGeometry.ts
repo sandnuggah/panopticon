@@ -1,7 +1,7 @@
 import { stayHopId, walkId } from './matching.ts'
 import type { Place } from './places.ts'
 import { placeStays, quietAfter } from './presence.ts'
-import { classifyTrail, latestOutingStart, stayDots, type LatLon, type StayDot, type TrailPiece } from './segments.ts'
+import { classifyTrail, latestOutingStart, withDots, type LatLon, type StayDot, type TrailPiece } from './segments.ts'
 import type { SnappedLine, SnappedLines } from './snapLines.ts'
 import { trailProfile, type TrackerKind } from './tracker.ts'
 import type { TrailPoint, Trails } from './trail.ts'
@@ -68,7 +68,7 @@ export function trailView(
   const fixes = points.filter((point) => point.valid)
   if (fixes.length === 0) return null
   const profile = trailProfile(tracker)
-  const pieces = classifyTrail(points, { visits: placeStays(points, places, id, profile, quiet), profile })
+  const pieces = withDots(classifyTrail(points, { visits: placeStays(points, places, id, profile, quiet), profile }))
   return { pieces, oldest: fixes[0]!.time, newest: fixes.at(-1)!.time, outing: latestOutingStart(pieces) }
 }
 
@@ -169,14 +169,17 @@ function pieceEnd(piece: TrailPiece): number {
 }
 
 /** Draws a trail, along the lines Snap to paths has for its walks (by walk id, see snapLines.ts). */
-export function drawTrail({ pieces, oldest, newest, outing: latest }: TrailView, lines: Record<string, SnappedLine> = {}): DrawnTrail {
+export function drawTrail(view: TrailView, lines: Record<string, SnappedLine> = {}): DrawnTrail {
+  const { oldest, newest, outing: latest } = view
+  // Each stay's dot, as worked out for all of the trail (see trailView), or for these pieces.
+  const pieces = view.pieces.some((piece) => piece.kind === 'stay' && !piece.dot) ? withDots(view.pieces) : view.pieces
   // The latest outing from 0.55 at its start to 0.95 at its newest point; older ones from 0.12 to 0.25.
   const outing = latest ?? oldest
   const along = (time: number, from: number, to: number) => (to > from ? Math.min(1, Math.max(0, (time - from) / (to - from))) : 1)
   const opacity = (time: number) => (time >= outing ? 0.55 + 0.4 * along(time, outing, newest) : 0.12 + 0.13 * along(time, oldest, outing))
   const drawn: DrawnTrail = { walks: [], rides: [], dots: [], opacity }
   const stayIndexes = pieces.flatMap((piece, index) => (piece.kind === 'stay' ? [index] : []))
-  const { dots, dotOf } = stayDots(stayIndexes.map((index) => pieces[index] as Extract<TrailPiece, { kind: 'stay' }>))
+  const { dots, dotOf } = shownDots(stayIndexes.map((index) => pieces[index] as Extract<TrailPiece, { kind: 'stay' }>))
   drawn.dots = dots
   /** The dot of the stay at `index` in the pieces, if there's a stay there. */
   const dotAt = (index: number) => {
@@ -266,6 +269,26 @@ export function toTrailFeatures(trails: TrailViews, lines: SnappedLines = {}): {
     trail: { type: 'FeatureCollection', features: trail },
     paws: { type: 'FeatureCollection', features: paws },
   }
+}
+
+/** The dots of the stays drawn: one for each dot they're at (see withDots), fading by the latest of them. */
+function shownDots(stays: Extract<TrailPiece, { kind: 'stay' }>[]): { dots: StayDot[]; dotOf: number[] } {
+  const dots: StayDot[] = []
+  const dotOf: number[] = []
+  stays.forEach((stay, index) => {
+    const center = stay.dot ?? stay.center
+    const at = dots.findIndex((dot) => dot.center.lat === center.lat && dot.center.lon === center.lon)
+    if (at < 0) {
+      const dot: StayDot = { center, to: stay.to, ms: stay.to - stay.from }
+      // A place's, even when only a stay near it is shown: its pin is there.
+      if (stay.atPlace || stay.dotAtPlace) dot.atPlace = true
+      dotOf[index] = dots.push(dot) - 1
+    } else {
+      dots[at] = { ...dots[at]!, to: Math.max(dots[at]!.to, stay.to), ms: dots[at]!.ms + stay.to - stay.from }
+      dotOf[index] = at
+    }
+  })
+  return { dots, dotOf }
 }
 
 /** A walk's line to draw, if it has one with any points: a walk of strays left out is drawn as recorded. */

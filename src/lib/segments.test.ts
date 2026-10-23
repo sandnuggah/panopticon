@@ -340,7 +340,7 @@ describe('stayDots', () => {
     assert.equal(dots.length, 1)
     assert.deepEqual(dotOf, [0, 0])
     assert.equal(dots[0]!.to, visits[1]!.to, 'fades by the latest visit')
-    assert.deepEqual(dots[0]!.center, visits[1]!.center, 'at the longest visit')
+    assert.deepEqual(dots[0]!.center, visits[0]!.center, 'at the first visit, where it was drawn first')
     assert.equal(dots[0]!.ms, visits[0]!.to - visits[0]!.from + visits[1]!.to - visits[1]!.from)
   })
 
@@ -435,6 +435,19 @@ describe('places', () => {
       stays(pieces).map((stay) => stay.atPlace),
       [true, undefined],
     )
+  })
+
+  test('stays near each other are one dot within an outing, not across a visit to a place or a long stay', () => {
+    const minute = 60 * 1000
+    const [bench, back] = [
+      { center: at(0), from: 0, to: 10 * minute },
+      { center: at(30), from: 60 * minute, to: 70 * minute },
+    ]
+    assert.equal(stayDots([bench, { center: at(300), from: 20 * minute, to: 30 * minute }, back]).dots.length, 2, 'a short stop between')
+    const home = { center: at(500), from: 20 * minute, to: 50 * minute, atPlace: true }
+    assert.equal(stayDots([bench, home, back]).dots.length, 3, 'home between')
+    const long = { center: at(300), from: 20 * minute, to: 50 * minute }
+    assert.equal(stayDots([bench, long, back]).dots.length, 3, 'a long stay between')
   })
 
   test("a place's dot takes in a longer stay nearby", () => {

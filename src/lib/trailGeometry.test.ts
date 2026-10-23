@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { matchableWalks, walkId } from './matching.ts'
 import type { Place } from './places.ts'
-import { latestOutingStart, type LatLon, type TrailPiece } from './segments.ts'
+import { latestOutingStart, withDots, type LatLon, type TrailPiece } from './segments.ts'
 import type { SnappedLine } from './snapLines.ts'
 import type { TrailPoint } from './trail.ts'
 import {
@@ -248,6 +248,33 @@ describe('trailViews and shownTrails', () => {
 })
 
 describe('drawTrail', () => {
+  test("a stay that joins a place's dot is drawn as the place: no dot under its pin", () => {
+    const at = (east: number, minutes: number): TrailPoint => ({
+      lat: START.lat,
+      lon: START.lon + east / METERS_PER_DEGREE_LON,
+      time: START.time + minutes * 60_000,
+      valid: true,
+    })
+    const minute = 60_000
+    // A stop 25 m from Home before Home's visit is in the trail; then out and back, and home.
+    const pieces: TrailPiece[] = [
+      { kind: 'stay', center: at(25, 0), radius: 10, from: START.time, to: START.time + 10 * minute },
+      { kind: 'move', points: [at(25, 10), at(300, 15), at(0, 20)] },
+      { kind: 'stay', center: at(0, 20), radius: 10, from: START.time + 20 * minute, to: START.time + 60 * minute, atPlace: true },
+    ]
+    const view: TrailView = { pieces, oldest: START.time, newest: START.time + 60 * minute, outing: null }
+    assert.deepEqual(
+      drawTrail(view).dots.map((dot) => !!dot.atPlace),
+      [true],
+    )
+    // Home, out, the stop, and home again, drawn from the stop on: without the first visit shown.
+    const home = pieces[2] as Extract<TrailPiece, { kind: 'stay' }>
+    const day = withDots([{ ...home, from: START.time - 60 * minute, to: START.time - 30 * minute }, pieces[1]!, ...pieces])
+    assert.deepEqual(
+      drawTrail(trailFrom({ ...view, pieces: day }, 2)!).dots.map((dot) => !!dot.atPlace),
+      [true],
+    )
+  })
   const trip = new Trip().stay(10).walk(10).stay(10)
   const trail = view(trip)
   const move = trail.pieces[1] as Extract<TrailPiece, { kind: 'move' }>

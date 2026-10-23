@@ -98,16 +98,18 @@ export function matchableWalks(
   const walks: MatchableWalk[] = []
   pieces.forEach((piece, index) => {
     const [before, after] = [pieces[index - 1], pieces[index + 1]]
-    if (piece.kind === 'stay' && before?.kind === 'stay' && distance(before.center, piece.center) >= STAY_HOP_METERS) {
+    const dot = (stay: Extract<TrailPiece, { kind: 'stay' }>) => stay.dot ?? stay.center
+    if (piece.kind === 'stay' && before?.kind === 'stay' && distance(dot(before), dot(piece)) >= STAY_HOP_METERS) {
       // Straight from one stay to the next (the walk between them was part of one): routed, if anything.
       const points = [
-        { ...before.center, time: before.to, anchor: true },
-        { ...piece.center, time: piece.from, anchor: true },
+        { ...dot(before), time: before.to, anchor: true },
+        { ...dot(piece), time: piece.from, anchor: true },
       ]
       walks.push({ id: stayHopId(before, piece), signature: walkSignature(points), points })
     }
     if (piece.kind !== 'move') return
-    const [from, to] = [before?.kind === 'stay' ? before.center : null, after?.kind === 'stay' ? after.center : null]
+    // From the dot drawn (see withDots), so the line meets it.
+    const [from, to] = [before?.kind === 'stay' ? dot(before) : null, after?.kind === 'stay' ? dot(after) : null]
     // Anywhere along it, not just at its end: a walk round the block and home again counts.
     const start = from ?? piece.points[0]!
     if (![...piece.points, ...(to ? [to] : [])].some((point) => distance(start, point) >= MIN_WALK_METERS)) return
