@@ -12,9 +12,10 @@
   --color-brand-primary: #2f8f5b;
 }
 
-/* Colours for the map, which Konsta's components don't style. AssetMap reads --trail. */
+/* Colours for the map, which Konsta's components don't style. The trail's own colour is chosen in
+   Appearance (lib/trailColors.ts); its casing is --trail-casing. */
 :root {
-  --trail: #2f8f5b;
+  --trail-casing: #ffffff;
   --place: #5856d6;
   --marker: #2f8f5b;
   --marker-text: #ffffff;
@@ -145,7 +146,7 @@ html.dark:has(.k-material) {
 }
 
 .dark {
-  --trail: #5cc98d;
+  --trail-casing: #1c1c1e;
   --place: #7d7aff;
   --marker: #5cc98d;
   --marker-text: #06200f;
@@ -159,7 +160,7 @@ html.dark:has(.k-material) {
 /* What's drawn on the map (trail, places, markers and their labels) takes the map style's colours,
    a day or a night map, whatever the device's mode (AssetMap, map/mapStyles.ts). */
 .map-light {
-  --trail: #2f8f5b;
+  --trail-casing: #ffffff;
   --place: #5856d6;
   --marker: #2f8f5b;
   --marker-text: #ffffff;
@@ -169,7 +170,7 @@ html.dark:has(.k-material) {
 }
 
 .map-dark {
-  --trail: #5cc98d;
+  --trail-casing: #1c1c1e;
   --place: #7d7aff;
   --marker: #5cc98d;
   --marker-text: #06200f;

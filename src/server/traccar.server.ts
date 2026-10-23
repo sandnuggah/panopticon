@@ -1,4 +1,5 @@
 import { env } from './env.server'
+import { TRAIL_COLORS } from '../lib/trailColors'
 
 // Typed client for the few Traccar endpoints panopticon uses. Responses are checked
 // field by field so a changed Traccar API fails loudly instead of rendering nonsense.
@@ -32,6 +33,8 @@ export type TraccarDevice = {
   model: string | null
   /** Which phones want alerts for it, sealed (attribute `panopticonAlerts`, see alertsSeal.server.ts). */
   alerts: string | null
+  /** The colour its trail is drawn in, by id (attribute `panopticonTrailColor`, see trailColors.ts), if chosen. */
+  trailColor: string | null
 }
 
 export type TraccarPosition = {
@@ -498,7 +501,15 @@ function parseDevice(value: unknown): TraccarDevice {
     image: readDeviceImage(value.attributes),
     model: typeof value.model === 'string' && value.model.trim() !== '' ? value.model.trim() : null,
     alerts: isObject(value.attributes) && typeof value.attributes.panopticonAlerts === 'string' ? value.attributes.panopticonAlerts : null,
+    trailColor: readTrailColor(value.attributes),
   }
+}
+
+/** Only a colour panopticon offers; anything else in the attribute is ignored. */
+function readTrailColor(attributes: unknown): string | null {
+  if (!isObject(attributes)) return null
+  const color = attributes.panopticonTrailColor
+  return typeof color === 'string' && TRAIL_COLORS.some((option) => option.id === color) ? color : null
 }
 
 /** Traccar always stores uploads as device.<ext>; anything else is ignored, which also rules out odd paths. */

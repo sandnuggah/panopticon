@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { MAX_IMAGE_BYTES, sniffImageType } from '../lib/assetImage'
+import { TRAIL_COLORS } from '../lib/trailColors'
 import {
   clearAssetImage,
   createAsset,
@@ -8,6 +9,7 @@ import {
   loadManagedAssets,
   saveAssetImage,
   updateAssetName,
+  updateAssetTrailColor,
   type EditResult,
 } from './manage.server'
 import { withToken } from './session.server'
@@ -31,6 +33,10 @@ export const addAsset = createServerFn({ method: 'POST' })
 export const renameAsset = createServerFn({ method: 'POST' })
   .validator((input: unknown) => ({ id: parseIdInput(input).id, name: parseName(fields(input).name) }))
   .handler(({ data }) => withToken((token) => updateAssetName(token, data.id, data.name)))
+
+export const setAssetTrailColor = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => ({ id: parseIdInput(input).id, color: parseTrailColor(fields(input).color) }))
+  .handler(({ data }) => withToken((token) => updateAssetTrailColor(token, data.id, data.color)))
 
 export const removeAsset = createServerFn({ method: 'POST' })
   .validator(parseIdInput)
@@ -78,6 +84,12 @@ function parseName(name: unknown): string {
   const trimmed = name.trim()
   if (!trimmed || trimmed.length > MAX_LENGTH) throw new Error('Invalid request')
   return trimmed
+}
+
+/** One of the colours offered (see trailColors.ts). */
+function parseTrailColor(color: unknown): string {
+  if (typeof color !== 'string' || !TRAIL_COLORS.some((option) => option.id === color)) throw new Error('Invalid request')
+  return color
 }
 
 /** Usually an IMEI or serial number: printable characters, no spaces. */

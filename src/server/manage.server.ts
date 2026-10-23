@@ -19,7 +19,7 @@ import {
 // Adding, renaming and removing assets, and changing their photos, through Traccar's device API.
 // Traccar enforces who may do what; the access check here only decides which controls to show.
 
-export type ManagedAsset = Pick<Asset, 'id' | 'name' | 'imageUrl'> & { disabled: boolean }
+export type ManagedAsset = Pick<Asset, 'id' | 'name' | 'imageUrl' | 'trailColor'> & { disabled: boolean }
 
 export type AssetAccess = {
   /** May rename, remove and change photos (Traccar's read-only settings are off). */
@@ -76,6 +76,16 @@ export function deleteAsset(token: string, id: number): Promise<EditResult> {
   })
 }
 
+/** The colour its trail is drawn in (one of trailColors.ts's), stored on the device in Traccar, so it's the same everywhere. */
+export function updateAssetTrailColor(token: string, id: number, color: string): Promise<EditResult> {
+  return attempt(token, async () => {
+    await updateDevice(token, id, (device) => {
+      deviceAttributes(device).panopticonTrailColor = color
+    })
+    return { ok: true }
+  })
+}
+
 /** Uploads the image to Traccar and makes it the asset's photo, as Traccar's own UI does. */
 export function saveAssetImage(token: string, id: number, bytes: Uint8Array<ArrayBuffer>, type: string): Promise<EditResult> {
   return attempt(token, async (): Promise<EditResult> => {
@@ -102,7 +112,9 @@ export function clearAssetImage(token: string, id: number): Promise<EditResult> 
 }
 
 function toManagedAsset(device: TraccarDevice): ManagedAsset {
-  return { id: device.id, name: device.name, imageUrl: imageUrl(device), disabled: device.disabled }
+  const asset: ManagedAsset = { id: device.id, name: device.name, imageUrl: imageUrl(device), disabled: device.disabled }
+  if (device.trailColor) asset.trailColor = device.trailColor
+  return asset
 }
 
 /**

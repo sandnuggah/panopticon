@@ -1,10 +1,59 @@
+import type { Marker } from 'maplibre-gl'
 import { assetInitial, type Asset } from '../../lib/asset'
+import { distance } from '../../lib/segments'
 import { PIN_PATH } from './placeLayers'
 
 // The assets' markers: maplibre DOM markers (enough for ≤5), a dot with the asset's picture or
 // initial and a name label, styled in styles.css (.marker). Greyed out when stale, ringed when
 // selected, and wearing a place's pin as a badge when the asset is at a place too small on screen to
 // show its own (see showsPin in placeLayers.ts).
+
+/** A marker moving farther than this goes there at once: a jump, not a glide across the map. */
+const GLIDE_MAX_METERS = 150
+
+/** How the camera eases (maplibre's own default), so a followed marker and the map move as one. */
+export function ease(t: number): number {
+  // cubic-bezier(0.25, 0.1, 0.25, 1), solved for x by bisection.
+  const bezier = (p1: number, p2: number, u: number) => 3 * p1 * u * (1 - u) ** 2 + 3 * p2 * u ** 2 * (1 - u) + u ** 3
+  let [low, high] = [0, 1]
+  for (let k = 0; k < 20; k++) {
+    const middle = (low + high) / 2
+    if (bezier(0.25, 0.25, middle) < t) low = middle
+    else high = middle
+  }
+  return bezier(0.1, 1, (low + high) / 2)
+}
+
+/** Each gliding marker's frame and where it's going. */
+const glides = new WeakMap<Marker, { frame: number; to: [number, number] }>()
+
+/**
+ * Moves a marker to a new position over `ms`, with the camera's easing (see ease), so a followed
+ * asset doesn't jump ahead of the map gliding after it; at once when it's far (GLIDE_MAX_METERS) or
+ * with Reduce Motion on.
+ */
+export function glideMarker(marker: Marker, to: [number, number], ms: number) {
+  const going = glides.get(marker)
+  if (going && going.to[0] === to[0] && going.to[1] === to[1]) return
+  if (going) cancelAnimationFrame(going.frame)
+  glides.delete(marker)
+  const from = marker.getLngLat()
+  if (from.lng === to[0] && from.lat === to[1]) return
+  const far = distance({ lat: from.lat, lon: from.lng }, { lat: to[1], lon: to[0] }) > GLIDE_MAX_METERS
+  if (far || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    marker.setLngLat(to)
+    return
+  }
+  const start = performance.now()
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / ms)
+    const e = ease(t)
+    marker.setLngLat([from.lng + (to[0] - from.lng) * e, from.lat + (to[1] - from.lat) * e])
+    if (t < 1) glides.set(marker, { frame: requestAnimationFrame(step), to })
+    else glides.delete(marker)
+  }
+  glides.set(marker, { frame: requestAnimationFrame(step), to })
+}
 
 /** A marker's element; tapping it calls `onTapRef.current` with the asset's id. */
 export function createMarkerElement(assetId: number, onTapRef: { current: (id: number) => void }): HTMLElement {

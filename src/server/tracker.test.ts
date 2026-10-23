@@ -13,6 +13,7 @@ const device: TraccarDevice = {
   image: null,
   model: 'ST-904L',
   alerts: null,
+  trailColor: null,
 }
 
 /** An ST-904L report, as Traccar stores it: the extra values as text. */

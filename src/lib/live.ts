@@ -12,6 +12,7 @@ export type LiveUpdate =
       lastUpdate: string | null
       disabled: boolean
       imageUrl?: string
+      trailColor?: string
     }
   | {
       kind: 'position'
@@ -51,6 +52,7 @@ export function applyUpdates(assets: Asset[], updates: LiveUpdate[]): { assets: 
             status: update.status,
             lastUpdate: update.lastUpdate,
             imageUrl: update.imageUrl,
+            trailColor: update.trailColor,
           }
     } else {
       // Trackers can deliver buffered positions late; never move backwards in time.

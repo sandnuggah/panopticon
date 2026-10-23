@@ -34,6 +34,8 @@ export type Asset = {
   placeIds: number[]
   /** What kind of tracker it has, by its latest position (see trackers.server.ts); none before its first. */
   tracker?: TrackerKind
+  /** The colour its trail is drawn in, by id (see trailColors.ts); the default's when none was chosen. */
+  trailColor?: string
 }
 
 /** First letter of the name, shown when there's no picture. */

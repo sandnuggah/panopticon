@@ -82,6 +82,7 @@ export function toAsset(device: TraccarDevice, position: TraccarPosition | undef
     placeIds: position?.geofenceIds ?? [],
   }
   if (position) asset.tracker = adapterFor(position.protocol).kind
+  if (device.trailColor) asset.trailColor = device.trailColor
   return asset
 }
 
@@ -94,6 +95,7 @@ export function toDeviceUpdate(device: TraccarDevice): LiveUpdate {
     lastUpdate: device.lastUpdate,
     disabled: device.disabled,
     imageUrl: imageUrl(device),
+    ...(device.trailColor && { trailColor: device.trailColor }),
   }
 }
 

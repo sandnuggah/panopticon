@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { LngLatBounds, MapLibreMap, Marker, setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 // maplibre looks for its worker next to its own file, which breaks once bundled.
@@ -17,7 +17,7 @@ import { resolveStyle, type MapStyle } from '../../lib/mapStyles'
 import { useSettings } from '../../lib/settings'
 import { addMyPositionLayer, createMyPositionDot, setAccuracyCircle } from './myPosition'
 import { circle } from './geometry'
-import { createMarkerElement, updateMarkerElement } from './markers'
+import { createMarkerElement, ease, glideMarker, updateMarkerElement } from './markers'
 import { addTrailLayers, recolourTrails, setTrails, showPawPrints } from './trailLayers'
 import { addPlaceLayers, recolourPlaces, setPlaces, showsPin } from './placeLayers'
 import { NO_COVER, type Cover } from '../cards'
@@ -292,11 +292,17 @@ export default function AssetMap({
     map.setStyle(styleUrl, { diff: false })
   }, [styleUrl])
 
+  // Each asset's trail colour (see trailColors.ts), new only when one changes, not with each position.
+  const trailColorsKey = assets.map((asset) => `${asset.id}:${asset.trailColor ?? ''}`).join(' ')
+  const trailColors = useMemo(
+    () => Object.fromEntries(assets.flatMap((asset) => (asset.trailColor ? [[asset.id, asset.trailColor]] : []))),
+    [trailColorsKey],
+  )
   useEffect(() => {
     const map = mapRef.current
     if (!styleLoaded || !map) return
-    setTrails(map, trails, snappedWalks)
-  }, [trails, snappedWalks, styleLoaded])
+    setTrails(map, trails, snappedWalks, trailColors)
+  }, [trails, snappedWalks, trailColorsKey, styleLoaded])
 
   const editedPlaceId = picker?.placeId
   useEffect(() => {
@@ -313,8 +319,7 @@ export default function AssetMap({
     showPawPrints(map, settings.pawPrints)
   }, [settings.pawPrints, styleLoaded])
 
-  // Trail and place colours for a day or night map. Runs after the map's class has changed, so
-  // --trail already has the new value. That only happens with a switch to another map style, which
+  // Trail and place colours for a day or night map. Runs after the map's class has changed. That only happens with a switch to another map style, which
   // the effect above has just started loading; maplibre throws on the old layers then, and the new
   // style's layers get the new colours as they're added (style.load).
   useEffect(() => {
@@ -336,7 +341,8 @@ export default function AssetMap({
       const lngLat: [number, number] = [asset.location.lon, asset.location.lat]
       let marker = markers.get(asset.id)
       if (marker) {
-        marker.setLngLat(lngLat)
+        // Along with the camera following it (see FOLLOW_MS).
+        glideMarker(marker, lngLat, FOLLOW_MS)
       } else {
         // A marker needs its position before it's added to the map.
         marker = new Marker({
@@ -397,7 +403,7 @@ export default function AssetMap({
     if ((flightRef.current !== null || gestureRef.current) && map.isMoving()) return
     flightRef.current = null
     gestureRef.current = false
-    map.easeTo({ center: [targetLon, targetLat], duration: FOLLOW_MS })
+    map.easeTo({ center: [targetLon, targetLat], duration: FOLLOW_MS, easing: ease })
   }, [targetLon, targetLat, following])
 
   // When a card opens, closes or changes height, the middle of the visible map moves. A followed

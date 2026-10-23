@@ -387,15 +387,15 @@ describe('toTrailFeatures', () => {
     )
   })
 
-  test('walks in pieces of three hops for fading, joined end to end, and whole for paw prints; stays as dots', () => {
+  test('each walk as one line, no beads where pieces of it overlap, and whole for paw prints; stays as dots', () => {
     const trail = view(new Trip().stay(10).walk(10).stay(10))
     const { trail: features, paws } = toTrailFeatures({ 1: trail }, {})
     const walk = drawTrail(trail, {}).walks[0]!
     const lines = features.features
       .filter((feature) => feature.properties.kind === 'move')
       .map((feature) => feature.geometry.coordinates as number[][])
-    assert.equal(lines.length, Math.ceil((walk.points.length - 1) / 3))
-    lines.slice(1).forEach((line, index) => assert.deepEqual(line[0], lines[index]!.at(-1)))
+    assert.equal(lines.length, 1)
+    assert.equal(lines[0]!.length, walk.points.length)
     assert.deepEqual(lines[0]![0], [walk.points[0]!.lon, walk.points[0]!.lat], 'longitude first')
     assert.equal(paws.features.length, 1)
     assert.equal(paws.features[0]!.geometry.coordinates.length, walk.points.length)
@@ -410,6 +410,47 @@ describe('toTrailFeatures', () => {
       dots.every((dot) => dot.properties.minutes! > 9 && dot.properties.minutes! < 11),
       'minutes',
     )
+  })
+
+  test('ways nobody saw as guesses of their own, cut where they begin and end; older outings behind', () => {
+    const trail = view(new Trip().stay(10).walk(10).stay(10))
+    const walk = drawTrail(trail, {}).walks[0]!
+    // Snapped: along the line, then a routed leg of two points, then along the line again.
+    const points = walk.points
+      .slice(1, -1)
+      .map((point, k) => ({ ...point, how: k === 4 || k === 5 ? ('routed' as const) : ('matched' as const) }))
+    const { trail: features } = toTrailFeatures({ 1: trail }, { 1: { [walk.key]: { points, current: true } } })
+    const moves = features.features.filter((feature) => feature.properties.kind === 'move')
+    assert.deepEqual(
+      moves.map((feature) => !!feature.properties.guess),
+      [false, true, false],
+    )
+    moves.slice(1).forEach((line, index) => assert.deepEqual(line.geometry.coordinates[0], moves[index]!.geometry.coordinates.at(-1)))
+    assert.ok(
+      moves.every((feature) => !feature.properties.older),
+      'all of one outing',
+    )
+    const later = view(new Trip().stay(10).walk(10).stay(30).walk(10).stay(10))
+    assert.deepEqual(
+      toTrailFeatures({ 1: later }, {})
+        .trail.features.filter((feature) => feature.properties.kind === 'move')
+        .map((feature) => !!feature.properties.older),
+      [true, false],
+      'the walk before the long stay is an older outing',
+    )
+    assert.equal(toTrailFeatures({ 1: later }, {}).paws.features.length, 1, 'paw prints for the latest outing only')
+  })
+
+  test("each trail in its asset's colour, or the default's", () => {
+    const trail = view(new Trip().stay(10).walk(10).stay(10))
+    const colorsOf = (colors: Record<number, string>) => [
+      ...new Set(
+        toTrailFeatures({ 1: trail, 2: trail }, {}, colors).trail.features.map(
+          (feature) => `${feature.properties.id}:${feature.properties.color}`,
+        ),
+      ),
+    ]
+    assert.deepEqual(colorsOf({ 1: 'pink' }), ['1:pink', '2:green'])
   })
 
   test('a ride through its fixes, as a vehicle', () => {

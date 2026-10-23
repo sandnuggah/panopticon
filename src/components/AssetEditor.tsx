@@ -3,9 +3,19 @@ import { useRouter } from '@tanstack/react-router'
 import { Block, BlockFooter, BlockTitle, Button, Dialog, DialogButton, List, ListButton, ListInput, ListItem } from 'konsta/react'
 import { prepareAssetImage } from '../lib/assetImage'
 import { editErrorMessage } from '../lib/editErrors'
-import { getManagedAsset, removeAsset, removeAssetImage, renameAsset, uploadAssetImage } from '../server/manage.functions'
+import { DEFAULT_TRAIL_COLOR, TRAIL_COLORS } from '../lib/trailColors'
+import {
+  getManagedAsset,
+  removeAsset,
+  removeAssetImage,
+  renameAsset,
+  setAssetTrailColor,
+  uploadAssetImage,
+} from '../server/manage.functions'
 import type { EditResult } from '../server/manage.server'
 import { AssetAvatar } from './AssetAvatar'
+import { CheckIcon } from './icons'
+import { TrailSwatch } from './TrailSwatch'
 import { TrackerSection } from './TrackerSection'
 
 type Loaded = Awaited<ReturnType<typeof getManagedAsset>>
@@ -22,13 +32,14 @@ type Props = {
   onRemoved: () => void
 }
 
-/** One asset: its photo, name, how its tracker is doing, and removing it. */
+/** One asset: its photo, name, trail colour, how its tracker is doing, and removing it. */
 export function AssetEditor({ id, listColors, onRemoved }: Props) {
   const router = useRouter()
   const [data, setData] = useState<Loaded | undefined>()
   const [loadFailed, setLoadFailed] = useState(false)
   const [photo, setPhoto] = useState<Status>(IDLE)
   const [name, setName] = useState<Status>(IDLE)
+  const [color, setColor] = useState<Status>(IDLE)
   const [removal, setRemoval] = useState<Status>(IDLE)
   const [confirming, setConfirming] = useState(false)
 
@@ -147,6 +158,30 @@ export function AssetEditor({ id, listColors, onRemoved }: Props) {
             <StatusMessage status={name} busy="Saving…" />
           </Block>
         </form>
+      )}
+
+      {access.canEdit && (
+        <>
+          <BlockTitle>Trail colour</BlockTitle>
+          <List strong inset colors={listColors}>
+            {TRAIL_COLORS.map((option) => (
+              <ListItem
+                key={option.id}
+                link
+                chevron={false}
+                media={<TrailSwatch day={option.day} night={option.night} />}
+                title={option.name}
+                after={option.id === (asset.trailColor ?? DEFAULT_TRAIL_COLOR) && <CheckIcon />}
+                onClick={() =>
+                  color.kind !== 'busy' &&
+                  change(setColor, () => setAssetTrailColor({ data: { id: asset.id, color: option.id } }), 'Trail colour saved.')
+                }
+              />
+            ))}
+          </List>
+          <StatusMessage status={color} busy="Saving…" />
+          <BlockFooter>Its trail on the map, for everyone who can see {asset.name}, in a lighter shade on a dark map.</BlockFooter>
+        </>
       )}
 
       <TrackerSection assetId={asset.id} listColors={listColors} />
