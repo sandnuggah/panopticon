@@ -1,4 +1,4 @@
-import { distanceLabel, type Outing } from '../lib/outings'
+import { distanceLabel, walkedOuting, type Outing } from '../lib/outings'
 import { durationLabel } from '../lib/places'
 import { OutIcon } from './icons'
 
@@ -31,8 +31,7 @@ export function Outings({ outings, now }: Props) {
               </span>
               <span className="min-w-0 flex-1">
                 {clock.format(outing.from)}–{outing.to === null ? 'now' : clock.format(outing.to)} ·{' '}
-                {durationLabel((outing.to ?? now) - outing.from)} ·{' '}
-                {outing.rode && outing.walked < 50 ? 'a ride' : distanceLabel(outing.walked)}
+                {durationLabel((outing.to ?? now) - outing.from)} · {walkedOuting(outing) ? distanceLabel(outing.walked) : 'a ride'}
               </span>
               <span className="shrink-0 opacity-60">up to {distanceLabel(outing.furthest)}</span>
             </li>

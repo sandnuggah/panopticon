@@ -1,4 +1,4 @@
-import { outingsOf, walkLength } from './outings.ts'
+import { outingsOf, walkedOuting } from './outings.ts'
 import { classifyTrail, DEFAULT_TRAIL_PROFILE, distance, type LatLon, type PlaceStay, type TrailProfile } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
@@ -52,9 +52,11 @@ export function dayStats(
   const stats = { ...NO_WALKS, fixes: points.filter((point) => point.valid).length }
   const last = points.at(-1)?.time ?? 0
   for (const outing of outingsOf(classifyTrail(points, { visits, profile }))) {
+    // A drive to daycare is no walk, nor time out walking.
+    if (!walkedOuting(outing)) continue
     const fixes = outing.walks.flat()
-    // Counted on the day it left (not again after midnight), if it walked: not a drive to daycare.
-    if (outing.began && outing.walks.length > 0) stats.walks++
+    // Counted on the day it left (not again after midnight).
+    if (outing.began) stats.walks++
     stats.walked += outing.walked
     stats.longest = Math.max(stats.longest, outing.walked)
     stats.walking += (outing.to ?? last) - outing.from

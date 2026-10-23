@@ -2,8 +2,9 @@ import { distance, isBase, type LatLon, type TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
 // Outings: from leaving a base (one of the asset's places, or a long stay anywhere; see isBase in
-// segments.ts) to arriving at the next, walks, stops and rides between. The card lists the day's,
-// Stats counts them, and the map draws the latest in front (latestOutingStart), all the same ones.
+// segments.ts) to arriving at the next, walks, stops and rides between, or to a silence out of 30
+// minutes. The card lists the day's and Stats counts the same ones; the map draws the latest in front
+// from the same bases (latestOutingStart), across such a silence too.
 // Until October 2026 Stats counted walks between any two stops, and disagreed with the card on 4 of a
 // week's 8 days. No runtime imports beyond segments.ts, so Node can run the tests directly.
 
@@ -16,6 +17,8 @@ const JITTER_METERS = 15
  * with the silence, rather than going on until the next one, hours later.
  */
 const SILENT_OUT_MS = 30 * 60 * 1000
+/** An outing that rode is a walk only with this much walking on it. */
+const RIDE_WALK_METERS = 50
 
 /**
  * One outing: when it left and came back (null: still out), how far it walked (metres), how far it
@@ -75,7 +78,8 @@ export function outingsOf(pieces: TrailPiece[], now = pieces.length > 0 ? pieceE
     // The trail began out (or out again after a silence): from its first point.
     if (!current) {
       const first = piece.kind === 'move' ? piece.points[0]! : piece.kind === 'stay' ? { ...piece.center, time: piece.from } : piece.from
-      current = { from: first.time, start: first, walks: [], seen: [], rode: false, began: false, last: first.time }
+      // Out where the pieces begin (Stats: under way at midnight); out again after a silence, it began here.
+      current = { from: first.time, start: first, walks: [], seen: [], rode: false, began: index > 0, last: first.time }
     }
     if (piece.kind === 'move') {
       current.walks.push(piece.points)
@@ -96,6 +100,11 @@ function pieceStart(piece: TrailPiece): number {
 
 function pieceEnd(piece: TrailPiece): number {
   return piece.kind === 'move' ? piece.points.at(-1)!.time : piece.kind === 'stay' ? piece.to : piece.to.time
+}
+
+/** Whether an outing was a walk: not a ride with a few steps either side of it (to daycare by car). */
+export function walkedOuting(outing: Outing): boolean {
+  return !outing.rode || outing.walked >= RIDE_WALK_METERS
 }
 
 /** How far a walk went, along its fixes, without standing-still jitter. */

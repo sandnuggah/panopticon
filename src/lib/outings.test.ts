@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { outingsOf, walkLength } from './outings.ts'
+import { outingsOf, walkedOuting, walkLength } from './outings.ts'
 import type { TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
@@ -117,6 +117,28 @@ describe('outingsOf, when the tracker goes quiet', () => {
       night.map((outing) => outing.began),
       [true, true],
     )
+  })
+
+  test('out again after a silence, it began there: counted, not taken for one under way at midnight', () => {
+    const outings = outingsOf([home(0, 20), walk([0, 20], [500, 40]), walk([800, 300], [1300, 310])])
+    assert.deepEqual(
+      outings.map((outing) => outing.began),
+      [true, true],
+    )
+  })
+
+  test('a ride with a few steps either side is no walk', () => {
+    const ride: TrailPiece = {
+      kind: 'vehicle',
+      from: at(0, 61),
+      to: at(5000, 80),
+      legs: [{ kind: 'vehicle', points: [at(0, 61), at(5000, 80)] }],
+    }
+    const daycare = { ...(stop(5000, 80, 200) as Extract<TrailPiece, { kind: 'stay' }>), atPlace: true }
+    const [drive] = outingsOf([home(0, 60), walk([0, 60], [0, 61]), ride, daycare])
+    assert.equal(walkedOuting(drive!), false)
+    const [walkThere] = outingsOf([home(0, 60), walk([0, 60], [400, 66]), ride, daycare])
+    assert.equal(walkedOuting(walkThere!), true, 'a walk to the bus is a walk')
   })
 
   test('a ride to daycare is an outing, as far as it went, with no walking', () => {
