@@ -72,6 +72,8 @@ type Props = {
   onSelect: (id: number) => void
   /** The selected asset's marker was tapped; the page decides what that does (see `centred`). */
   onSelectedTap: (id: number) => void
+  /** Zooming out (yourself) past where the selected asset shows in its place's pill (PILL_ZOOM). */
+  onDeselect?: () => void
   /**
    * Filled in by the map: whether the selected asset is centred (within 12 px of the middle of the
    * visible map, or being followed), for taps on it here or in the bottom bar.
@@ -117,6 +119,7 @@ export default function AssetMap({
   focusToken,
   onSelect,
   onSelectedTap,
+  onDeselect,
   centred,
   buttons,
   showMe,
@@ -142,6 +145,12 @@ export default function AssetMap({
   const groupsRef = useRef(new Map<number, { pill: Marker; count: Marker }>())
   /** The assets in one of them. */
   const capsuledRef = useRef(new Set<number>())
+  const selectedIdRef = useRef(selectedId)
+  const onDeselectRef = useRef(onDeselect)
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+    onDeselectRef.current = onDeselect
+  })
   const now = useNow(30_000)
 
   // Following the selected asset: the map keeps its latest position centred. Dragging the map pauses
@@ -300,6 +309,18 @@ export default function AssetMap({
     mapRef.current = map
     // From the start: the first move to a place (the place editor's jump to it) can come before the tiles.
     map.on('zoom', () => updateMarkersRef.current())
+    // Zooming out yourself (a pinch, the wheel, −) past the pill hides the selected asset behind
+    // its place's count: it's deselected. Not the app's own moves, such as a selection's flight in.
+    let zoomingByHand = false
+    map.on('zoomstart', (event) => {
+      zoomingByHand = !!(event.originalEvent || (event as { byHand?: boolean }).byHand)
+    })
+    map.on('zoomend', () => {
+      const selected = selectedIdRef.current
+      if (zoomingByHand && map.getZoom() < PILL_ZOOM && selected !== undefined && capsuledRef.current.has(selected)) {
+        onDeselectRef.current?.()
+      }
+    })
     const markers = markersRef.current
     const groups = groupsRef.current
     return () => {

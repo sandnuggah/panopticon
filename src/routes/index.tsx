@@ -414,6 +414,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
               focusToken={focusToken}
               onSelect={select}
               onSelectedTap={() => tapSelected(true)}
+              onDeselect={deselect}
               centred={centred}
               buttons="above-bar"
               showMe={showMe}

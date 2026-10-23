@@ -34,11 +34,11 @@ export function MapButtons({ map, placement, showMe, onToggleMe }: Props) {
           {divider}
         </>
       )}
-      <button type="button" className={button} aria-label="Zoom in" onClick={() => map.current?.zoomIn()}>
+      <button type="button" className={button} aria-label="Zoom in" onClick={() => map.current?.zoomIn(undefined, { byHand: true })}>
         <PlusIcon />
       </button>
       {divider}
-      <button type="button" className={button} aria-label="Zoom out" onClick={() => map.current?.zoomOut()}>
+      <button type="button" className={button} aria-label="Zoom out" onClick={() => map.current?.zoomOut(undefined, { byHand: true })}>
         <MinusIcon />
       </button>
     </div>

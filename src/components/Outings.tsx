@@ -11,7 +11,7 @@ type Props = {
 }
 
 /**
- * The asset's outings today, as Stats counts them and the map draws them: when, for how long, how
+ * The asset's outings today, newest first, as Stats counts them and the map draws them: when, for how long, how
  * far it walked and how far it got. "17:03–17:13 · 10 min · 400 m, up to 100 m". Screen readers hear
  * the same. Until October 2026 the card listed Traccar's raw arrivals and departures instead, which
  * flapped along Home's edge (115 in a week for about 30 real comings and goings).
@@ -24,16 +24,22 @@ export function Outings({ outings, now }: Props) {
         <p className="opacity-60">None yet today.</p>
       ) : (
         <ul>
-          {outings.map((outing) => (
-            <li key={outing.from} className="flex items-center gap-x-2.5 py-0.5">
-              <span className="shrink-0 text-primary">
+          {outings.toReversed().map((outing) => (
+            <li key={outing.from} className="flex items-start gap-x-2.5 py-1">
+              {/* On the first line, however many the text takes. */}
+              <span className="flex h-lh shrink-0 items-center text-primary">
                 <OutIcon />
               </span>
-              <span className="min-w-0 flex-1">
-                {clock.format(outing.from)}–{outing.to === null ? 'now' : clock.format(outing.to)} ·{' '}
-                {durationLabel((outing.to ?? now) - outing.from)} · {walkedOuting(outing) ? distanceLabel(outing.walked) : 'a ride'}
+              {/* Its parts kept whole; "up to" on a line of its own when they don't fit (large text sizes). */}
+              <span className="flex min-w-0 flex-1 flex-wrap justify-between gap-x-2.5">
+                <span className="min-w-0">
+                  <span className="whitespace-nowrap">{clock.format(outing.from)}–</span>
+                  <span className="whitespace-nowrap">{outing.to === null ? 'now' : clock.format(outing.to)}</span> ·{' '}
+                  <span className="whitespace-nowrap">{durationLabel((outing.to ?? now) - outing.from)}</span> ·{' '}
+                  <span className="whitespace-nowrap">{walkedOuting(outing) ? distanceLabel(outing.walked) : 'a ride'}</span>
+                </span>
+                <span className="whitespace-nowrap opacity-60">up to {distanceLabel(outing.furthest)}</span>
               </span>
-              <span className="shrink-0 opacity-60">up to {distanceLabel(outing.furthest)}</span>
             </li>
           ))}
         </ul>
