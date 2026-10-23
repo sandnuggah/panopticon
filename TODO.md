@@ -85,7 +85,9 @@ How, from 2026-10-22: fast where it's safe, careful where it isn't. Each step ha
 
 - [x] A Stats card per asset, from Stats beside Share on the details card: today, this week or this month, with distance walked and a bar per day (compared with the same days before when the tracker reported on all of them), walks, the longest, stops on walks, time out walking, furthest from Home and the walk streak (days in a row with 500 m or more, over 90 days). Worked out on the server a day at a time from Traccar's history with the map's own rules; finished days kept in memory. Released as `:74` (2026-10-18)
 - [x] Checked `:74` on Kofi's real week: the stats look right (2026-10-18)
-- [ ] More stats, later: new streets or parks walked this week, a heatmap of the neighbourhood, the fastest stretch on foot (a zoomie), time at each place, rides and how far, battery per day and how long a charge lasts
+- [x] More stats: an average walk and pace, rides (how far, how many underground), when it walks (a dot an hour, and the hours it usually does), the battery's lowest each day and how long a charge lasts, and from the last 90 days the records (longest walk, biggest day, earliest and latest walk, longest streak) and the average walked on each day of the week. Released as `:105` (2026-10-23)
+- [ ] Check `:105` on Kofi's real data: do "Usually around" and the time per charge look right (the ST-904L's battery readings jump about near empty), and how slow is the first opening after a restart (90 days fetched again)
+- [ ] More stats, later: time at each place ("Home 19 h, Daycare 4 h a day"; the server needs all the asset's places, not just Home), and a heatmap of where it's been this month (a map in the Stats card, or a layer over the main map). Left out: zoomies (GPS 20 m off makes any jump look like a sprint) and new streets walked (every walk snapped and compared with the map's streets)
 
 ## Trackers
 
