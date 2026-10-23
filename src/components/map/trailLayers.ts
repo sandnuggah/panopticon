@@ -4,7 +4,7 @@ import { toTrailFeatures, type TrailViews } from '../../lib/trailGeometry'
 import { DEFAULT_TRAIL_COLOR, TRAIL_COLORS, trailColorOf } from '../../lib/trailColors'
 
 // The trail on the map, drawn by what the asset was doing (see segments.ts, and trailGeometry.ts for
-// what's drawn where): walking as a line, or as paw prints close up (Appearance → Paw prints); rides
+// what's drawn where): walking as a line, or as paw prints close up (an asset's page → Paw prints); rides
 // through their fixes, dashed, and dotted where they went without GPS (underground); stays as dots,
 // bigger the longer they were. The latest outing in front, with a casing and a mark at each minute
 // walked (the way it went, and its pace); older ones behind it as a soft halo, the same however often
@@ -37,18 +37,17 @@ const GUESS_OPACITY = 0.6
  * Shows these trails (see useLiveAssets), along the lines Snap to paths has for their walks (see
  * useSnappedWalks), each in its asset's colour (`colors`, by asset id; see trailColors.ts).
  */
-export function setTrails(map: MapLibreMap, trails: TrailViews, snappedWalks: SnappedLines, colors: Record<number, string>) {
-  const features = toTrailFeatures(trails, snappedWalks, colors)
+export function setTrails(
+  map: MapLibreMap,
+  trails: TrailViews,
+  snappedWalks: SnappedLines,
+  colors: Record<number, string>,
+  pawPrints: ReadonlySet<number>,
+) {
+  const features = toTrailFeatures(trails, snappedWalks, colors, pawPrints)
   void map.getSource<GeoJSONSource>(TRAILS)?.setData(features.trail)
   void map.getSource<GeoJSONSource>(PAWS)?.setData(features.paws)
   void map.getSource<GeoJSONSource>(MARKS)?.setData(features.marks)
-}
-
-/** The latest outing's walks as paw prints close up (from PAW_ZOOM), or as a line. */
-export function showPawPrints(map: MapLibreMap, on: boolean) {
-  for (const layer of [TRAILS, CASING]) map.setLayerZoomRange(layer, 0, on ? PAW_ZOOM : 24)
-  map.setLayerZoomRange(MARKS, MARK_ZOOM, on ? PAW_ZOOM : 24)
-  map.setLayoutProperty(PAWS, 'visibility', on ? 'visible' : 'none')
 }
 
 /** Repaints the trails in their colours' shades for a day or a night map, after switching between them. */
@@ -67,6 +66,11 @@ export function addTrailLayers(map: MapLibreMap) {
   const kind = (value: string) => ['==', ['get', 'kind'], value] as ['==', ['get', string], string]
   const older: ExpressionSpecification = ['==', ['get', 'older'], true]
   const guess: ExpressionSpecification = ['==', ['get', 'guess'], true]
+  // An asset's latest walks as paw prints close up (see the PAWS layer): from PAW_ZOOM, its line and
+  // minute marks are hidden. Zoom can only be the input of a step at the top of an expression.
+  const pawsOn: ExpressionSpecification = ['==', ['get', 'paws'], true]
+  const unlessPaws = (opacity: ExpressionSpecification | number): ExpressionSpecification =>
+    ['step', ['zoom'], opacity, PAW_ZOOM, ['case', pawsOn, 0, opacity]] as unknown as ExpressionSpecification
   const lineLayout = { 'line-cap': 'round', 'line-join': 'round' } as const
   // Under the map's labels (street names, places), with all its layers in this order.
   const labels = map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id
@@ -131,7 +135,7 @@ export function addTrailLayers(map: MapLibreMap) {
     paint: {
       'line-color': casingColor(map),
       'line-width': width(3),
-      'line-opacity': ['get', 'opacity'],
+      'line-opacity': unlessPaws(['get', 'opacity']),
     },
   })
   addLayer({
@@ -143,7 +147,7 @@ export function addTrailLayers(map: MapLibreMap) {
     paint: {
       'line-color': color,
       'line-width': width(0),
-      'line-opacity': ['*', ['get', 'opacity'], ['case', guess, GUESS_OPACITY, 1]],
+      'line-opacity': unlessPaws(['*', ['get', 'opacity'], ['case', guess, GUESS_OPACITY, 1]]),
     },
   })
   // Stays on top of the lines that run through them: a dot with a white ring, of radius 5 px for a
@@ -180,9 +184,10 @@ export function addTrailLayers(map: MapLibreMap) {
       'icon-allow-overlap': true,
       'icon-ignore-placement': true,
     },
+    paint: { 'icon-opacity': unlessPaws(1) },
   })
 
-  // The latest outing's walking as paw prints instead of the line close up, when the setting is on.
+  // The latest outing's walking as paw prints instead of the line close up, for the assets drawn so.
   for (const option of TRAIL_COLORS) {
     map.addImage(pawImage(option.id), drawPawPrints(trailColorOf(option.id, isDark(map))), { pixelRatio: PAW_PIXEL_RATIO })
   }
@@ -193,7 +198,6 @@ export function addTrailLayers(map: MapLibreMap) {
     source: PAWS,
     minzoom: PAW_ZOOM,
     layout: {
-      visibility: 'none',
       // maplibre spaces the prints along each line and turns them to follow it: the icon's +x axis
       // points the way the line runs, oldest to newest, i.e. the direction of travel.
       'symbol-placement': 'line',

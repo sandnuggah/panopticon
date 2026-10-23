@@ -1,39 +1,29 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { DEFAULT_TRAIL, nearestTrail, type TrailLength } from './trail'
 
 // Per-browser preferences in localStorage. They're conveniences: if storage is unavailable
 // (private mode, blocked site data) the defaults apply and nothing breaks. Only what was chosen is
-// stored, so a changed default reaches browsers that never chose. That's from `v: 2` on: before,
-// changing one setting stored them all, Snap to paths included, so that one is ignored then.
+// stored, so a changed default reaches browsers that never chose. The trail's length, paw prints and
+// Snap to paths were stored here too until they became each asset's own (see TrailOptions in
+// trail.ts, stored in Traccar); what's left of them here is ignored.
 
 export type Settings = {
-  /** How much movement to draw behind each asset. */
-  trail: TrailLength
-  /** Snap walks on the trail to streets and paths, when the server offers it. */
-  snapToPaths: boolean
-  /** Draw walks as paw prints instead of a line. */
-  pawPrints: boolean
   /** The map style's id, or Auto (see mapStyles.ts); unset means the server's default. */
   mapStyle?: string
 }
 
 const STORAGE_KEY = 'panopticon.settings'
-const DEFAULTS: Settings = { trail: DEFAULT_TRAIL, snapToPaths: true, pawPrints: false }
+const DEFAULTS: Settings = {}
 const VERSION = 2
 
-type Stored = Partial<Settings> & { v?: number; trailMinutes?: unknown; followRoads?: unknown }
+type Stored = Partial<Settings> & { v?: number }
 
-/** What this browser chose. Before version 2 every setting was stored, chosen or not: its Snap to paths is ignored. */
+/** What this browser chose. */
 function storedChoices(raw: string | null): Stored {
   if (!raw) return {}
   try {
-    const value = JSON.parse(raw) as Stored
+    const value = JSON.parse(raw) as Record<string, unknown>
     if (typeof value !== 'object' || value === null) return {}
-    if (value.v !== VERSION) {
-      delete value.snapToPaths
-      delete value.followRoads
-    }
-    return value
+    return typeof value.mapStyle === 'string' ? { mapStyle: value.mapStyle } : {}
   } catch {
     return {}
   }
@@ -58,13 +48,7 @@ function read(): Settings {
 }
 
 function parse(raw: string | null): Settings {
-  const value = storedChoices(raw)
-  // `trailMinutes` is what the trail length was saved as before "today" existed.
-  const trail = nearestTrail(value.trail ?? value.trailMinutes) ?? DEFAULTS.trail
-  const snapToPaths = typeof value.snapToPaths === 'boolean' ? value.snapToPaths : DEFAULTS.snapToPaths
-  const settings: Settings = { trail, snapToPaths, pawPrints: value.pawPrints === true }
-  if (typeof value.mapStyle === 'string') settings.mapStyle = value.mapStyle
-  return settings
+  return storedChoices(raw)
 }
 
 function subscribe(listener: () => void): () => void {
@@ -92,7 +76,7 @@ export function useSettings(): [Settings, (patch: Partial<Settings>) => void, bo
   )
   const update = useCallback((patch: Partial<Settings>) => {
     try {
-      const { trailMinutes: _, followRoads: __, ...chosen } = storedChoices(localStorage.getItem(STORAGE_KEY))
+      const chosen = storedChoices(localStorage.getItem(STORAGE_KEY))
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...chosen, ...patch, v: VERSION }))
     } catch {
       // Storage unavailable; the change only lasts until the page reloads.

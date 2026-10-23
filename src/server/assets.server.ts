@@ -83,6 +83,7 @@ export function toAsset(device: TraccarDevice, position: TraccarPosition | undef
   }
   if (position) asset.tracker = adapterFor(position.protocol).kind
   if (device.trailColor) asset.trailColor = device.trailColor
+  if (Object.keys(device.trail).length > 0) asset.trail = device.trail
   return asset
 }
 
@@ -96,6 +97,7 @@ export function toDeviceUpdate(device: TraccarDevice): LiveUpdate {
     disabled: device.disabled,
     imageUrl: imageUrl(device),
     ...(device.trailColor && { trailColor: device.trailColor }),
+    ...(Object.keys(device.trail).length > 0 && { trail: device.trail }),
   }
 }
 

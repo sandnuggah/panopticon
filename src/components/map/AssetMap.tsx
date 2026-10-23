@@ -9,6 +9,7 @@ import { assetStatus, isGrey, type AssetStatus } from '../../lib/status'
 import { parkFromRings, type Park } from '../../lib/parks'
 import type { Place } from '../../lib/places'
 import type { Presence } from '../../lib/presence'
+import { trailOptionsOf } from '../../lib/trail'
 import type { TrailViews } from '../../lib/trailGeometry'
 import type { LatLon } from '../../lib/segments'
 import type { SnappedLines } from '../../lib/snapLines'
@@ -19,7 +20,7 @@ import { useSettings } from '../../lib/settings'
 import { addMyPositionLayer, createMyPositionDot, setAccuracyCircle } from './myPosition'
 import { circle } from './geometry'
 import { createMarkerElement, ease, glideMarker, updateMarkerElement } from './markers'
-import { addTrailLayers, recolourTrails, setTrails, showPawPrints } from './trailLayers'
+import { addTrailLayers, recolourTrails, setTrails } from './trailLayers'
 import { addPlaceLayers, recolourPlaces, setPlaces, showsPin } from './placeLayers'
 import { NO_COVER, type Cover } from '../cards'
 import { MapButtons } from './MapButtons'
@@ -325,11 +326,17 @@ export default function AssetMap({
     () => Object.fromEntries(assets.flatMap((asset) => (asset.trailColor ? [[asset.id, asset.trailColor]] : []))),
     [trailColorsKey],
   )
+  // The assets whose walks are paw prints close up (see trailOptionsOf), new only when one changes.
+  const pawPrintsKey = assets.map((asset) => `${asset.id}:${trailOptionsOf(asset).pawPrints}`).join(' ')
+  const pawPrints = useMemo(
+    () => new Set(assets.filter((asset) => trailOptionsOf(asset).pawPrints).map((asset) => asset.id)),
+    [pawPrintsKey],
+  )
   useEffect(() => {
     const map = mapRef.current
     if (!styleLoaded || !map) return
-    setTrails(map, trails, snappedWalks, trailColors)
-  }, [trails, snappedWalks, trailColorsKey, styleLoaded])
+    setTrails(map, trails, snappedWalks, trailColors, pawPrints)
+  }, [trails, snappedWalks, trailColorsKey, pawPrintsKey, styleLoaded])
 
   const editedPlaceId = picker?.placeId
   useEffect(() => {
@@ -337,14 +344,6 @@ export default function AssetMap({
     if (!styleLoaded || !map) return
     setPlaces(map, places, editedPlaceId)
   }, [places, editedPlaceId, styleLoaded])
-
-  // Walks as a line or as paw prints (Appearance → Paw prints). Again after each style load, which
-  // re-adds both layers.
-  useEffect(() => {
-    const map = mapRef.current
-    if (!styleLoaded || !map) return
-    showPawPrints(map, settings.pawPrints)
-  }, [settings.pawPrints, styleLoaded])
 
   // Trail and place colours for a day or night map. Runs after the map's class has changed. That only happens with a switch to another map style, which
   // the effect above has just started loading; maplibre throws on the old layers then, and the new

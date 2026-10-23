@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { MAX_IMAGE_BYTES, sniffImageType } from '../lib/assetImage'
+import { TRAIL_OPTIONS, type TrailOptions } from '../lib/trail'
 import { TRAIL_COLORS } from '../lib/trailColors'
 import {
   clearAssetImage,
@@ -10,6 +11,7 @@ import {
   saveAssetImage,
   updateAssetName,
   updateAssetTrailColor,
+  updateAssetTrailOptions,
   type EditResult,
 } from './manage.server'
 import { withToken } from './session.server'
@@ -37,6 +39,11 @@ export const renameAsset = createServerFn({ method: 'POST' })
 export const setAssetTrailColor = createServerFn({ method: 'POST' })
   .validator((input: unknown) => ({ id: parseIdInput(input).id, color: parseTrailColor(fields(input).color) }))
   .handler(({ data }) => withToken((token) => updateAssetTrailColor(token, data.id, data.color)))
+
+/** Changes how its trail is drawn: any of `length` (one of TRAIL_OPTIONS), `pawPrints`, `snapToPaths`. */
+export const setAssetTrailOptions = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => ({ id: parseIdInput(input).id, options: parseTrailOptions(fields(input)) }))
+  .handler(({ data }) => withToken((token) => updateAssetTrailOptions(token, data.id, data.options)))
 
 export const removeAsset = createServerFn({ method: 'POST' })
   .validator(parseIdInput)
@@ -84,6 +91,25 @@ function parseName(name: unknown): string {
   const trimmed = name.trim()
   if (!trimmed || trimmed.length > MAX_LENGTH) throw new Error('Invalid request')
   return trimmed
+}
+
+function parseTrailOptions(input: Record<string, unknown>): Partial<TrailOptions> {
+  const options: Partial<TrailOptions> = {}
+  const { length, pawPrints, snapToPaths } = input
+  if (length !== undefined) {
+    if (!TRAIL_OPTIONS.includes(length as TrailOptions['length'])) throw new Error('Invalid request')
+    options.length = length as TrailOptions['length']
+  }
+  for (const [key, value] of [
+    ['pawPrints', pawPrints],
+    ['snapToPaths', snapToPaths],
+  ] as const) {
+    if (value === undefined) continue
+    if (typeof value !== 'boolean') throw new Error('Invalid request')
+    options[key] = value
+  }
+  if (Object.keys(options).length === 0) throw new Error('Invalid request')
+  return options
 }
 
 /** One of the colours offered (see trailColors.ts). */

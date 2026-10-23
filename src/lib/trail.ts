@@ -34,6 +34,20 @@ export const TRAIL_OPTIONS: readonly TrailLength[] = [0, 'outing', 'today', 1440
 export const DEFAULT_TRAIL: TrailLength = 'outing'
 export const MAX_TRAIL_MINUTES = 1440
 
+/**
+ * How an asset's trail is drawn, chosen on its page under Assets and stored on the device in Traccar
+ * (see traccar.server.ts), so it's the same everywhere: how much of it, whether its walks are paw
+ * prints close up, and whether they're snapped to streets and paths (when the server can).
+ */
+export type TrailOptions = { length: TrailLength; pawPrints: boolean; snapToPaths: boolean }
+
+export const DEFAULT_TRAIL_OPTIONS: TrailOptions = { length: DEFAULT_TRAIL, pawPrints: false, snapToPaths: true }
+
+/** An asset's trail options: what was chosen for it, the defaults for the rest. */
+export function trailOptionsOf(asset: { trail?: Partial<TrailOptions> } | undefined): TrailOptions {
+  return { ...DEFAULT_TRAIL_OPTIONS, ...asset?.trail }
+}
+
 /** "This outing", "Today", "24 hours", "Off": the trail length as the app shows it. */
 export function trailLabel(length: TrailLength): string {
   if (length === 'outing') return 'This outing'

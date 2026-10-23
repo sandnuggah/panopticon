@@ -11,6 +11,7 @@ import {
   nearestTrail,
   stayPoints,
   trailMinutes,
+  trailOptionsOf,
   trailStart,
   type TrailPoint,
 } from './trail.ts'
@@ -29,6 +30,13 @@ describe('nearestTrail', () => {
 
   test('ignores anything else', () => {
     for (const value of [undefined, null, -5, Number.NaN, '60', 'yesterday']) assert.equal(nearestTrail(value), undefined)
+  })
+})
+
+describe('trailOptionsOf', () => {
+  test("an asset's choices, the defaults for the rest: this outing, a line, snapped", () => {
+    assert.deepEqual(trailOptionsOf(undefined), { length: 'outing', pawPrints: false, snapToPaths: true })
+    assert.deepEqual(trailOptionsOf({ trail: { length: 0, snapToPaths: false } }), { length: 0, pawPrints: false, snapToPaths: false })
   })
 })
 

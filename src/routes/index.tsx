@@ -15,7 +15,7 @@ import { visitSentence, type Place, type PlaceVisit } from '../lib/places'
 import { trackersOf } from '../lib/tracker'
 import type { LatLon } from '../lib/segments'
 import type { GoTo, Inset } from '../components/map/PlacePicker'
-import { useSettings } from '../lib/settings'
+import { trailOptionsOf } from '../lib/trail'
 import { useAddress } from '../lib/useAddress'
 import { useLiveAssets } from '../lib/useLiveAssets'
 import { useNow } from '../lib/useNow'
@@ -234,7 +234,6 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   const settingsButton = useRef<HTMLButtonElement>(null)
   // The map data's credits, shown in the Settings card instead of on the map.
   const [attribution, setAttribution] = useState<string[]>([])
-  const [settings, , settingsLoaded] = useSettings()
   const { places } = loaderData
   // "Betty left Home", while the app is open (see PlaceBanner).
   const [banner, setBanner] = useState<{ text: string; time: string; key: number; assetId: number } | null>(null)
@@ -247,7 +246,6 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   }
   const { assets, trails, views, trailsLoaded, activities, stays, presence, status, updateAvailable } = useLiveAssets(
     loaderData.assets,
-    settingsLoaded ? settings.trail : null,
     places,
     announce,
   )
@@ -271,7 +269,14 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   const [parks, setParks] = useState<Park[] | null>(null)
   const trackerKey = assets.map((asset) => `${asset.id}:${asset.tracker ?? ''}`).join(' ')
   const trackers = useMemo(() => trackersOf(assets), [trackerKey])
-  const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths, parks, trackers)
+  // Snap to paths, for the assets it's on for (see trailOptionsOf), when the server can.
+  const snapKey = assets.map((asset) => `${asset.id}:${trailOptionsOf(asset).snapToPaths}`).join(' ')
+  const snapping = useMemo(() => new Set(assets.filter((asset) => trailOptionsOf(asset).snapToPaths).map((asset) => asset.id)), [snapKey])
+  const snapTrails = useMemo(
+    () => Object.fromEntries(Object.entries(trails).filter(([id]) => snapping.has(Number(id)))),
+    [trails, snapping],
+  )
+  const snappedWalks = useSnappedWalks(snapTrails, loaderData.mapOptions.canSnapToPaths, parks, trackers)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
   // The selected asset's outings today, for its card (see outings.ts), from all of its trail.

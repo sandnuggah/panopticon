@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { getUser } from '../server/auth.functions'
 import { getHistory, getTrails } from '../server/trails.functions'
@@ -18,8 +18,8 @@ import {
   mergeHistory,
   MISSED_AFTER_MS,
   MISSED_SILENCE_MS,
+  trailOptionsOf,
   trailStart,
-  type TrailLength,
   type Trails,
 } from './trail'
 import { quietAssets, shownKey, shownTrails, trailViews, type TrailViewCache } from './trailGeometry'
@@ -41,19 +41,14 @@ const LOAD_TRIES = 3
 /**
  * Keeps the asset list and trails current from /live. `initialAssets` is the route loader's data;
  * whenever it's reloaded (reconnect, returning to the tab) it replaces the live state.
- * `trail` is null until the setting is known, so no history is fetched for a default.
  * History covers a day and HISTORY_MIN_MINUTES before it (see historyMinutes), even with trails off,
  * to tell what each asset is doing right now and where it is; the trails are worked out from all of it
- * and returned for drawing from where the trail starts (see trailFrom).
+ * and returned for drawing from where each asset's trail starts, as chosen for it (see trailFrom and
+ * trailOptionsOf).
  * `onVisits` hears of arrivals and departures as they happen (see presence.ts).
  */
-export function useLiveAssets(
-  initialAssets: Asset[],
-  trail: TrailLength | null,
-  places: Place[],
-  onVisits?: (visits: PlaceVisit[]) => void,
-) {
-  const historyLength = historyMinutes(trail ?? 0)
+export function useLiveAssets(initialAssets: Asset[], places: Place[], onVisits?: (visits: PlaceVisit[]) => void) {
+  const historyLength = historyMinutes()
   const router = useRouter()
   const [assets, setAssets] = useState(initialAssets)
   const assetsRef = useRef(initialAssets)
@@ -93,7 +88,6 @@ export function useLiveAssets(
   const loadKey = `${historyVersion} ${assetIdsKey}`
   const failures = useRef(0)
   useEffect(() => {
-    if (trail === null) return
     if (assetIdsKey === '') {
       setTrails({})
       setTrailsLoaded(true)
@@ -127,7 +121,7 @@ export function useLiveAssets(
       cancelled = true
       clearTimeout(retry)
     }
-  }, [trail === null, historyLength, loadKey])
+  }, [historyLength, loadKey])
 
   useEffect(() => {
     let source: EventSource | undefined
@@ -241,7 +235,7 @@ export function useLiveAssets(
   // Where the assets are goes by the clock (see presence.ts) while the page is in step with them: in
   // view, live, and with the history it asked for. Else the page may have missed reports: the clock
   // stays at its last tick in step, so a tracker doesn't go quiet for reports that didn't come.
-  const inStep = visible && status === 'live' && trailsLoaded && (trail === null || loadedKey === loadKey)
+  const inStep = visible && status === 'live' && trailsLoaded && loadedKey === loadKey
   const [steady, setSteady] = useState(now)
   useEffect(() => {
     if (inStep) setSteady(now)
@@ -256,7 +250,11 @@ export function useLiveAssets(
   const quietKey = quieted.join(' ')
   const quiet = useMemo(() => new Map(quieted), [quietKey])
   const views = useMemo(() => trailViews(trails, places, trackers, worked.current, quiet), [trails, places, trackers, quiet])
-  const start = trailStart(trail ?? 0, now)
+  // Each asset's own length (see trailOptionsOf), new only when one changes, not with each position.
+  const lengthsKey = assets.map((asset) => `${asset.id}:${trailOptionsOf(asset).length}`).join(' ')
+  const lengths = useMemo(() => new Map(assets.map((asset) => [asset.id, trailOptionsOf(asset).length])), [lengthsKey])
+  const lengthOf = useCallback((id: number) => lengths.get(id) ?? trailOptionsOf(undefined).length, [lengths])
+  const start = useCallback((id: number) => trailStart(lengthOf(id), now), [lengthOf, now])
   const shown = useMemo(() => shownTrails(views, start), [views, shownKey(views, start)])
 
   const activities = useMemo(() => {
@@ -330,7 +328,7 @@ export function useLiveAssets(
   }, [visits, inStep, places])
 
   // Staying put away from its places (at them, it's where it is that says), since it left one.
-  const stays = useMemo(() => currentStays(trails, trail ?? 0, now, trackers, where), [trails, trail, now, trackers, where])
+  const stays = useMemo(() => currentStays(trails, lengthOf, now, trackers, where), [trails, lengthOf, now, trackers, where])
 
   // Each asset where its trail can trust it to be, and at its place's centre while it's at one (see shownLocation).
   const shownAssetsNow = useMemo(() => shownAssets(assets, trails, where, places), [assets, trails, where, places])

@@ -443,7 +443,7 @@ export function shownAssets<A extends { id: number; location: AssetLocation | nu
  */
 export function currentStays(
   trails: Trails,
-  length: TrailLength,
+  length: TrailLength | ((id: number) => TrailLength),
   now: number,
   trackers: Record<number, TrackerKind | undefined>,
   presence: Record<number, Presence> = {},
@@ -453,7 +453,7 @@ export function currentStays(
     const id = Number(key)
     const where = presence[id]
     const left = where?.left !== undefined ? where.since : null
-    const shown = stayPoints(points, length)
+    const shown = stayPoints(points, typeof length === 'function' ? length(id) : length)
     const stay = currentStay(left === null ? shown : shown.filter((point) => point.time >= left), now, trailProfile(trackers[id]))
     if (!stay) continue
     // Begun since it left, which the points go back to: it's known when.

@@ -1,8 +1,9 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { Block, BlockFooter, BlockTitle, Button, Dialog, DialogButton, List, ListButton, ListInput, ListItem } from 'konsta/react'
+import { Block, BlockFooter, BlockTitle, Button, Dialog, DialogButton, List, ListButton, ListInput, ListItem, Toggle } from 'konsta/react'
 import { prepareAssetImage } from '../lib/assetImage'
 import { editErrorMessage } from '../lib/editErrors'
+import { TRAIL_OPTIONS, trailLabel, trailOptionsOf, type TrailOptions } from '../lib/trail'
 import { DEFAULT_TRAIL_COLOR, TRAIL_COLORS } from '../lib/trailColors'
 import {
   getManagedAsset,
@@ -10,6 +11,7 @@ import {
   removeAssetImage,
   renameAsset,
   setAssetTrailColor,
+  setAssetTrailOptions,
   uploadAssetImage,
 } from '../server/manage.functions'
 import type { EditResult } from '../server/manage.server'
@@ -28,18 +30,23 @@ const IDLE: Status = { kind: 'idle' }
 type Props = {
   id: number
   listColors?: { strongBgIos: string }
+  /** Whether the server has map matching (MAP_MATCHING_URL), so Snap to paths can be turned on. */
+  canSnapToPaths: boolean
   /** Called once the asset is removed, to go back to the list. */
   onRemoved: () => void
 }
 
-/** One asset: its photo, name, trail colour, how its tracker is doing, and removing it. */
-export function AssetEditor({ id, listColors, onRemoved }: Props) {
+/** One asset: its photo, name, its trail (colour, length, how walks are drawn), how its tracker is doing, and removing it. */
+export function AssetEditor({ id, listColors, canSnapToPaths, onRemoved }: Props) {
   const router = useRouter()
   const [data, setData] = useState<Loaded | undefined>()
   const [loadFailed, setLoadFailed] = useState(false)
   const [photo, setPhoto] = useState<Status>(IDLE)
   const [name, setName] = useState<Status>(IDLE)
   const [color, setColor] = useState<Status>(IDLE)
+  // The trail's length, and how walks are drawn, each with its own message under its list.
+  const [lengthStatus, setLengthStatus] = useState<Status>(IDLE)
+  const [walksStatus, setWalksStatus] = useState<Status>(IDLE)
   const [removal, setRemoval] = useState<Status>(IDLE)
   const [confirming, setConfirming] = useState(false)
 
@@ -67,6 +74,18 @@ export function AssetEditor({ id, listColors, onRemoved }: Props) {
   }
 
   const { asset, access } = data
+  const trail = trailOptionsOf(asset)
+
+  /** Saves a change to how its trail is drawn, one at a time. */
+  function saveTrail(options: Partial<TrailOptions>) {
+    if (lengthStatus.kind === 'busy' || walksStatus.kind === 'busy') return
+    const onOff = (on: boolean | undefined) => (on ? 'on' : 'off')
+    const save = () => setAssetTrailOptions({ data: { id: asset.id, ...options } })
+    if (options.length !== undefined) return void change(setLengthStatus, save, 'Trail saved.')
+    const done =
+      options.pawPrints !== undefined ? `Paw prints ${onOff(options.pawPrints)}.` : `Snap to paths ${onOff(options.snapToPaths)}.`
+    void change(setWalksStatus, save, done)
+  }
 
   /** Runs a change, then reloads this asset and the map, so the avatar, name and markers pick it up. */
   async function change(setStatus: (status: Status) => void, run: () => Promise<EditResult>, done: string) {
@@ -179,8 +198,63 @@ export function AssetEditor({ id, listColors, onRemoved }: Props) {
               />
             ))}
           </List>
-          <StatusMessage status={color} busy="Saving…" />
-          <BlockFooter>Its trail on the map, for everyone who can see {asset.name}, in a lighter shade on a dark map.</BlockFooter>
+          <BlockFooter>
+            <div>
+              Its trail on the map, for everyone who can see {asset.name}, in a lighter shade on a dark map.
+              <FooterStatus status={color} busy="Saving…" />
+            </div>
+          </BlockFooter>
+
+          <BlockTitle>Trail</BlockTitle>
+          <List strong inset colors={listColors}>
+            {TRAIL_OPTIONS.map((length) => (
+              <ListItem
+                key={length}
+                link
+                chevron={false}
+                title={trailLabel(length)}
+                after={length === trail.length && <CheckIcon />}
+                onClick={() => saveTrail({ length })}
+              />
+            ))}
+          </List>
+          <BlockFooter>
+            <div>
+              How much of its recent movement the map draws. This outing is the walk under way, or the last one: since it left home, daycare
+              or anywhere it stayed 20 minutes or more. Today is everything since midnight.
+              <FooterStatus status={lengthStatus} busy="Saving…" />
+            </div>
+          </BlockFooter>
+
+          <BlockTitle>Walks</BlockTitle>
+          <List strong inset colors={listColors}>
+            <ListItem
+              title="Paw prints"
+              after={<Toggle checked={trail.pawPrints} onChange={() => saveTrail({ pawPrints: !trail.pawPrints })} />}
+            />
+            {/* Greyed out without a map-matching server (MAP_MATCHING_URL), which does the snapping. */}
+            <ListItem
+              title="Snap to paths"
+              className={canSnapToPaths ? undefined : 'opacity-50'}
+              after={
+                <Toggle
+                  checked={canSnapToPaths && trail.snapToPaths}
+                  disabled={!canSnapToPaths}
+                  onChange={() => saveTrail({ snapToPaths: !trail.snapToPaths })}
+                />
+              }
+            />
+          </List>
+          <BlockFooter>
+            <div>
+              Paw prints draws its walks as a dog's tracks close up, instead of a line.{' '}
+              {canSnapToPaths
+                ? 'Snap to paths draws them along the streets and paths it most likely took, instead of straight lines between GPS fixes.'
+                : "Snap to paths draws them along the streets and paths it most likely took, but needs a map-matching server, which this one doesn't have (MAP_MATCHING_URL)."}{' '}
+              For everyone who can see {asset.name}.
+              <FooterStatus status={walksStatus} busy="Saving…" />
+            </div>
+          </BlockFooter>
         </>
       )}
 
@@ -221,6 +295,21 @@ export function AssetEditor({ id, listColors, onRemoved }: Props) {
         }
       />
     </>
+  )
+}
+
+/**
+ * The same, as a line of its own at the end of a list's footer, inside a block with the footer's text
+ * (the footer lays its children out in a row): Konsta pulls a footer up against its list, so a
+ * message put between them was drawn over the footer's text.
+ */
+function FooterStatus({ status, busy }: { status: Status; busy: string }) {
+  const text = status.kind === 'busy' ? busy : status.kind === 'done' || status.kind === 'error' ? status.message : ''
+  // Always there, empty until there's news, so screen readers hear it when it comes.
+  return (
+    <span role="status" className={text ? `mt-1 block ${status.kind === 'error' ? 'text-red-500' : 'font-semibold'}` : undefined}>
+      {text}
+    </span>
   )
 }
 

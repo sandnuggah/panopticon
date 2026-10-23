@@ -1,4 +1,5 @@
 import type { Asset } from '../lib/asset'
+import type { TrailOptions } from '../lib/trail'
 import { imageUrl } from './assets.server'
 import { assetImageChanged } from './images.server'
 import {
@@ -19,7 +20,7 @@ import {
 // Adding, renaming and removing assets, and changing their photos, through Traccar's device API.
 // Traccar enforces who may do what; the access check here only decides which controls to show.
 
-export type ManagedAsset = Pick<Asset, 'id' | 'name' | 'imageUrl' | 'trailColor'> & { disabled: boolean }
+export type ManagedAsset = Pick<Asset, 'id' | 'name' | 'imageUrl' | 'trailColor' | 'trail'> & { disabled: boolean }
 
 export type AssetAccess = {
   /** May rename, remove and change photos (Traccar's read-only settings are off). */
@@ -86,6 +87,19 @@ export function updateAssetTrailColor(token: string, id: number, color: string):
   })
 }
 
+/** How its trail is drawn (see TrailOptions in trail.ts), on the device in Traccar like its colour; only what's given changes. */
+export function updateAssetTrailOptions(token: string, id: number, options: Partial<TrailOptions>): Promise<EditResult> {
+  return attempt(token, async () => {
+    await updateDevice(token, id, (device) => {
+      const attributes = deviceAttributes(device)
+      if (options.length !== undefined) attributes.panopticonTrail = options.length
+      if (options.pawPrints !== undefined) attributes.panopticonPawPrints = options.pawPrints
+      if (options.snapToPaths !== undefined) attributes.panopticonSnapToPaths = options.snapToPaths
+    })
+    return { ok: true }
+  })
+}
+
 /** Uploads the image to Traccar and makes it the asset's photo, as Traccar's own UI does. */
 export function saveAssetImage(token: string, id: number, bytes: Uint8Array<ArrayBuffer>, type: string): Promise<EditResult> {
   return attempt(token, async (): Promise<EditResult> => {
@@ -114,6 +128,7 @@ export function clearAssetImage(token: string, id: number): Promise<EditResult> 
 function toManagedAsset(device: TraccarDevice): ManagedAsset {
   const asset: ManagedAsset = { id: device.id, name: device.name, imageUrl: imageUrl(device), disabled: device.disabled }
   if (device.trailColor) asset.trailColor = device.trailColor
+  if (Object.keys(device.trail).length > 0) asset.trail = device.trail
   return asset
 }
 

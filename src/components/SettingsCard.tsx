@@ -218,14 +218,16 @@ export function SettingsCard({
             </div>
           )}
           <div key={page} className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-[env(safe-area-inset-bottom)] ${slide}`}>
-            {page === 'appearance' && <Appearance listColors={ROWS} {...mapStyles} canSnapToPaths={canSnapToPaths} />}
+            {page === 'appearance' && <Appearance listColors={ROWS} {...mapStyles} />}
             {page === 'places' && <PlacesList places={places} assets={assets} listColors={ROWS} onOpen={onOpenPlace} />}
             {page === 'alerts' && <AlertsPage listColors={ROWS} />}
             {page === 'live-links' && <LiveLinksList listColors={ROWS} />}
             {page === 'account' && <AccountView user={user} />}
             {page === 'assets' && <AssetsList listColors={ROWS} onOpen={(id) => onShow(`asset-${id}`)} onAdd={() => onShow('add-asset')} />}
             {page === 'add-asset' && <AddAssetForm listColors={ROWS} onAdded={(id) => onShow(`asset-${id}`)} />}
-            {assetId !== undefined && <AssetEditor id={assetId} listColors={ROWS} onRemoved={() => onShow('assets')} />}
+            {assetId !== undefined && (
+              <AssetEditor id={assetId} listColors={ROWS} canSnapToPaths={canSnapToPaths} onRemoved={() => onShow('assets')} />
+            )}
           </div>
         </div>
       </section>

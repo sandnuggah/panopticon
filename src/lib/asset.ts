@@ -1,4 +1,5 @@
 import type { TrackerKind } from './tracker'
+import type { TrailOptions } from './trail'
 
 export type AssetLocation = {
   lat: number
@@ -36,6 +37,8 @@ export type Asset = {
   tracker?: TrackerKind
   /** The colour its trail is drawn in, by id (see trailColors.ts); the default's when none was chosen. */
   trailColor?: string
+  /** How its trail is drawn, as chosen; the defaults for the rest (see trailOptionsOf in trail.ts). */
+  trail?: Partial<TrailOptions>
 }
 
 /** First letter of the name, shown when there's no picture. */

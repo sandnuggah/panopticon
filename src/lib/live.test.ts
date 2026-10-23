@@ -11,4 +11,10 @@ describe('applyUpdates', () => {
     assert.equal(applyUpdates([betty], [{ ...device, trailColor: 'orange' }]).assets[0]!.trailColor, 'orange')
     assert.equal(applyUpdates([betty], [device]).assets[0]!.trailColor, undefined)
   })
+
+  test('a device update brings how its trail is drawn, chosen somewhere else, or nothing: the defaults', () => {
+    const update = { ...device, trail: { length: 0 as const, pawPrints: true } }
+    assert.deepEqual(applyUpdates([betty], [update]).assets[0]!.trail, { length: 0, pawPrints: true })
+    assert.equal(applyUpdates([{ ...betty, trail: { pawPrints: true } }], [device]).assets[0]!.trail, undefined)
+  })
 })

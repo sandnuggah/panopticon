@@ -127,24 +127,31 @@ export function quietAssets(trails: Trails, trackers: Record<number, TrackerKind
  * Each trail drawn from `start` on (see trailFrom); none when trails are off (`start` null). With
  * 'outing', each from where its latest outing began (see latestOutingStart), a day back at most.
  */
-export function shownTrails(views: TrailViews, start: number | 'outing' | null): TrailViews {
+export function shownTrails(views: TrailViews, start: Start | ((id: number) => Start)): TrailViews {
   const shown: TrailViews = {}
-  if (start === null) return shown
   for (const [id, view] of Object.entries(views)) {
-    const trail = trailFrom(view, firstShown(view.pieces, startOf(view, start)))
+    const from = typeof start === 'function' ? start(Number(id)) : start
+    if (from === null) continue
+    const trail = trailFrom(view, firstShown(view.pieces, startOf(view, from)))
     if (trail) shown[Number(id)] = trail
   }
   return shown
 }
 
+/** Where a trail starts (see trailStart in trail.ts): a time, its latest outing, or null for none. */
+type Start = number | 'outing' | null
+
 /**
  * What shownTrails depends on, as a string, for keeping its result while the trail's start moves on
  * but the same pieces are drawn (see firstShown): each asset's first piece drawn.
  */
-export function shownKey(views: TrailViews, start: number | 'outing' | null): string {
+export function shownKey(views: TrailViews, start: Start | ((id: number) => Start)): string {
   if (start === null) return 'off'
   return Object.entries(views)
-    .map(([id, view]) => `${id}:${firstShown(view.pieces, startOf(view, start))}`)
+    .map(([id, view]) => {
+      const from = typeof start === 'function' ? start(Number(id)) : start
+      return `${id}:${from === null ? 'off' : firstShown(view.pieces, startOf(view, from))}`
+    })
     .join(' ')
 }
 
@@ -240,7 +247,8 @@ type Position = [number, number]
 
 /**
  * `older`: in an outing before the latest one, drawn in the background; `guess`: a way nobody saw (see
- * GUESSES), or a hop between two dots; `bearing`: a minute mark's (see minuteMarks).
+ * GUESSES), or a hop between two dots; `bearing`: a minute mark's (see minuteMarks); `paws`: its
+ * asset's walks are paw prints close up (see trailOptionsOf in trail.ts).
  */
 export type TrailFeature = {
   type: 'Feature'
@@ -253,6 +261,7 @@ export type TrailFeature = {
     older?: boolean
     guess?: boolean
     bearing?: number
+    paws?: boolean
   }
   geometry: { type: 'LineString'; coordinates: Position[] } | { type: 'Point'; coordinates: Position }
 }
@@ -262,24 +271,26 @@ export type TrailFeatures = { type: 'FeatureCollection'; features: TrailFeature[
 /**
  * GeoJSON for the trail layers: each walk as one line, a feature for each stretch of it seen or
  * guessed, so it has no darker beads where pieces of it overlap; it fades as a whole. `paws` holds the
- * latest outing's walks only, whole.
+ * latest outing's walks only, whole, of the assets drawn with paw prints (`pawPrints`, by asset id).
  */
 export function toTrailFeatures(
   trails: TrailViews,
   lines: SnappedLines = {},
   colors: Record<number, string> = {},
+  pawPrints: ReadonlySet<number> = new Set(),
 ): { trail: TrailFeatures; paws: TrailFeatures; marks: TrailFeatures } {
   const trail: TrailFeature[] = []
-  const paws: TrailFeature[] = []
+  const prints: TrailFeature[] = []
   const marks: TrailFeature[] = []
   for (const [key, view] of Object.entries(trails)) {
     const id = Number(key)
     const { walks, rides, dots, opacity, outing } = drawTrail(view, lines[id])
     // Its asset's (see trailColors.ts), for the layers to draw in its shade for a day or night map.
     const color = colors[id] ?? DEFAULT_TRAIL_COLOR
+    const paws = pawPrints.has(id)
     const line = (kind: string, points: TimedPoint[], time: number, extra: Partial<TrailFeature['properties']> = {}): TrailFeature => ({
       type: 'Feature',
-      properties: { id, kind, color, opacity: opacity(time), ...extra },
+      properties: { id, kind, color, opacity: opacity(time), ...(paws && { paws }), ...extra },
       geometry: { type: 'LineString', coordinates: points.map((point) => [point.lon, point.lat]) },
     })
     for (const walk of walks) {
@@ -294,8 +305,13 @@ export function toTrailFeatures(
         i = j
       }
       if (older) continue
-      paws.push(line('move', walk.points, end))
-      marks.push(...minuteMarks(walk.points, guess).map((mark) => ({ ...mark, properties: { ...mark.properties, id, color } })))
+      if (paws) prints.push(line('move', walk.points, end))
+      marks.push(
+        ...minuteMarks(walk.points, guess).map((mark) => ({
+          ...mark,
+          properties: { ...mark.properties, id, color, ...(paws && { paws }) },
+        })),
+      )
     }
     for (const ride of rides) trail.push(line(ride.kind, ride.points, ride.points.at(-1)!.time))
     // Not at a place: its pin is there (see placeLayers.ts), and walks run to its way in.
@@ -309,7 +325,7 @@ export function toTrailFeatures(
   }
   return {
     trail: { type: 'FeatureCollection', features: trail },
-    paws: { type: 'FeatureCollection', features: paws },
+    paws: { type: 'FeatureCollection', features: prints },
     marks: { type: 'FeatureCollection', features: marks },
   }
 }

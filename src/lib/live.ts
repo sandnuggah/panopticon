@@ -1,5 +1,6 @@
 import type { Asset, AssetBattery, AssetLocation } from './asset'
 import type { TrackerKind } from './tracker'
+import type { TrailOptions } from './trail'
 
 // Messages the /live stream sends (as a JSON array per SSE message) and how the browser applies them.
 
@@ -13,6 +14,7 @@ export type LiveUpdate =
       disabled: boolean
       imageUrl?: string
       trailColor?: string
+      trail?: Partial<TrailOptions>
     }
   | {
       kind: 'position'
@@ -53,6 +55,7 @@ export function applyUpdates(assets: Asset[], updates: LiveUpdate[]): { assets: 
             lastUpdate: update.lastUpdate,
             imageUrl: update.imageUrl,
             trailColor: update.trailColor,
+            trail: update.trail,
           }
     } else {
       // Trackers can deliver buffered positions late; never move backwards in time.

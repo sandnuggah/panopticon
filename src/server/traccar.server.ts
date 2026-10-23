@@ -1,4 +1,5 @@
 import { env } from './env.server'
+import { nearestTrail, type TrailOptions } from '../lib/trail'
 import { TRAIL_COLORS } from '../lib/trailColors'
 
 // Typed client for the few Traccar endpoints panopticon uses. Responses are checked
@@ -35,6 +36,8 @@ export type TraccarDevice = {
   alerts: string | null
   /** The colour its trail is drawn in, by id (attribute `panopticonTrailColor`, see trailColors.ts), if chosen. */
   trailColor: string | null
+  /** How its trail is drawn, as chosen (attributes `panopticonTrail`, `panopticonPawPrints`, `panopticonSnapToPaths`). */
+  trail: Partial<TrailOptions>
 }
 
 export type TraccarPosition = {
@@ -486,7 +489,19 @@ function parseDevice(value: unknown): TraccarDevice {
     model: typeof value.model === 'string' && value.model.trim() !== '' ? value.model.trim() : null,
     alerts: isObject(value.attributes) && typeof value.attributes.panopticonAlerts === 'string' ? value.attributes.panopticonAlerts : null,
     trailColor: readTrailColor(value.attributes),
+    trail: readTrailOptions(value.attributes),
   }
+}
+
+/** The trail options chosen for a device; values panopticon doesn't offer are left out, so the defaults apply. */
+function readTrailOptions(attributes: unknown): Partial<TrailOptions> {
+  if (!isObject(attributes)) return {}
+  const options: Partial<TrailOptions> = {}
+  const length = nearestTrail(attributes.panopticonTrail)
+  if (length !== undefined) options.length = length
+  if (typeof attributes.panopticonPawPrints === 'boolean') options.pawPrints = attributes.panopticonPawPrints
+  if (typeof attributes.panopticonSnapToPaths === 'boolean') options.snapToPaths = attributes.panopticonSnapToPaths
+  return options
 }
 
 /** Only a colour panopticon offers; anything else in the attribute is ignored. */

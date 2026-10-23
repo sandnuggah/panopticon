@@ -410,7 +410,7 @@ describe('toTrailFeatures', () => {
 
   test('each walk as one line, no beads where pieces of it overlap, and whole for paw prints; stays as dots', () => {
     const trail = view(new Trip().stay(10).walk(10).stay(10))
-    const { trail: features, paws } = toTrailFeatures({ 1: trail }, {})
+    const { trail: features, paws } = toTrailFeatures({ 1: trail }, {}, {}, new Set([1]))
     const walk = drawTrail(trail, {}).walks[0]!
     const lines = features.features
       .filter((feature) => feature.properties.kind === 'move')
@@ -422,6 +422,8 @@ describe('toTrailFeatures', () => {
     assert.deepEqual(lines[0]![0], [walk.points[0]!.lon, walk.points[0]!.lat], 'longitude first')
     assert.equal(paws.features.length, 1)
     assert.equal(paws.features[0]!.geometry.coordinates.length, walk.points.length)
+    assert.ok(features.features.filter((feature) => feature.properties.kind === 'move').every((feature) => feature.properties.paws))
+    assert.equal(toTrailFeatures({ 1: trail }, {}).paws.features.length, 0, 'no paw prints for an asset drawn with a line')
     const dots = features.features.filter((feature) => feature.properties.kind === 'stay')
     assert.equal(dots.length, 2)
     assert.deepEqual(
@@ -461,7 +463,7 @@ describe('toTrailFeatures', () => {
       [true, false],
       'the walk before the long stay is an older outing',
     )
-    assert.equal(toTrailFeatures({ 1: later }, {}).paws.features.length, 1, 'paw prints for the latest outing only')
+    assert.equal(toTrailFeatures({ 1: later }, {}, {}, new Set([1])).paws.features.length, 1, 'paw prints for the latest outing only')
   })
 
   test("each trail in its asset's colour, or the default's", () => {
