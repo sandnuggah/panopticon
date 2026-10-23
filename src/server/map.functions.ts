@@ -42,7 +42,7 @@ function parseWalks(input: unknown): MatchablePoint[][] {
   return input.map((walk: unknown) => {
     if (!Array.isArray(walk) || walk.length < 2 || walk.length > MAX_POINTS_PER_WALK) throw new Error('Invalid request')
     return walk.map((point: unknown) => {
-      const { lat, lon, time, park, anchor, unseen } = (point ?? {}) as Record<string, unknown>
+      const { lat, lon, time, park, anchor, unseen, stood } = (point ?? {}) as Record<string, unknown>
       const ok =
         typeof lat === 'number' &&
         Math.abs(lat) <= 90 &&
@@ -58,6 +58,7 @@ function parseWalks(input: unknown): MatchablePoint[][] {
         ...(park === true && { park: true }),
         ...(anchor === true && { anchor: true }),
         ...(unseen === true && { unseen: true }),
+        ...(stood === true && { stood: true }),
       }
     })
   })

@@ -36,6 +36,39 @@ describe('matchableWalks', () => {
     )
   })
 
+  test('the stays are timed as long before and after as the way takes at a walk, a minute at least', () => {
+    // Home 20 m from the first fix (a minute), the next stay 140 m on from the last (100 s at 1.4 m/s).
+    const move: TrailPiece = { kind: 'move', points: [fix(20, 0, 10), fix(60, 0, 11), fix(100, 0, 12)] }
+    const points = matchableWalks([stay(0, 0, 10), move, stay(240, 20, 30)])[0]!.points
+    assert.equal(points[0]!.time, move.points[0]!.time - 60_000)
+    assert.ok(Math.abs(points.at(-1)!.time - (move.points.at(-1)!.time + 100_000)) < 1000)
+  })
+
+  test('a fix standing for 3 or more left out as jitter is where the dog stood', () => {
+    // On, a stop of 4 fixes within a few metres (3 left out), on again; then 2 (1 left out); at the end
+    // 4 again, but the last is kept as the end, so only 2 are left out.
+    const move: TrailPiece = {
+      kind: 'move',
+      points: [
+        fix(0, 0, 0),
+        fix(40, 0, 1),
+        fix(41, 2, 2),
+        fix(39, 1, 3),
+        fix(42, 0, 4),
+        fix(80, 0, 5),
+        fix(81, 1, 6),
+        fix(120, 0, 7),
+        fix(121, 1, 8),
+        fix(122, 0, 9),
+        fix(121, 2, 10),
+      ],
+    }
+    assert.deepEqual(
+      matchableWalks([move])[0]!.points.map((point) => !!point.stood),
+      [false, true, false, false, false],
+    )
+  })
+
   test('wandering about without going anywhere is no walk', () => {
     const move: TrailPiece = { kind: 'move', points: [fix(0, 0, 0), fix(20, 5, 1), fix(40, 0, 2), fix(10, 5, 3)] }
     assert.deepEqual(matchableWalks([move]), [])
@@ -108,6 +141,24 @@ describe('matchableWalks', () => {
     assert.equal(walk!.points.at(-2)!.time, points.at(-1)!.time)
     const gaps = walk!.points.slice(2, -1).map((point, index) => point.time - walk!.points[index + 1]!.time)
     assert.ok(Math.max(...gaps) - Math.min(...gaps) <= 30_000, 'evenly')
+  })
+})
+
+describe('gaps nobody saw', () => {
+  test('between fixes as recorded: a dog standing still, its fixes left out as jitter, is no gap', () => {
+    // Still for 3 minutes (fixes every 30 s within 2 m), then on: kept fixes 3.5 minutes apart.
+    const still = [fix(0, 0, 0), ...[1, 2, 3, 4, 5, 6].map((step) => fix(1, 1, step)), fix(40, 0, 7), fix(80, 0, 8), fix(120, 0, 9)]
+    const walk = matchableWalks([{ kind: 'move', points: still }])[0]!
+    assert.equal(
+      walk.points.some((point) => point.unseen),
+      false,
+    )
+    // A real gap: nothing for 3 minutes.
+    const gap = [fix(0, 0, 0), fix(40, 0, 7), fix(80, 0, 8), fix(120, 0, 9)]
+    assert.deepEqual(
+      matchableWalks([{ kind: 'move', points: gap }])[0]!.points.map((point) => !!point.unseen),
+      [false, true, false, false],
+    )
   })
 })
 

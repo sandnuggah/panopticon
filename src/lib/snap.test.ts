@@ -204,6 +204,18 @@ describe('drawWalk', () => {
     assert.deepEqual([...strayed(walk, [[4, 5]], metres([0, 0, 0, 0, 30, 18]))], [], 'only when each of them did')
   })
 
+  test("a fix that strayed doesn't break the stretch on the line it jumped out of", () => {
+    // Two fixes on the line, a stray, two more: four in a row on the line, strays aside.
+    const walk = [at(20, 2), at(50, -2), at(80, -30), at(110, 1), at(140, -1)]
+    assert.equal(drawWalk(walk, PATH).snapped, false, 'two and two: neither enough')
+    assert.equal(drawWalk(walk, PATH, new Set([2])).snapped, true)
+  })
+
+  test('where the dog stood a while is no stray', () => {
+    const walk = [at(10, 2), at(40, -3), { ...at(70, -40), stood: true }, at(100, 3), at(130, -4)]
+    assert.deepEqual(strayCandidates(walk, PATH), [])
+  })
+
   test('three fixes off the line in a row are no strays', () => {
     const walk = [at(0, 2), at(40, -3), at(80, 4), at(110, 60), at(150, 70), at(170, 65), at(198, 120), at(201, 160), at(199, 190)]
     assert.deepEqual(strayCandidates(walk, PATH), [])
@@ -214,9 +226,12 @@ describe('drawWalk', () => {
     assert.deepEqual(strayCandidates(walk, PATH), [[2]])
   })
 
-  test('a route fits up to 4 times as far plus 50 m', () => {
-    assert.equal(routeFits(at(0, 0), at(100, 0), 440), true)
-    assert.equal(routeFits(at(0, 0), at(100, 0), 460), false)
+  test('a route fits up to twice as far plus 20 m, counting the bits from the points to it', () => {
+    // 100 m apart; round a block 40 m north: 180 m, and 10 m from each point to where it starts and ends.
+    const round = (north: number) => [at(0, 10), at(0, north), at(100, north), at(100, 10)]
+    assert.equal(routeFits(at(0, 0), at(100, 0), round(45)), true, '200 m in all')
+    assert.equal(routeFits(at(0, 0), at(100, 0), round(65)), false, '240 m')
+    assert.equal(routeFits(at(0, 0), at(100, 0), []), false, 'none')
   })
 })
 
@@ -270,6 +285,34 @@ describe('how it was drawn, and when', () => {
     assert.deepEqual(
       points.map((point) => point.time),
       [1_000_000, 1_030_000, 1_045_000, 1_060_000],
+    )
+  })
+})
+
+describe('round trips and breaks', () => {
+  test('a stay at the start is put on the first stretch of a round trip, not on the way back beside it', () => {
+    // Out east along one side of a street and back along the other, 10 m north; home 12 m north of the start.
+    const line = [at(0, 0), at(200, 0), at(200, 10), at(0, 10)]
+    const home = { ...at(0, 12), anchor: true }
+    const fixes = [at(50, 0), at(100, 0), at(150, 0), at(200, 5), at(150, 10), at(100, 10), at(50, 10)]
+    const walk = drawWalk([home, ...fixes], line)
+    assert.equal(walk.how.filter((way) => way === 'matched').length > 3, true, 'out and back along the line')
+    assert.deepEqual(metres(walk.points[0]!), [0, 0], 'from the start of the line')
+  })
+
+  test("not across a break between two of Valhalla's trips: straight between the fixes there", () => {
+    // Two trips: east along y = 0, then on along y = 50, with the gap between them a break.
+    const line = [at(0, 0), at(100, 0), at(100, 50), at(200, 50)]
+    const fixes = [at(30, 0), at(60, 0), at(90, 0), at(105, 25), at(110, 50), at(140, 50), at(170, 50)]
+    assert.ok(
+      drawWalk(fixes, line).points.some((point) => metres(point).join() === '100,50'),
+      'along the chord without the break',
+    )
+    const broken = drawWalk(fixes, line, new Set(), new Set([1]))
+    assert.ok(!broken.points.some((point) => metres(point).join() === '100,50'), 'not along it with')
+    assert.ok(
+      broken.points.some((point) => metres(point).join() === '105,25'),
+      'and a fix beside the break drawn as recorded, not put on it',
     )
   })
 })

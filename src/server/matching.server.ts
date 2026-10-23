@@ -30,7 +30,7 @@ export async function matchWalk(points: MatchablePoint[]): Promise<SnapAnswer> {
   const key = points
     .map(
       (point) =>
-        `${point.time}:${point.lat.toFixed(6)},${point.lon.toFixed(6)}${point.park ? 'p' : ''}${point.anchor ? 'a' : ''}${point.unseen ? 'u' : ''}`,
+        `${point.time}:${point.lat.toFixed(6)},${point.lon.toFixed(6)}${point.park ? 'p' : ''}${point.anchor ? 'a' : ''}${point.unseen ? 'u' : ''}${point.stood ? 's' : ''}`,
     )
     .join(';')
   if (cache.has(key)) return cache.get(key)!
@@ -57,10 +57,16 @@ export async function matchWalk(points: MatchablePoint[]): Promise<SnapAnswer> {
       const body = (await response.json()) as { trip?: Trip; alternates?: { trip?: Trip }[] }
       const trips = [body.trip, ...(body.alternates ?? []).map((alternate) => alternate.trip)].filter((trip): trip is Trip => !!trip)
       const firstPoint = (trip: Trip) => trip.locations?.[0]?.original_index ?? 0
-      const line = trips
-        .sort((a, b) => firstPoint(a) - firstPoint(b))
-        .flatMap((trip) => (trip.legs ?? []).flatMap((leg) => (leg.shape ? decodePolyline6(leg.shape) : [])))
-      result = await routeUnseen(url, points, drawWalk(points, line, await strays(url, points, line)))
+      // Kept apart: where one trip ends and the next begins isn't a way (see drawWalk).
+      const line: LatLon[] = []
+      const breaks = new Set<number>()
+      for (const trip of trips.sort((a, b) => firstPoint(a) - firstPoint(b))) {
+        const shape = (trip.legs ?? []).flatMap((leg) => (leg.shape ? decodePolyline6(leg.shape) : []))
+        if (shape.length === 0) continue
+        if (line.length > 0) breaks.add(line.length - 1)
+        line.push(...shape)
+      }
+      result = await routeUnseen(url, points, drawWalk(points, line, await strays(url, points, line, breaks), breaks))
     } else if (response.status === 400) {
       // No match (e.g. points far from any path): the legs nobody saw may still have a route.
       result = await routeUnseen(url, points, drawWalk(points, []))
@@ -78,8 +84,8 @@ export async function matchWalk(points: MatchablePoint[]): Promise<SnapAnswer> {
 }
 
 /** The fixes that strayed (see strayCandidates in snap.ts), by how far each is from the nearest way, from `locate`. */
-async function strays(url: string, points: MatchablePoint[], line: LatLon[]): Promise<Set<number>> {
-  const groups = strayCandidates(points, line)
+async function strays(url: string, points: MatchablePoint[], line: LatLon[], breaks: ReadonlySet<number>): Promise<Set<number>> {
+  const groups = strayCandidates(points, line, breaks)
   const candidates = groups.flat()
   if (candidates.length === 0) return new Set()
   const response = await fetch(`${url}/locate`, {
@@ -129,10 +135,10 @@ async function walkingRoute(url: string, from: Point, to: Point): Promise<LatLon
   // 400: no route (e.g. a point far from any path).
   if (response.status === 400) return null
   if (!response.ok) throw new Error(`route: HTTP ${response.status}`)
-  const body = (await response.json()) as { trip?: { summary?: { length?: number }; legs?: { shape?: string }[] } }
-  const metres = (body.trip?.summary?.length ?? Infinity) * 1000
+  const body = (await response.json()) as { trip?: { legs?: { shape?: string }[] } }
   const shape = body.trip?.legs?.[0]?.shape
-  return shape && routeFits(from, to, metres) ? decodePolyline6(shape) : null
+  const route = shape ? decodePolyline6(shape) : []
+  return routeFits(from, to, route) ? route : null
 }
 
 /** Valhalla's shapes are Google-style encoded polylines with 6 decimals. */

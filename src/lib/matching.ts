@@ -12,6 +12,16 @@ const JITTER_METERS = 15
 const MIN_WALK_METERS = 75
 /** Two stays next to each other this far apart are separate dots, with a hop between them that nobody saw. */
 const STAY_HOP_METERS = 40
+/** A fix standing for at least this many more left out as jitter is where the dog stood a while: no stray. */
+const STOOD_FIXES = 3
+/**
+ * A walk's stays are timed this long before its first fix and after its last at least, or as long as
+ * the way takes at a walk (WALK_METERS_PER_SECOND): Valhalla turns down a way that would take far longer
+ * than the time between two points, so 1 s, as before, broke the match at the door, and the leg
+ * from home was routed instead (on a week of Kofi's, 5.0 km routed and 8.3 km matched; now 0.9 and 13.3).
+ */
+const ANCHOR_MS = 60_000
+const WALK_METERS_PER_SECOND = 1.4
 
 /** At most this many walks per request, each at most this many points. */
 export const MAX_WALKS_PER_REQUEST = 20
@@ -19,9 +29,10 @@ export const MAX_POINTS_PER_WALK = 400
 
 /**
  * `park`: in a park, where snapping is stricter (see snap.ts). `anchor`: the stay the walk starts or
- * ends at, not a fix. `unseen`: nobody saw the way here from the fix before (see matchableWalks).
+ * ends at, not a fix. `unseen`: nobody saw the way here from the fix before. `stood`: the dog stood
+ * here a while (see matchableWalks).
  */
-export type MatchablePoint = LatLon & { time: number; park?: boolean; anchor?: boolean; unseen?: boolean }
+export type MatchablePoint = LatLon & { time: number; park?: boolean; anchor?: boolean; unseen?: boolean; stood?: boolean }
 
 /** Identifies a walk by its first fix, so it's the same walk as it grows. */
 export function walkId(points: TrailPoint[]): string {
@@ -42,7 +53,7 @@ export function walkSignature(points: MatchablePoint[]): string {
   const text = points
     .map(
       (point) =>
-        `${point.time}${point.park ? 'p' : ''}${point.unseen ? 'u' : ''}${point.anchor ? `a${point.lat.toFixed(6)},${point.lon.toFixed(6)}` : ''}`,
+        `${point.time}${point.park ? 'p' : ''}${point.unseen ? 'u' : ''}${point.stood ? 's' : ''}${point.anchor ? `a${point.lat.toFixed(6)},${point.lon.toFixed(6)}` : ''}`,
     )
     .join(' ')
   // FNV-1a: short enough to keep and compare, and versions of one walk differ in their ends and count anyway.
@@ -74,7 +85,8 @@ export function otherWalks(pieces: TrailPiece[], worth: MatchableWalk[]): Matcha
  * walk from or to a stay starts or ends at the stay's middle, where the map draws it from (its dot),
  * marked as an anchor: leaving home then follows the street from the door, not a straight line to
  * the first fix outside, which comes once the tracker wakes (see drawWalk in snap.ts). For the same
- * reason a fix is marked `unseen` when it comes at least the tracker's `gapMs` after the one before.
+ * reason a fix is marked `unseen` when, between it and the fix kept before it, the fixes as recorded
+ * have a gap of at least the tracker's `gapMs` (as kept, a dog standing still has none).
  * (A long hop to or from a weak fix used to be marked too: its only clear effect, on a week of Kofi's,
  * was a 454 m loop round the block made up from 208 m of weak fixes.)
  */
@@ -100,22 +112,37 @@ export function matchableWalks(
     const start = from ?? piece.points[0]!
     if (![...piece.points, ...(to ? [to] : [])].some((point) => distance(start, point) >= MIN_WALK_METERS)) return
     const kept = [piece.points[0]!]
-    for (const point of piece.points.slice(1)) if (distance(kept.at(-1)!, point) >= JITTER_METERS) kept.push(point)
-    if (kept.at(-1) !== piece.points.at(-1)) kept.push(piece.points.at(-1)!)
+    // How many fixes left out as jitter each kept one stands for.
+    const left = new Map<TrailPoint, number>()
+    for (const point of piece.points.slice(1)) {
+      if (distance(kept.at(-1)!, point) >= JITTER_METERS) kept.push(point)
+      else left.set(kept.at(-1)!, (left.get(kept.at(-1)!) ?? 0) + 1)
+    }
+    if (kept.at(-1) !== piece.points.at(-1)) {
+      // The last fix is kept after all: one fewer left out.
+      left.set(kept.at(-1)!, left.get(kept.at(-1)!)! - 1)
+      kept.push(piece.points.at(-1)!)
+    }
     // Room for the two stays' middles within the limit.
     const room = MAX_POINTS_PER_WALK - 2
     const thinned =
       kept.length <= room ? kept : Array.from({ length: room }, (_, k) => kept[Math.round((k * (kept.length - 1)) / (room - 1))]!)
-    const points: MatchablePoint[] = thinned.map((fix, index, all) => {
+    // A gap nobody saw is between fixes as recorded, not as kept: a dog standing still leaves its
+    // fixes out as jitter, which isn't a gap (on a week of Kofi's, 18 of 29 such marks were that).
+    const gaps = new Set(piece.points.filter((fix, index) => index > 0 && fix.time - piece.points[index - 1]!.time >= profile.gapMs))
+    const points: MatchablePoint[] = thinned.map((fix, index) => {
       const { lat, lon, time } = fix
       const point: MatchablePoint = { lat, lon, time }
       if (inPark({ lat, lon })) point.park = true
-      const before = all[index - 1]
-      if (before && time - before.time >= profile.gapMs) point.unseen = true
+      if ((left.get(fix) ?? 0) >= STOOD_FIXES) point.stood = true
+      // Any gap between the kept fix before and this one.
+      const before = thinned[index - 1]
+      if (before && piece.points.some((raw) => raw.time > before.time && raw.time <= time && gaps.has(raw))) point.unseen = true
       return point
     })
-    if (from) points.unshift({ ...from, time: points[0]!.time - 1000, anchor: true })
-    if (to) points.push({ ...to, time: points.at(-1)!.time + 1000, anchor: true })
+    const walkMs = (a: LatLon, b: LatLon) => Math.max(ANCHOR_MS, Math.round((distance(a, b) / WALK_METERS_PER_SECOND) * 1000))
+    if (from) points.unshift({ ...from, time: points[0]!.time - walkMs(from, points[0]!), anchor: true })
+    if (to) points.push({ ...to, time: points.at(-1)!.time + walkMs(points.at(-1)!, to), anchor: true })
     if (points.length < 3) return
     walks.push({ id: walkId(piece.points), signature: walkSignature(points), points })
   })
