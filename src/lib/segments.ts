@@ -58,9 +58,6 @@ const SHORT_STOP_MS = 5 * 60 * 1000
  * A lone fix at least this far from the fixes either side of it, all within SPIKE_MAX_MS, while
  * those two are much closer to each other (at most SPIKE_SHORTCUT of the way through it), went out
  * and straight back: GPS jumping among buildings or trees, not a trip down the street. It's left out.
- * A weak fix (see isWeak) may have its neighbours further apart, up to the tracker's silence
- * (SILENT_MS): indoors there are minutes without a fix around it. On a week of Kofi's that was one
- * fix, 96 m out from the courtyard behind home into the next block's and 123 m back, over 3.5 minutes.
  */
 const SPIKE_MIN_METERS = 40
 const SPIKE_SHORTCUT = 0.6
@@ -404,7 +401,7 @@ function withoutSpikes(points: TrailPoint[], profile: TrailProfile): TrailPoint[
 }
 
 function isSpike(before: TrailPoint, fix: TrailPoint, after: TrailPoint, profile: TrailProfile): boolean {
-  if (after.time - before.time > (isWeak(fix, profile) ? profile.silentMs : profile.spikeMs)) return false
+  if (after.time - before.time > profile.spikeMs) return false
   const [out, back] = [distance(before, fix), distance(fix, after)]
   return out >= profile.spikeMeters && back >= profile.spikeMeters && distance(before, after) <= SPIKE_SHORTCUT * (out + back)
 }

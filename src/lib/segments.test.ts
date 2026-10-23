@@ -272,8 +272,8 @@ describe('classifyTrail', () => {
     assert.ok(!drawn.includes(points[5]!))
   })
 
-  test('a weak fix out and back is left out with its neighbours minutes apart, a good one only within 3', () => {
-    // 3.5 minutes between the fixes either side, indoors without a fix; the middle one 95 m out.
+  test('a fix out and back is left out with its neighbours within 3 minutes, weak or not', () => {
+    // 3.5 minutes between the fixes either side; the middle one 95 m out.
     const at = (north: number, step: number, satellites: number): TrailPoint => ({
       lat: START.lat + north / METERS_PER_DEGREE_LAT,
       lon: START.lon,
@@ -283,8 +283,8 @@ describe('classifyTrail', () => {
     })
     const drawn = (points: TrailPoint[]) =>
       classifyTrail(points).some((piece) => piece.kind === 'move' && piece.points.includes(points[1]!))
-    assert.equal(drawn([at(0, 0, 6), at(-95, 6, 6), at(5, 7, 6)]), false)
-    assert.equal(drawn([at(0, 0, 18), at(-95, 6, 18), at(5, 7, 18)]), true)
+    assert.equal(drawn([at(0, 0, 6), at(-95, 6, 6), at(5, 7, 6)]), true)
+    assert.equal(drawn([at(0, 0, 6), at(-95, 2, 6), at(5, 3, 6)]), false, 'within 3 minutes')
   })
 
   test('turning a corner keeps the fix at the corner', () => {

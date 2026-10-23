@@ -66,7 +66,7 @@ describe('matchableWalks', () => {
     )
   })
 
-  test('a long hop to or from a weak fix is marked: either end may be tens of metres off', () => {
+  test('a long hop to or from a weak fix is matched like any other: only a gap in time is unseen', () => {
     const weak = (point: TrailPoint): TrailPoint => ({ ...point, satellites: 6 })
     const strong = (point: TrailPoint): TrailPoint => ({ ...point, satellites: 18 })
     // 30 s apart: 30 m strong, 80 m to a weak fix, 80 m between strong fixes, 40 m to a weak one.
@@ -83,7 +83,7 @@ describe('matchableWalks', () => {
     }
     assert.deepEqual(
       matchableWalks([move])[0]!.points.map((point) => !!point.unseen),
-      [false, false, true, true, false, false],
+      [false, false, false, false, false, false],
     )
   })
 

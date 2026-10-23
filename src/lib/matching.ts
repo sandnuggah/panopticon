@@ -12,8 +12,6 @@ const JITTER_METERS = 15
 const MIN_WALK_METERS = 75
 /** Two stays next to each other this far apart are separate dots, with a hop between them that nobody saw. */
 const STAY_HOP_METERS = 40
-/** A hop this long to or from a weak fix (see isWeak) is one nobody saw: either end may be tens of metres off. */
-const WEAK_HOP_METERS = 60
 
 /** At most this many walks per request, each at most this many points. */
 export const MAX_WALKS_PER_REQUEST = 20
@@ -76,8 +74,9 @@ export function otherWalks(pieces: TrailPiece[], worth: MatchableWalk[]): Matcha
  * walk from or to a stay starts or ends at the stay's middle, where the map draws it from (its dot),
  * marked as an anchor: leaving home then follows the street from the door, not a straight line to
  * the first fix outside, which comes once the tracker wakes (see drawWalk in snap.ts). For the same
- * reason a fix is marked `unseen` when it comes at least the tracker's `gapMs` after the one before, or
- * WEAK_HOP_METERS or more from it when either is weak.
+ * reason a fix is marked `unseen` when it comes at least the tracker's `gapMs` after the one before.
+ * (A long hop to or from a weak fix used to be marked too: its only clear effect, on a week of Kofi's,
+ * was a 454 m loop round the block made up from 208 m of weak fixes.)
  */
 export function matchableWalks(
   pieces: TrailPiece[],
@@ -112,8 +111,7 @@ export function matchableWalks(
       const point: MatchablePoint = { lat, lon, time }
       if (inPark({ lat, lon })) point.park = true
       const before = all[index - 1]
-      const weakHop = before && distance(before, fix) >= WEAK_HOP_METERS && (isWeak(before, profile) || isWeak(fix, profile))
-      if (before && (time - before.time >= profile.gapMs || weakHop)) point.unseen = true
+      if (before && time - before.time >= profile.gapMs) point.unseen = true
       return point
     })
     if (from) points.unshift({ ...from, time: points[0]!.time - 1000, anchor: true })
