@@ -402,7 +402,9 @@ export default function AssetMap({
     const stackOf = (id: number) => {
       const stack = stacks.get(id)
       if (!stack || stack.size < 2) return undefined
-      return { index: spots.get(stack.spot)!.indexOf(id), size: stack.size, fanned: fanned === stack.spot }
+      const ids = spots.get(stack.spot)!
+      const names = ids.map((other) => assets.find((asset) => asset.id === other)?.name ?? '')
+      return { index: ids.indexOf(id), size: stack.size, fanned: fanned === stack.spot, names }
     }
     updateMarkersRef.current = () => {
       for (const asset of assets) {

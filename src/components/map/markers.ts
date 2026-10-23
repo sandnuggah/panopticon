@@ -17,13 +17,16 @@ const GLIDE_MAX_METERS = 150
 const STACK_STEP = { x: 18, y: -6 }
 /** Fanned out, how far apart (px) the markers stand in their row. */
 const FAN_STEP = 64
+/** A stack's label names as many of its assets as fit in this width (px), and "+2" for the rest. */
+const STACK_LABEL_PX = 140
 
 /**
  * Where a marker sits among others at the same spot (assets at one place share its pin, see
  * shownLocation in presence.ts): `index` 0 on top. Stacked, the others peek out behind it and its
- * name says how many more; fanned out, they stand in a row, each with its name, to be tapped.
+ * label names them all, as many as fit (`names`, top first); fanned out, they stand in a row, each
+ * with its own name, to be tapped.
  */
-export type Stack = { index: number; size: number; fanned: boolean }
+export type Stack = { index: number; size: number; fanned: boolean; names: string[] }
 
 /** How the camera eases (maplibre's own default), so a followed marker and the map move as one. */
 export function ease(t: number): number {
@@ -69,6 +72,31 @@ export function glideMarker(marker: Marker, to: [number, number], ms: number) {
   glides.set(marker, { frame: requestAnimationFrame(step), to })
 }
 
+/** "Betty, Sixten", or "Betty, Sixten +2" when the rest wouldn't fit in STACK_LABEL_PX, at least the first name. */
+function stackLabel(names: string[], label: HTMLElement): string {
+  const width = textWidth(label)
+  for (let shown = names.length; shown > 1; shown--) {
+    const text = names.slice(0, shown).join(', ') + (shown < names.length ? ` +${names.length - shown}` : '')
+    if (width(text) <= STACK_LABEL_PX) return text
+  }
+  return `${names[0]} +${names.length - 1}`
+}
+
+/** "Betty and Sixten", "Betty, Sixten and Bamse". */
+function listed(names: string[]): string {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+}
+
+let measure: CanvasRenderingContext2D | null = null
+
+/** How wide text is in an element's font, in px. */
+function textWidth(element: HTMLElement): (text: string) => number {
+  measure ??= document.createElement('canvas').getContext('2d')
+  const style = getComputedStyle(element)
+  if (measure) measure.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+  return (text) => measure?.measureText(text).width ?? text.length * 7
+}
+
 /** A marker's element; tapping it calls `onTapRef.current` with the asset's id. */
 export function createMarkerElement(assetId: number, onTapRef: { current: (id: number) => void }): HTMLElement {
   const element = document.createElement('button')
@@ -103,19 +131,20 @@ export function updateMarkerElement(
   asset: Asset,
   state: { stale: boolean; selected: boolean; atPlace?: string; stack?: Stack },
 ) {
-  const { index = 0, size = 1, fanned = false } = state.stack ?? {}
+  const { index = 0, size = 1, fanned = false, names = [] } = state.stack ?? {}
   const stacked = size > 1 && !fanned
-  const more = stacked && index === 0 ? size - 1 : 0
+  const top = stacked && index === 0
   element.classList.toggle('marker-stale', state.stale)
   element.classList.toggle('marker-selected', state.selected)
   element.classList.toggle('marker-behind', stacked && index > 0)
   const where = state.atPlace ? `, at ${state.atPlace}` : ''
-  element.setAttribute('aria-label', more ? `${asset.name} and ${more} more${where}: show them all` : `Show ${asset.name}${where}`)
+  element.setAttribute('aria-label', top ? `${listed(names)}${where}: show them all` : `Show ${asset.name}${where}`)
   element.setAttribute('aria-expanded', String(size > 1 ? fanned : false))
   if (size < 2) element.removeAttribute('aria-expanded')
   element.querySelector<HTMLElement>('.marker-badge')!.hidden = !state.atPlace
   element.querySelector('.marker-initial')!.textContent = assetInitial(asset.name)
-  element.querySelector('.marker-label')!.textContent = more ? `${asset.name} +${more}` : asset.name
+  const label = element.querySelector<HTMLElement>('.marker-label')!
+  label.textContent = top ? stackLabel(names, label) : asset.name
   // Stacked: to the right behind the top one; fanned out: in a row centred on the spot.
   const [x, y] = size < 2 ? [0, 0] : fanned ? [(index - (size - 1) / 2) * FAN_STEP, 0] : [index * STACK_STEP.x, index * STACK_STEP.y]
   element.style.translate = x || y ? `${x}px ${y}px` : ''
