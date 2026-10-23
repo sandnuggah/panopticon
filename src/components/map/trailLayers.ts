@@ -6,10 +6,9 @@ import { DEFAULT_TRAIL_COLOR, TRAIL_COLORS, trailColorOf } from '../../lib/trail
 // The trail on the map, drawn by what the asset was doing (see segments.ts, and trailGeometry.ts for
 // what's drawn where): walking as a line, or as paw prints close up (Appearance → Paw prints); rides
 // through their fixes, dashed, and dotted where they went without GPS (underground); stays as dots,
-// bigger the longer they were. The latest outing in front, with a casing; older ones behind it as one
-// layer; walks along the same street side by side, like a metro map's lines (lanes.ts), so the
-// street home, walked every day, shows each walk; ways nobody saw thinner and lighter. All of it
-// under the map's labels. Markers are DOM elements, so they always sit above.
+// bigger the longer they were. The latest outing in front, with a casing and a mark at each minute
+// walked (the way it went, and its pace); older ones behind it as a soft halo, the same however often
+// a street was walked; ways nobody saw thinner and lighter. All of it under the map's labels. Markers are DOM elements, so they always sit above.
 
 const TRAILS = 'trails'
 const OLDER = 'trails-older'
@@ -19,12 +18,18 @@ const RIDES_UNDERGROUND = 'trail-underground'
 const STAYS = 'trail-stays'
 const PAWS = 'paws'
 const PAW_IMAGE = 'paw-prints'
+const MARKS = 'trail-marks'
+const MARK_IMAGE = 'minute-mark'
+/** Minute marks from this zoom, where they're apart enough to read. */
+const MARK_ZOOM = 14.5
 /** Paw prints from this zoom, where they're far enough apart to read; the line below it. */
 const PAW_ZOOM = 16.5
-/** Older outings, as one layer: faint enough to stay behind the latest, clear enough to see on a park. */
-const OLDER_OPACITY = 0.4
-/** Between walks side by side along a street (see lanes.ts), pixels. */
-const LANE_GAP = 1.5
+/**
+ * Older outings' walks, as one soft wide band (a halo): where they overlap, the street walked every
+ * day, it's no darker, and the latest outing reads clearly on it. Side by side lanes, tried before,
+ * were too busy; so was each walk fading with its age.
+ */
+const HALO_OPACITY = 0.22
 /** A guess (see trailGeometry.ts) at this much of the line's opacity. */
 const GUESS_OPACITY = 0.6
 
@@ -36,11 +41,13 @@ export function setTrails(map: MapLibreMap, trails: TrailViews, snappedWalks: Sn
   const features = toTrailFeatures(trails, snappedWalks, colors)
   void map.getSource<GeoJSONSource>(TRAILS)?.setData(features.trail)
   void map.getSource<GeoJSONSource>(PAWS)?.setData(features.paws)
+  void map.getSource<GeoJSONSource>(MARKS)?.setData(features.marks)
 }
 
 /** The latest outing's walks as paw prints close up (from PAW_ZOOM), or as a line. */
 export function showPawPrints(map: MapLibreMap, on: boolean) {
   for (const layer of [TRAILS, CASING]) map.setLayerZoomRange(layer, 0, on ? PAW_ZOOM : 24)
+  map.setLayerZoomRange(MARKS, MARK_ZOOM, on ? PAW_ZOOM : 24)
   map.setLayoutProperty(PAWS, 'visibility', on ? 'visible' : 'none')
 }
 
@@ -74,16 +81,6 @@ export function addTrailLayers(map: MapLibreMap) {
     18,
     ['case', guess, 3 + extra, 5.5 + extra],
   ]
-  // Walks along the same street side by side (see lanes.ts): a lane is a line's width and LANE_GAP apart.
-  const lane: ExpressionSpecification = [
-    'interpolate',
-    ['linear'],
-    ['zoom'],
-    12,
-    ['*', ['coalesce', ['get', 'lane'], 0], 2.5 + LANE_GAP],
-    18,
-    ['*', ['coalesce', ['get', 'lane'], 0], 5.5 + LANE_GAP],
-  ]
   map.addSource(TRAILS, { type: 'geojson', data: empty.trail })
   addLayer({
     id: OLDER,
@@ -92,11 +89,10 @@ export function addTrailLayers(map: MapLibreMap) {
     filter: ['all', kind('move'), older],
     layout: lineLayout,
     paint: {
-      'line-offset': lane,
       'line-color': color,
-      'line-width': width(0),
-      'line-opacity': ['case', guess, GUESS_OPACITY, 1],
-      'line-layer-opacity': OLDER_OPACITY,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 12, 6, 18, 16],
+      'line-blur': ['interpolate', ['linear'], ['zoom'], 12, 2, 18, 5],
+      'line-layer-opacity': HALO_OPACITY,
     },
   })
   addLayer({
@@ -133,7 +129,6 @@ export function addTrailLayers(map: MapLibreMap) {
     filter: ['all', kind('move'), ['!', older], ['!', guess]],
     layout: lineLayout,
     paint: {
-      'line-offset': lane,
       'line-color': casingColor(map),
       'line-width': width(3),
       'line-opacity': ['get', 'opacity'],
@@ -146,7 +141,6 @@ export function addTrailLayers(map: MapLibreMap) {
     filter: ['all', kind('move'), ['!', older]],
     layout: lineLayout,
     paint: {
-      'line-offset': lane,
       'line-color': color,
       'line-width': width(0),
       'line-opacity': ['*', ['get', 'opacity'], ['case', guess, GUESS_OPACITY, 1]],
@@ -167,6 +161,24 @@ export function addTrailLayers(map: MapLibreMap) {
       'circle-stroke-width': 2,
       'circle-opacity': ['get', 'opacity'],
       'circle-stroke-opacity': ['get', 'opacity'],
+    },
+  })
+
+  // A small white chevron at each minute walked on the latest outing (see minuteMarks): the way it
+  // went, and by their spacing its pace.
+  map.addImage(MARK_IMAGE, drawChevron(), { pixelRatio: PAW_PIXEL_RATIO })
+  map.addSource(MARKS, { type: 'geojson', data: empty.marks })
+  addLayer({
+    id: MARKS,
+    type: 'symbol',
+    source: MARKS,
+    minzoom: MARK_ZOOM,
+    layout: {
+      'icon-image': MARK_IMAGE,
+      'icon-rotate': ['get', 'bearing'],
+      'icon-rotation-alignment': 'map',
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
     },
   })
 
@@ -225,6 +237,25 @@ function drawPawPrints(color: string): ImageData {
   }
   paw(12, 11, 1.25)
   paw(40, 25, 1.25)
+  return context.getImageData(0, 0, canvas.width, canvas.height)
+}
+
+/** A chevron pointing up (+y north, as icon-rotate turns it by bearing), white, 7 px across. Drawn at 2x. */
+function drawChevron(): ImageData {
+  const size = 14
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size * PAW_PIXEL_RATIO
+  const context = canvas.getContext('2d')!
+  context.scale(PAW_PIXEL_RATIO, PAW_PIXEL_RATIO)
+  context.strokeStyle = '#ffffff'
+  context.lineWidth = 2.2
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.beginPath()
+  context.moveTo(3.5, 9)
+  context.lineTo(7, 5)
+  context.lineTo(10.5, 9)
+  context.stroke()
   return context.getImageData(0, 0, canvas.width, canvas.height)
 }
 

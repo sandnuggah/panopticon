@@ -364,15 +364,15 @@ describe('drawTrail', () => {
     assert.ok(drawn.walks.every((walk) => walk.points.every((point) => drawn.opacity(point.time) >= 0.55)))
   })
 
-  test('the latest outing is drawn in front, older ones faint; each fainter the older its part', () => {
+  test('the latest outing is drawn in front at full strength, older ones behind, with no fading by age', () => {
     const twice = new Trip().stay(30).walk(10).walk(10, -4).stay(25).walk(10)
     const trail = view(twice)
     const drawn = drawTrail(trail, {})
     const [older, latest] = [drawn.walks[0]!, drawn.walks.at(-1)!]
-    const [olderStart, olderEnd] = [drawn.opacity(older.points[0]!.time), drawn.opacity(older.points.at(-1)!.time)]
-    assert.ok(olderStart >= 0.12 && olderStart < olderEnd && olderEnd <= 0.25, 'older: 0.12 to 0.25')
-    assert.ok(Math.abs(drawn.opacity(trail.outing!) - 0.55) < 0.01, 'the latest from 0.55')
-    assert.ok(Math.abs(drawn.opacity(trail.newest) - 0.95) < 0.01, 'to 0.95')
+    assert.equal(drawn.opacity(older.points[0]!.time), drawn.opacity(older.points.at(-1)!.time), 'older: all one')
+    assert.ok(drawn.opacity(older.points[0]!.time) < 1)
+    assert.equal(drawn.opacity(trail.outing!), 1, 'the latest at full strength')
+    assert.equal(drawn.opacity(trail.newest), 1)
     const dots = toTrailFeatures({ 1: trail }, {}).trail.features.filter((feature) => feature.properties.kind === 'stay')
     assert.deepEqual(
       dots.map((dot) => dot.properties.opacity),
@@ -468,6 +468,17 @@ describe('toTrailFeatures', () => {
       ),
     ]
     assert.deepEqual(colorsOf({ 1: 'pink' }), ['1:pink', '2:green'])
+  })
+
+  test('a mark at each minute walked on the latest outing, pointing the way it went; none on older ones', () => {
+    const twice = new Trip().stay(30).walk(10).walk(10, -4).stay(25).walk(10)
+    const { marks } = toTrailFeatures({ 1: view(twice) }, {})
+    // The latest walk, east for 10 minutes: a mark a minute, about.
+    assert.ok(marks.features.length >= 9 && marks.features.length <= 11, `${marks.features.length} marks`)
+    assert.ok(
+      marks.features.every((mark) => Math.abs(mark.properties.bearing! - 90) < 1),
+      'east',
+    )
   })
 
   test('a ride through its fixes, as a vehicle', () => {
