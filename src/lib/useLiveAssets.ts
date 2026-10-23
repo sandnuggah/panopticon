@@ -252,8 +252,9 @@ export function useLiveAssets(
   // trailViews; but once when its tracker goes quiet), and drawn from where the trail starts: the
   // same until a whole piece drops off its old end (see firstShown), so kept until then.
   const worked = useRef<TrailViewCache>(new Map())
-  const quietKey = quietAssets(trails, trackers, clock).join(' ')
-  const quiet = useMemo(() => new Set(quietKey ? quietKey.split(' ').map(Number) : []), [quietKey])
+  const quieted = quietAssets(trails, trackers, clock)
+  const quietKey = quieted.join(' ')
+  const quiet = useMemo(() => new Map(quieted), [quietKey])
   const views = useMemo(() => trailViews(trails, places, trackers, worked.current, quiet), [trails, places, trackers, quiet])
   const start = trailStart(trail ?? 0, now)
   const shown = useMemo(() => shownTrails(views, start), [views, shownKey(views, start)])

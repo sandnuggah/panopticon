@@ -42,16 +42,14 @@ export async function loadDayStats(token: string, assetId: number, days: Day[], 
         results[index] = kept
         continue
       }
-      const positions = await getPositionHistory(
-        token,
-        assetId,
-        new Date(day.from - MARGIN_MS),
-        new Date(Math.min(day.to + MARGIN_MS, Date.now())),
-      )
+      const end = Math.min(day.to + MARGIN_MS, Date.now())
+      const positions = await getPositionHistory(token, assetId, new Date(day.from - MARGIN_MS), new Date(end))
       // Read as its kind of tracker reports (see trackers.server.ts).
       const profile = trailProfile(adapterFor(positions.find((position) => position.protocol)?.protocol).kind)
       const points = positions.map(toTrailPoint).sort((a, b) => a.time - b.time)
-      const stats = dayStats(points, home, profile, placeStays(points, places, assetId, profile), day)
+      // As of the end of what was fetched: a tracker silent after its last fix there was silent (a
+      // departure that settled is none, see presence.ts), not cut off.
+      const stats = dayStats(points, home, profile, placeStays(points, places, assetId, profile, end), day)
       results[index] = stats
       if (day.to + MARGIN_MS + SETTLED_MS <= Date.now()) {
         if (cache.size >= MAX_CACHED) cache.delete(cache.keys().next().value!)

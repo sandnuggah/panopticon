@@ -40,7 +40,7 @@ export type TrailViews = Record<number, TrailView>
  */
 export type TrailViewCache = Map<
   number,
-  { points: TrailPoint[]; places: Place[]; tracker: TrackerKind | undefined; quiet: boolean; view: TrailView | null }
+  { points: TrailPoint[]; places: Place[]; tracker: TrackerKind | undefined; asOf: number | undefined; view: TrailView | null }
 >
 
 /**
@@ -64,19 +64,19 @@ export type DrawnTrail = {
  * they come, with its places and its kind of tracker's profile; drawn from where the trail starts with
  * trailFrom. Worked out from only the points the trail shows, it would change as its start moves on:
  * a walk cut in two, a stay too short to be one, a fix the trail can't check any more (see
- * withoutUnconfirmed in segments.ts). `quiet`: its tracker has gone quiet since (see quietAssets).
+ * withoutUnconfirmed in segments.ts). `asOf`: when its tracker has gone quiet since (see quietAssets).
  */
 export function trailView(
   points: Trails[number],
   places: Place[],
   id: number,
   tracker: TrackerKind | undefined,
-  quiet = false,
+  asOf?: number,
 ): TrailView | null {
   const fixes = points.filter((point) => point.valid)
   if (fixes.length === 0) return null
   const profile = trailProfile(tracker)
-  const pieces = withDots(classifyTrail(points, { visits: placeStays(points, places, id, profile, quiet), profile }))
+  const pieces = withDots(classifyTrail(points, { visits: placeStays(points, places, id, profile, asOf), profile }))
   return { pieces, oldest: fixes[0]!.time, newest: fixes.at(-1)!.time, outing: latestOutingStart(pieces) }
 }
 
@@ -91,21 +91,16 @@ export function trailViews(
   places: Place[],
   trackers: Record<number, TrackerKind | undefined>,
   cache: TrailViewCache = new Map(),
-  quiet: ReadonlySet<number> = new Set(),
+  quiet: ReadonlyMap<number, number> = new Map(),
 ): TrailViews {
   const views: TrailViews = {}
   for (const id of cache.keys()) if (!(id in trails)) cache.delete(id)
   for (const [key, points] of Object.entries(trails)) {
     const id = Number(key)
     let entry = cache.get(id)
-    if (entry?.points !== points || entry.places !== places || entry.tracker !== trackers[id] || entry.quiet !== quiet.has(id)) {
-      entry = {
-        points,
-        places,
-        tracker: trackers[id],
-        quiet: quiet.has(id),
-        view: trailView(points, places, id, trackers[id], quiet.has(id)),
-      }
+    const asOf = quiet.get(id)
+    if (entry?.points !== points || entry.places !== places || entry.tracker !== trackers[id] || entry.asOf !== asOf) {
+      entry = { points, places, tracker: trackers[id], asOf, view: trailView(points, places, id, trackers[id], asOf) }
       cache.set(id, entry)
     }
     if (entry.view) views[id] = entry.view
@@ -114,13 +109,17 @@ export function trailViews(
 }
 
 /**
- * The assets whose trackers have gone quiet, as of `now`, for as long as a place they went quiet near
- * counts as arrived at (see quietAfter): their trails are worked out again once, when that happens.
+ * The assets whose trackers have gone quiet, as of `now`, each with the time its trail goes by (see
+ * placeStays): once quiet for as long as a place it went quiet near counts as arrived at (see
+ * quietAfter), when that was; once silent (its `silentMs`), for good, so a departure that settled is
+ * none (see settles in presence.ts). Its trail is worked out again at each, not as the clock ticks.
  */
-export function quietAssets(trails: Trails, trackers: Record<number, TrackerKind | undefined>, now: number): number[] {
-  return Object.entries(trails).flatMap(([key, points]) => {
+export function quietAssets(trails: Trails, trackers: Record<number, TrackerKind | undefined>, now: number): [number, number][] {
+  return Object.entries(trails).flatMap(([key, points]): [number, number][] => {
     const lastFix = points.findLast((point) => point.valid)
-    return lastFix && now - lastFix.time >= quietAfter(trailProfile(trackers[Number(key)])) ? [Number(key)] : []
+    const profile = trailProfile(trackers[Number(key)])
+    if (!lastFix || now - lastFix.time < quietAfter(profile)) return []
+    return [[Number(key), now - lastFix.time >= profile.silentMs ? Infinity : lastFix.time + quietAfter(profile)]]
   })
 }
 

@@ -50,6 +50,19 @@ const JUMP_METERS = 60
 const JUMP_KMH = 10
 const TRAVEL_METERS = 300
 const LEAVE_HOLD_MS = 3 * 60 * 1000
+/**
+ * A departure that settles is none: when, within SETTLE_MS of leaving, a tracker that stops
+ * reporting when still goes silent (its `silentMs`), with its fixes all within SETTLE_METERS of the
+ * place's edge, and none back within its margin first, the asset never left. GPS drifts indoors, most
+ * of all as the tracker settles to sleep (on Kofi's second week, twice in 44 hours: fixes 70–104 m
+ * out, good or weak, the last on one spot, then asleep for 1½ and 9 hours). An ST-904L sleeps about 2
+ * minutes after it stops moving, so a dog that walked out and lay down that close at once, for 10
+ * minutes or more, is taken for drift too: rarer, at home, than the drift. Out and back without
+ * settling there is still an outing, however soon the tracker sleeps once home: a trip to the pee
+ * spot, and on weak fixes as well (as on 21/10 07:28).
+ */
+const SETTLE_MS = 5 * 60 * 1000
+const SETTLE_METERS = 100
 /** It arrived with this many fixes in a row inside, or one good one... */
 const ARRIVE_FIXES = 2
 /**
@@ -120,15 +133,15 @@ export function presenceOf(points: TrailPoint[], visits: Visit[]): Presence | nu
 /**
  * The asset's visits to its places as its trail draws them (see PlaceStay): one at a time, the one it
  * came to last while places overlap, each at the place's way in, or its middle without one; not to
- * places bigger than a spot (see SPOT_METERS). As of its latest point, or, `quiet`, of when its
- * tracker has been quiet long enough since its latest fix to have arrived where it went quiet (see
- * quietAfter), so the map draws it there when presence says so.
+ * places bigger than a spot (see SPOT_METERS). As of `asOf` (see placeVisits), by default its latest
+ * point: the map passes when its tracker went quiet (see quietAssets), so it draws an arrival or a
+ * departure that settled when presence has it, and Stats the end of the day it fetched.
  */
-export function placeStays(points: TrailPoint[], places: Place[], assetId: number, profile: TrailProfile, quiet = false): PlaceStay[] {
+export function placeStays(points: TrailPoint[], places: Place[], assetId: number, profile: TrailProfile, asOf?: number): PlaceStay[] {
   const latest = points.at(-1)
   if (!latest) return []
   const spots = places.filter((place) => areaSize(place.area) <= Math.PI * SPOT_METERS ** 2)
-  const visits = placeVisits(points, spots, assetId, profile, quiet ? Infinity : latest.time)
+  const visits = placeVisits(points, spots, assetId, profile, asOf ?? latest.time)
   const times = [...new Set(visits.flatMap((visit) => (visit.to === null ? [visit.from] : [visit.from, visit.to])))].sort((a, b) => a - b)
   const stays: (PlaceStay & { visit: Visit })[] = []
   times.forEach((time, index) => {
@@ -299,6 +312,10 @@ function visitsTo(place: Place, fixes: TrailPoint[], profile: TrailProfile, now:
       if (good(fix)) goodOut++
       if (positions.length < WEAK_RUN_POSITIONS && positions.every((other) => distance(other, fix) > WEAK_RUN_METERS)) positions.push(fix)
       if (!hasLeft(out, goodOut, positions.length, lastIn, moved)) continue
+      if (settles(fixes, index, place, profile, now)) {
+        ;[out, goodOut, positions] = [[], 0, []]
+        continue
+      }
       visits.push({ place: place.id, from: at.from, to: out[0]!.time, known: at.known })
       ;[at, out, goodOut, positions, arriving, settling] = [null, [], 0, [], [], []]
       continue
@@ -325,6 +342,21 @@ function visitsTo(place: Place, fixes: TrailPoint[], profile: TrailProfile, now:
   }
   if (at) visits.push({ place: place.id, from: at.from, to: null, known: at.known })
   return visits
+}
+
+/** Whether the asset, having just left a place on the fix at `index`, settled (see SETTLE_MS) as of `now`. */
+function settles(fixes: TrailPoint[], index: number, place: Place, profile: TrailProfile, now: number): boolean {
+  if (profile.quietMs === undefined) return false
+  const left = fixes[index]!
+  for (let j = index; j < fixes.length; j++) {
+    const fix = fixes[j]!
+    if (fix.time - left.time > SETTLE_MS || !withinArea(place.area, fix, SETTLE_METERS)) return false
+    // Back at the place first, its margin too: out and back, then asleep at home, as after a trip to the
+    // pee spot (on 17/10 19:27 at Kofi's: 2 minutes 90 m out, then asleep 6 m past the edge).
+    if (j > index && withinArea(place.area, fix, profile.placeMarginMeters)) return false
+    if ((fixes[j + 1]?.time ?? now) - fix.time >= profile.silentMs) return true
+  }
+  return false
 }
 
 /**

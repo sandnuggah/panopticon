@@ -453,6 +453,7 @@ async function replay(length: TrailLength): Promise<Score> {
   // Where it was as of the frame before, departures and arrivals seen (by place and time) and when
   // first, and the departures it left by.
   let wasAt: Presence | null = null
+  let wasGrey = false
   let wasVisits: Visit[] | null = null
   const departures = new Map<string, { time: number; known: number | null; place: number }>()
   const cameTo = new Map<string, { time: number; known: number | null }>()
@@ -525,7 +526,7 @@ async function replay(length: TrailLength): Promise<Score> {
     // What the map shows (useLiveAssets → setTrails, useSnappedWalks, the marker, the details card).
     const from = trailStart(length, now)
     const trackers = { [id]: asset.tracker }
-    const quiet = new Set(quietAssets(trails, trackers, now))
+    const quiet = new Map(quietAssets(trails, trackers, now))
     const view: TrailView | null = shownTrails(trailViews(trails, places, trackers, cache, quiet), from)[id] ?? null
     const walks: AssetWalk[] =
       snapping && view ? matchableWalks(view.pieces, () => false, profile).map((walk) => ({ ...walk, asset: id })) : []
@@ -729,6 +730,7 @@ async function replay(length: TrailLength): Promise<Score> {
       nextPicture = (Math.floor(time / 3_600_000) + 1) * 3_600_000
       const fixes = view ? (trails[id] ?? []).filter((point) => point.valid && point.time >= view.oldest).map(xy) : []
       for (const walk of shown?.walks ?? []) {
+        const farBefore = s.picture.farMetres
         for (let i = 1; i < walk.points.length; i++) {
           const [a, b] = [xy(walk.points[i - 1]!), xy(walk.points[i]!)]
           const d = metres(a, b)
@@ -739,6 +741,8 @@ async function replay(length: TrailLength): Promise<Score> {
             if (!fixes.some((fix) => metres(fix, p) <= FAR_METRES)) s.picture.farMetres += d / steps
           }
         }
+        const far = s.picture.farMetres - farBefore
+        if (far >= 5) log(time, `far from fixes: the walk of ${local(walk.points[0]!.time)}, ${Math.round(far)} m of it`)
       }
     }
 
@@ -770,7 +774,11 @@ async function replay(length: TrailLength): Promise<Score> {
         : undefined
     const walking = isWalking(trails[id] ?? [], time, places)
     // Lost, as the marker and the bottom bar have it (see status.ts).
-    const grey = isGrey(assetStatus(asset, { presence: presence ?? undefined, stay }, now))
+    const status = assetStatus(asset, { presence: presence ?? undefined, stay }, now)
+    const grey = isGrey(status)
+    if (grey !== wasGrey)
+      log(time, grey ? `grey: ${status.kind}${status.kind === 'lost' ? ` since ${local(status.since)}` : ''}` : 'grey no more')
+    wasGrey = grey
     account = (minutes) => {
       if (grey) s.greyMinutes += minutes
       if (walking) s.card.walkingMinutes += minutes

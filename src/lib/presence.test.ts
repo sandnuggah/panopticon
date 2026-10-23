@@ -150,6 +150,51 @@ describe('placeVisits', () => {
     assert.equal(visits(peeSpot)[0]!.to, at(-85, 24).time)
   })
 
+  test('a departure that settles is none: out on good fixes, then asleep 70–100 m away within 5 minutes', () => {
+    // Good fixes 70–104 m out, the last on one spot, then nothing for 80 minutes (as on 21/10 20:32).
+    const drift = [...indoors, ...run(8, 75, 104, 98, 70, 70, 70)]
+    assert.equal(visits(drift, drift.at(-1)!.time + 80 * 60_000)[0]!.to, null)
+    // Waking up and walking off: out since then.
+    const off = [...drift, ...run(180, 75, 160, 240)]
+    assert.equal(visits(off)[0]!.to, at(75, 180).time)
+  })
+
+  test('not settled once back within the margin: out and back, then asleep just past the edge', () => {
+    const back = [...indoors, ...run(8, 92, 87, 95, 97, 60, 56, 56, 56)]
+    assert.equal(visits(back, back.at(-1)!.time + 60 * 60_000)[0]!.to, at(92, 8).time)
+  })
+
+  test('a tracker that reports on its own interval never settles: its silence is its interval', () => {
+    const tenMinutes = (east: number, index: number) => at(east, 8 + index * 20)
+    const out = [...indoors, ...[80, 90, 85, 85, 10, 5].map(tenMinutes)]
+    assert.equal(placeVisits(out, [home], 7, TRAIL_PROFILES.phone, out.at(-1)!.time)[0]!.to, at(80, 8).time)
+  })
+
+  test('weak fixes drifting out, then asleep all night: at home; out in the morning to the pee spot and back', () => {
+    const weak = (east: number, step: number) => at(east, step, 6)
+    // Drifting out at walking pace from the margin (40 m), as on 21/10 22:37.
+    const night = [...indoors, ...[40, 70, 85, 100, 115, 96, 89, 89, 89].map((east, k) => weak(-east, 8 + k))]
+    const morning = [...[63, 76, 83, 91, 97, 91].map((east, k) => weak(east, 1200 + k)), at(20, 1206), at(10, 1207)]
+    const all = visits([...night, ...morning])
+    // The first of them, 63 m out, is within Home's margin.
+    assert.equal(all[0]!.to, morning[1]!.time, 'not the night before')
+    assert.equal(all.length, 2, 'and back')
+  })
+
+  test('out and back, then asleep at home within 5 minutes: an outing all the same', () => {
+    const trip = [...indoors, ...[80, 90, 85, 70, 30, 10].map((east, k) => at(east, 8 + k, 6))]
+    const all = visits(trip, trip.at(-1)!.time + 60 * 60_000)
+    assert.equal(all[0]!.to, at(80, 8).time)
+    assert.equal(all.length, 2)
+  })
+
+  test('not settled: on further than 100 m past the edge, or asleep only after 5 minutes', () => {
+    const further = [...indoors, ...run(8, 80, 120, 180, 220)]
+    assert.equal(visits(further, further.at(-1)!.time + 60 * 60_000)[0]!.to, at(80, 8).time)
+    const later = [...indoors, ...run(8, 80, 90, 100, 95, 90, 85, 80, 85, 90, 95, 90, 85, 80)]
+    assert.equal(visits(later, later.at(-1)!.time + 60 * 60_000)[0]!.to, at(80, 8).time, 'out and about 6 minutes first')
+  })
+
   test('a tracker that reports on its own interval leaves however far apart its fixes come', () => {
     // A phone every 10 minutes, walking away.
     const tenMinutes = (east: number, index: number) => at(east, 8 + index * 20)
@@ -490,7 +535,19 @@ describe('placeStays', () => {
     // Back just outside, then nothing: there once the tracker has been quiet for 2 minutes.
     const back = [...indoors, ...run(8, 80, 120, 200, 120, 60)]
     assert.equal(placeStays(back, [home], 7, DEFAULT_TRAIL_PROFILE).length, 1)
-    assert.deepEqual(placeStays(back, [home], 7, DEFAULT_TRAIL_PROFILE, true)[1], { from: at(60, 12).time, to: null, center: HOME })
+    assert.deepEqual(placeStays(back, [home], 7, DEFAULT_TRAIL_PROFILE, back.at(-1)!.time + 120_000)[1], {
+      from: at(60, 12).time,
+      to: null,
+      center: HOME,
+    })
+    // Drift out, the last of the points: a departure as of them, none as of 10 minutes on (the end of a
+    // day Stats fetched, the tracker asleep).
+    const drift = [...indoors, ...run(8, 75, 104, 98, 70, 70, 70)]
+    assert.equal(placeStays(drift, [home], 7, DEFAULT_TRAIL_PROFILE).length, 1)
+    assert.equal(placeStays(drift, [home], 7, DEFAULT_TRAIL_PROFILE, drift.at(-1)!.time + 9 * 60_000)[0]!.to, drift[8]!.time)
+    assert.deepEqual(placeStays(drift, [home], 7, DEFAULT_TRAIL_PROFILE, drift.at(-1)!.time + 10 * 60_000), [
+      { from: START, to: null, center: HOME },
+    ])
     // A place much bigger than a home (a block drawn in Traccar): its visits aren't drawn as a stay.
     const block: Place = { ...home, id: 3, area: { kind: 'circle', center: HOME, radius: 300 } }
     assert.deepEqual(placeStays(indoors, [block], 7, DEFAULT_TRAIL_PROFILE), [])

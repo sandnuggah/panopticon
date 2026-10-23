@@ -241,7 +241,7 @@ describe('trailViews and shownTrails', () => {
     const tracked = trailViews(trails, otherPlaces, { 1: 'phone' }, cache)[1]
     assert.notEqual(tracked, placed, 'another kind of tracker')
     assert.notEqual(trailViews({ ...trails, 1: [...trip.points] }, otherPlaces, { 1: 'phone' }, cache)[1], tracked, 'new points')
-    const quiet = trailViews(trails, otherPlaces, { 1: 'phone' }, cache, new Set([1]))[1]
+    const quiet = trailViews(trails, otherPlaces, { 1: 'phone' }, cache, new Map([[1, Infinity]]))[1]
     assert.notEqual(quiet, trailViews(trails, otherPlaces, { 1: 'phone' }, cache)[1], 'quiet, then not')
     trailViews({ 1: trip.points }, places, {}, cache)
     assert.deepEqual([...cache.keys()], [1])
@@ -250,9 +250,15 @@ describe('trailViews and shownTrails', () => {
   test('quiet: an asset whose tracker has had no fix for its gap (one that sleeps when still) or its silence (one that doesn’t)', () => {
     const last = trip.points.findLast((point) => point.valid)!.time
     const trails = { 1: trip.points, 2: trip.points }
-    assert.deepEqual(quietAssets(trails, { 1: 'sinotrack', 2: 'phone' }, last + 119_000), [])
-    assert.deepEqual(quietAssets(trails, { 1: 'sinotrack', 2: 'phone' }, last + 120_000), [1])
-    assert.deepEqual(quietAssets(trails, { 1: 'sinotrack', 2: 'phone' }, last + 600_000), [1, 2])
+    const trackers = { 1: 'sinotrack', 2: 'phone' } as const
+    assert.deepEqual(quietAssets(trails, trackers, last + 119_000), [])
+    // As of when it went quiet, until silent: then for good.
+    assert.deepEqual(quietAssets(trails, trackers, last + 120_000), [[1, last + 120_000]])
+    assert.deepEqual(quietAssets(trails, trackers, last + 599_000), [[1, last + 120_000]])
+    assert.deepEqual(quietAssets(trails, trackers, last + 600_000), [
+      [1, Infinity],
+      [2, Infinity],
+    ])
   })
 
   test('shownKey changes only when a piece drops off the old end', () => {
