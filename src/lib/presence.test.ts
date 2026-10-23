@@ -3,6 +3,8 @@ import { describe, test } from 'node:test'
 import type { Place } from './places.ts'
 import {
   currentStays,
+  keepFrom,
+  startsInVisit,
   news,
   placeStays,
   placeVisits,
@@ -404,6 +406,60 @@ describe('currentStays', () => {
     assert.equal(presence.left, 1)
     assert.equal(currentStays({ 7: points }, 1440, now, {})[7]!.since, hour[0]!.time, 'by the stops alone')
     assert.deepEqual(currentStays({ 7: points }, 1440, now, {}, { 7: presence })[7], { since: spot[0]!.time, began: true })
+  })
+})
+
+describe('keepFrom', () => {
+  const keep = (points: TrailPoint[], places = [home]) =>
+    keepFrom(points, placeVisits(points, places, 7, DEFAULT_TRAIL_PROFILE, points.at(-1)!.time), places, 7, DEFAULT_TRAIL_PROFILE)
+  /** Whether the visits are the same with the trail cut where keepFrom says. */
+  const sameCut = (points: TrailPoint[]) => {
+    const visits = placeVisits(points, [home], 7, DEFAULT_TRAIL_PROFILE, points.at(-1)!.time)
+    const cut = points.filter((point) => point.time >= keep(points)!)
+    assert.deepEqual(placeVisits(cut, [home], 7, DEFAULT_TRAIL_PROFILE, points.at(-1)!.time).at(-1), visits.at(-1))
+  }
+
+  test('from the last fix outside the place before the visit it is at began; none while out', () => {
+    const back = [...indoors, ...run(8, 80, 150, 300, 150, 80), ...run(13, 30, 10)]
+    assert.equal(keep(back), at(80, 12).time)
+    sameCut(back)
+    assert.equal(keep([...indoors, ...run(8, 80, 150)]), undefined)
+  })
+
+  test('not a fix in the margin: cut there, it would have been there from the first fix', () => {
+    // Coming home along the edge: 62 m and 58 m from the middle, then inside.
+    const slow = [...indoors, ...run(8, 80, 150, 120), ...run(11, 62, 58, 40, 30)]
+    assert.equal(keep(slow), at(120, 10).time)
+    sameCut(slow)
+  })
+
+  test('outside all of its places, from before the earliest visit it is at, when places overlap', () => {
+    // A yard 70 m east, overlapping Home: in from the west, into the yard, then the overlap, for 40 hours.
+    const yard: Place = {
+      ...home,
+      id: 2,
+      area: { kind: 'circle', center: { ...HOME, lon: HOME.lon + 70 / METERS_PER_DEGREE_LON }, radius: 45 },
+    }
+    const stay = Array.from({ length: 80 }, (_, k) => at(25 + (k % 3) * 3, 8 + k * 60))
+    const points = [...run(0, -150, -100, -60, 60, 65, 40, 30), ...stay]
+    const visits = placeVisits(points, [home, yard], 7, DEFAULT_TRAIL_PROFILE, points.at(-1)!.time)
+    const cut = points.filter((point) => point.time >= keep(points, [home, yard])!)
+    assert.deepEqual(placeVisits(cut, [home, yard], 7, DEFAULT_TRAIL_PROFILE, points.at(-1)!.time), visits)
+  })
+
+  test('there from the first point: from it, reports without a fix too', () => {
+    const asleep = [at(400, 0, 0, false), ...run(1, 0, 20, -15)]
+    assert.equal(keep(asleep), asleep[0]!.time)
+  })
+})
+
+describe('startsInVisit', () => {
+  test('there from the first fix there is, and still', () => {
+    assert.equal(startsInVisit(placeVisits(indoors, [home], 7, DEFAULT_TRAIL_PROFILE, START)), true)
+    const back = [...run(0, 300, 200), ...run(2, 30, 10)]
+    assert.equal(startsInVisit(placeVisits(back, [home], 7, DEFAULT_TRAIL_PROFILE, START)), false)
+    const left = [...indoors, ...run(8, 80, 150, 300)]
+    assert.equal(startsInVisit(placeVisits(left, [home], 7, DEFAULT_TRAIL_PROFILE, START)), false, 'left since')
   })
 })
 

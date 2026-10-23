@@ -129,7 +129,7 @@ A trail behind each asset showing where it went in the last N minutes, drawn by 
   - Reports **without a GPS fix** are kept, marked `valid: false`. Their position is stale, so they're never drawn; they only count as evidence of travel without GPS.
   - Each point also carries the **serving cell tower**: Traccar's `network.cellTowers` when it has one, otherwise `io4` for SinoTrack's `h02` (see [Battery](#battery) for the io fields).
   - Traccar refuses this endpoint for users with "disable reports" set. Those users just get no trail and no activity.
-- **Live:** every live position, with or without a fix, is appended; points more than the history (the trail and 3 hours) before the newest are dropped (`extendTrails`).
+- **Live:** every live position, with or without a fix, is appended; points more than the history (a day and 3 hours) before the newest are dropped (`extendTrails`), but not those of the visit to a place the asset is at, from a couple of fixes before it began (`keepFrom` in `lib/presence.ts`), up to a week, so a long stay at Home isn't cut as it goes on. A history that starts inside that visit (at Home from its first fix) is fetched further back, a day at a time, to when it began (`startsInVisit`, `getHistory`). Traccar's live stream doesn't pass on a report older than the latest it sent, so a minute after the first report that follows more than 10 minutes of silence (longer than a phone's usual interval), the asset's reports since the one before are fetched and merged in (`mergeHistory`): on a week of Kofi's, about 40 that the live trail had dropped, nearly one a wake-up (the ST-904L sends a stored report just after a newer one).
 
 ### What the asset was doing (`src/lib/segments.ts`)
 

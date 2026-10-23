@@ -5,7 +5,9 @@ import {
   extendTrails,
   historyMinutes,
   historyStart,
+  keepEarlier,
   MAX_HISTORY_MINUTES,
+  mergeHistory,
   nearestTrail,
   stayPoints,
   trailMinutes,
@@ -92,6 +94,51 @@ describe('history', () => {
       extendTrails(trails, [update(now + minutes(30))], 240, now)[1]!.map((point) => (now - point.time) / 60_000),
       [100, -30],
     )
+  })
+
+  test('the visit an asset is at stays, however long it goes on, up to a week', () => {
+    const at = (time: number): TrailPoint => ({ lat: 59, lon: 18, time, valid: true })
+    const update = (time: number): LiveUpdate => ({
+      kind: 'position',
+      id: 1,
+      location: { lat: 59, lon: 18, fixTime: new Date(time).toISOString() },
+      valid: true,
+      placeIds: [],
+    })
+    const trails = { 1: [at(now - minutes(300)), at(now - minutes(245)), at(now - minutes(100))] }
+    const kept = extendTrails(trails, [update(now - minutes(10))], 240, now, { 1: now - minutes(300) })
+    assert.deepEqual(
+      kept[1]!.map((point) => (now - point.time) / 60_000),
+      [300, 245, 100, 10],
+    )
+    const week = extendTrails(trails, [update(now - minutes(10))], 240, now, { 1: now - minutes(30_000) })
+    assert.equal(week[1]!.length, 4)
+    const old = { 1: [at(now - minutes(11_000)), ...trails[1]] }
+    assert.equal(extendTrails(old, [update(now - minutes(10))], 240, now, { 1: 0 })[1]![0]!.time, now - minutes(300), 'over a week')
+  })
+
+  test('more history fetched later goes in by time, each point once', () => {
+    const at = (time: number): TrailPoint => ({ lat: 59, lon: 18, time, valid: true })
+    const points = [at(10), at(30)]
+    assert.deepEqual(
+      mergeHistory(points, [at(20), at(30), at(5)]).map((point) => point.time),
+      [5, 10, 20, 30],
+    )
+    assert.equal(mergeHistory(points, [at(10)]), points, 'nothing new')
+  })
+
+  test('a history loaded again keeps the points the page had of the visit it is at, from before it starts', () => {
+    const at = (time: number): TrailPoint => ({ lat: 59, lon: 18, time, valid: true })
+    const current = { 1: [at(5), at(10), at(20), at(30)], 2: [at(5), at(30)] }
+    const history = { 1: [at(20), at(30), at(40)], 2: [at(30), at(40)] }
+    const loaded = keepEarlier(history, current, { 1: 10 })
+    assert.deepEqual(
+      loaded[1]!.map((point) => point.time),
+      [10, 20, 30, 40],
+    )
+    assert.equal(loaded[2], history[2], 'out: as loaded')
+    // Away for longer than the history: what the page had stops before it starts.
+    assert.equal(keepEarlier(history, { 1: [at(5), at(10)] }, { 1: 5 })[1], history[1])
   })
 
   test('live positions keep what the trail reads of them', () => {

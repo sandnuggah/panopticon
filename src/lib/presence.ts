@@ -159,6 +159,38 @@ export function assetVisits(
 }
 
 /**
+ * From when an asset's points must stay in its history (see extendTrails): from its last fix outside
+ * all of its places (by their margin) before the visit it's at began (the earliest, when places
+ * overlap), so a trail cut there decides its visits the same, and a long stay isn't cut as the
+ * history's start moves on; from the first point there is when it's been there from the start.
+ * None while it's out.
+ */
+export function keepFrom(
+  points: TrailPoint[],
+  visits: Visit[],
+  places: Place[],
+  assetId: number,
+  profile: TrailProfile,
+): number | undefined {
+  const open = visits.filter((visit) => visit.to === null)
+  if (open.length === 0) return undefined
+  const from = Math.min(...open.map((visit) => visit.from))
+  const own = places.filter((place) => place.assetIds.includes(assetId))
+  const outside = points.findLast(
+    (point) => point.valid && point.time < from && own.every((place) => !withinArea(place.area, point, profile.placeMarginMeters)),
+  )
+  return outside?.time ?? points[0]?.time ?? from
+}
+
+/**
+ * Whether an asset's history starts inside the visit it's at (there from its first fix): then it may
+ * have begun earlier, and more of the history says when (see useLiveAssets).
+ */
+export function startsInVisit(visits: Visit[]): boolean {
+  return visits.some((visit) => visit.to === null && !visit.known)
+}
+
+/**
  * Each asset's presence (see Presence), as of `now`, by its visits (see assetVisits). An asset without
  * a fix in its trail (quiet for longer than its history, a day and 3 hours, or not loaded yet) is at
  * the place its latest location is in, as far as anyone knows, since then at least.

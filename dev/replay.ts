@@ -27,10 +27,12 @@ import { placeCenter, placeOf, withinArea, type Place } from '../src/lib/places.
 import {
   assetVisits,
   currentStays,
+  keepFrom,
   news,
   presences,
   quietAfter,
   shownAssets,
+  startsInVisit,
   whileLoading,
   type Presence,
   type Visit,
@@ -42,7 +44,12 @@ import {
   extendTrails,
   historyMinutes,
   historyStart,
+  MAX_EXTRA_HISTORY_MS,
   MAX_HISTORY_MINUTES,
+  keepEarlier,
+  mergeHistory,
+  MISSED_AFTER_MS,
+  MISSED_SILENCE_MS,
   trailStart,
   type TrailLength,
   type TrailPoint,
@@ -396,15 +403,30 @@ async function replay(length: TrailLength): Promise<Score> {
       undefined,
     )
     const start = historyStart(historyLength, time, latest && Date.parse(latest.fixTime))
-    const points = known
-      .filter((position) => Date.parse(position.fixTime) >= start && Date.parse(position.fixTime) <= time)
-      .map(toTrailPoint)
-      .sort((a, b) => a.time - b.time)
+    let points = fetched(start, time, time)
+    // A history that starts inside the visit it's at goes further back, a day at a time (as useLiveAssets).
+    const tracker = latest && applyUpdates([empty], [toPositionUpdate(latest)]).assets[0]!.tracker
+    for (let first = points[0]?.time; first !== undefined;) {
+      if (!startsInVisit(assetVisits({ [id]: points }, places, { [id]: tracker }, time)[id] ?? [])) break
+      const from = Math.max(first - MAX_HISTORY_MINUTES * 60 * 1000, time - MAX_EXTRA_HISTORY_MS)
+      const more = from < first ? fetched(from, first, time) : []
+      if (more.length === 0) break
+      points = mergeHistory(points, more)
+      if (points[0]!.time === first) break
+      first = points[0]!.time
+    }
     return { trails: { [id]: points } as Trails, latest }
   }
+  /** The asset's reports from `from` to `to`, as Traccar has them at `at`. */
+  function fetched(from: number, to: number, at: number): TrailPoint[] {
+    return fixture.positions
+      .filter((position) => position.serverTime <= at && Date.parse(position.fixTime) >= from && Date.parse(position.fixTime) <= to)
+      .map(toTrailPoint)
+      .sort((a, b) => a.time - b.time)
+  }
+  const empty: Asset = { id, name: 'replay', status: 'online', lastUpdate: null, location: null, placeIds: [] }
   const loaded = load(opened)
   let trails = loaded.trails
-  const empty: Asset = { id, name: 'replay', status: 'online', lastUpdate: null, location: null, placeIds: [] }
   let assets = loaded.latest ? applyUpdates([empty], [toPositionUpdate(loaded.latest)]).assets : [empty]
   const arrivals = fixture.positions.filter((position) => position.serverTime > opened && position.serverTime <= closed)
 
@@ -448,14 +470,22 @@ async function replay(length: TrailLength): Promise<Score> {
   let now = opened
   let nextTick = opened + TICK_MS
   let nextReload = reload ? opened + reload * 60_000 : Infinity
+  // The reports a silence may have missed, fetched a minute after it ended (see MISSED_SILENCE_MS);
+  // and from when the visit it's at stays in its history (see keepFrom).
+  let missed = null as { at: number; from: number } | null
+  let keep: Record<number, number> = {}
   for (let k = 0; ;) {
-    // The next report, or the page opened again, or the clock's next tick, whichever comes first.
+    // The next report, or the page opened again, or the missed reports coming, or the clock's next
+    // tick, whichever comes first.
     const arrival = arrivals[k]
-    const time = Math.min(nextTick, nextReload, arrival?.serverTime ?? Infinity)
+    const time = Math.min(nextTick, nextReload, missed?.at ?? Infinity, arrival?.serverTime ?? Infinity)
     if (time > closed) break
     let kind: Frame['kind']
+    // What a history load or the missed reports found out, for the banners (as useLiveAssets).
+    let fromLoad = false
     if (time === nextReload) {
       kind = 'reload'
+      fromLoad = true
       nextReload += reload! * 60_000
       // While the history loads, the page has the trail it had and the latest location: never newer
       // here (no report is missed), so where the asset is mustn't change (see whileLoading).
@@ -465,7 +495,15 @@ async function replay(length: TrailLength): Promise<Score> {
         s.presence!.whileLoading!++
         log(time, 'while loading: out of its place on a location its trail has')
       }
-      trails = load(time).trails
+      trails = keepEarlier(load(time).trails, trails, keep)
+    } else if (time === missed?.at) {
+      kind = 'report'
+      fromLoad = true
+      const merged = mergeHistory(trails[id] ?? [], fetched(missed.from, time, time))
+      if (merged.length > (trails[id]?.length ?? 0))
+        log(time, `missed reports: ${merged.length - (trails[id]?.length ?? 0)} since ${local(missed.from)}`)
+      trails = { ...trails, [id]: merged }
+      missed = null
     } else if (time === nextTick) {
       kind = 'tick'
       now = nextTick
@@ -474,7 +512,10 @@ async function replay(length: TrailLength): Promise<Score> {
       kind = 'report'
       const updates = [toPositionUpdate(arrival!)]
       assets = applyUpdates(assets, updates).assets
-      trails = extendTrails(trails, updates, historyLength, time)
+      const last = trails[id]?.at(-1)
+      if (!missed && last && Date.parse(arrival!.fixTime) - last.time > MISSED_SILENCE_MS)
+        missed = { at: time + MISSED_AFTER_MS, from: last.time }
+      trails = extendTrails(trails, updates, historyLength, time, keep)
       k++
     }
     const asset = assets[0]!
@@ -493,6 +534,8 @@ async function replay(length: TrailLength): Promise<Score> {
     const location = asset.location
     const visits = assetVisits({ [id]: trails[id] ?? [] }, places, trackers, now)
     const presence = presences({ [id]: trails[id] ?? [] }, places, trackers, now, assets, visits)[id] ?? null
+    const keeping = keepFrom(trails[id] ?? [], visits[id] ?? [], places, id, profile)
+    keep = keeping === undefined ? {} : { [id]: keeping }
     const marker = shownAssets(assets, trails, presence ? { [id]: presence } : {}, places)[0]!.location
     const atPlace =
       !!marker &&
@@ -526,7 +569,7 @@ async function replay(length: TrailLength): Promise<Score> {
         }
       }
       // The banners: as it happens; what the page opened again finds out, if it's recent.
-      const said = wasVisits ? news(wasVisits, visits[id] ?? []).filter((change) => kind !== 'reload' || time - change.time <= NEWS_MS) : []
+      const said = wasVisits ? news(wasVisits, visits[id] ?? []).filter((change) => !fromLoad || time - change.time <= NEWS_MS) : []
       if (said.length) {
         s.presence!.banners++
         for (const change of said) log(time, `banner: ${change.arrived ? 'arrived at' : 'left'} ${change.placeId} at ${local(change.time)}`)

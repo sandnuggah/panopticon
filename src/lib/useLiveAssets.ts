@@ -1,15 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { getUser } from '../server/auth.functions'
-import { getTrails } from '../server/trails.functions'
+import { getHistory, getTrails } from '../server/trails.functions'
 import type { Asset } from './asset'
 import { BUILD_ID } from './buildId'
 import { applyUpdates, type LiveUpdate } from './live'
 import type { Place, PlaceVisit } from './places'
-import { assetVisits, currentStays, news, presences, shownAssets, whileLoading, type Visit } from './presence'
+import { assetVisits, currentStays, keepFrom, news, presences, shownAssets, startsInVisit, whileLoading, type Visit } from './presence'
 import { currentActivity, type Activity } from './segments'
 import { trackersOf, trailProfile } from './tracker'
-import { extendTrails, historyMinutes, trailStart, type TrailLength, type Trails } from './trail'
+import {
+  extendTrails,
+  historyMinutes,
+  MAX_EXTRA_HISTORY_MS,
+  MAX_HISTORY_MINUTES,
+  keepEarlier,
+  mergeHistory,
+  MISSED_AFTER_MS,
+  MISSED_SILENCE_MS,
+  trailStart,
+  type TrailLength,
+  type Trails,
+} from './trail'
 import { quietAssets, shownKey, shownTrails, trailViews, type TrailViewCache } from './trailGeometry'
 import { useNow } from './useNow'
 
@@ -58,6 +70,10 @@ export function useLiveAssets(
   // Bumped when we may have missed updates, to refetch trail history.
   const [historyVersion, setHistoryVersion] = useState(0)
   const historyLengthRef = useRef(historyLength)
+  // From when each asset's points stay in its history (see keepFrom), for the live updates.
+  const keep = useRef<Record<number, number>>({})
+  // For each asset, the first point its history was fetched further back from (see startsInVisit).
+  const earlier = useRef(new Map<number, number>())
   const now = useNow(15_000)
   const onVisitsRef = useRef(onVisits)
 
@@ -93,7 +109,8 @@ export function useLiveAssets(
         if (!history) throw new Error('no history')
         if (cancelled) return
         ;[loaded.current, failures.current] = [true, 0]
-        setTrails(history)
+        earlier.current.clear()
+        setTrails((current) => keepEarlier(history, current, keep.current))
         setLoadedKey(loadKey)
       })
       .catch((error) => {
@@ -129,7 +146,31 @@ export function useLiveAssets(
       setAssets(result.assets)
       // A tracker was added in Traccar; reload the full list.
       if (result.unknown) void router.invalidate()
-      setTrails((current) => extendTrails(current, updates, historyLengthRef.current, Date.now()))
+      setTrails((current) => {
+        for (const update of updates) {
+          if (update.kind !== 'position') continue
+          const last = current[update.id]?.at(-1)
+          if (last && Date.parse(update.location.fixTime) - last.time > MISSED_SILENCE_MS) fetchMissed(update.id, last.time)
+        }
+        return extendTrails(current, updates, historyLengthRef.current, Date.now(), keep.current)
+      })
+    }
+
+    // The reports since a silence began, once the tracker has uploaded what it kept (see MISSED_SILENCE_MS).
+    const missed = new Map<number, ReturnType<typeof setTimeout>>()
+    const fetchMissed = (assetId: number, from: number) => {
+      if (missed.has(assetId)) return
+      const timer = setTimeout(() => {
+        getHistory({ data: { assetId, from, to: Date.now() } })
+          .then((points) => {
+            if (!points?.length) return
+            loaded.current = true
+            setTrails((current) => (current[assetId] ? { ...current, [assetId]: mergeHistory(current[assetId], points) } : current))
+          })
+          .catch((error) => console.warn('Could not load missed reports:', error))
+          .finally(() => missed.delete(assetId))
+      }, MISSED_AFTER_MS)
+      missed.set(assetId, timer)
     }
 
     const connect = () => {
@@ -188,6 +229,7 @@ export function useLiveAssets(
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       clearTimeout(retryTimer)
+      for (const timer of missed.values()) clearTimeout(timer)
       source?.close()
     }
   }, [router])
@@ -231,6 +273,39 @@ export function useLiveAssets(
   const visits = useMemo(() => assetVisits(trails, places, trackers, clock), [trails, places, trackers, clock])
   const found = useMemo(() => presences(trails, places, trackers, clock, assets, visits), [trails, places, trackers, clock, assets, visits])
   const where = useMemo(() => (inStep ? found : whileLoading(found, assets, places, trails)), [found, inStep, assets, places, trails])
+
+  // Each asset's points from the visit it's at stay as the history's start moves on (see keepFrom);
+  // a history that starts inside it is fetched further back, a day at a time, to when it began.
+  useEffect(() => {
+    keep.current = Object.fromEntries(
+      Object.entries(visits).flatMap(([key, list]) => {
+        const from = keepFrom(trails[Number(key)] ?? [], list, places, Number(key), trailProfile(trackers[Number(key)]))
+        return from === undefined ? [] : [[key, from]]
+      }),
+    )
+  }, [visits, trails, places, trackers])
+  useEffect(() => {
+    if (!inStep) return
+    for (const [key, list] of Object.entries(visits)) {
+      const id = Number(key)
+      const first = trails[id]?.[0]?.time
+      // Asked for already, back from this first point: nothing earlier, or on its way.
+      if (!startsInVisit(list) || first === undefined || earlier.current.get(id) === first) continue
+      const from = Math.max(first - MAX_HISTORY_MINUTES * 60 * 1000, Date.now() - MAX_EXTRA_HISTORY_MS)
+      if (from >= first) continue
+      earlier.current.set(id, first)
+      getHistory({ data: { assetId: id, from, to: first } })
+        .then((points) => {
+          // Nothing earlier: as far back as there is.
+          if (!points?.length) return
+          loaded.current = true
+          // Kept by live updates that come before the keep is worked out again.
+          keep.current = { ...keep.current, [id]: Math.min(keep.current[id] ?? Infinity, points[0]!.time) }
+          setTrails((current) => (current[id] ? { ...current, [id]: mergeHistory(current[id], points) } : current))
+        })
+        .catch((error) => console.warn('Could not load earlier history:', error))
+    }
+  }, [visits, inStep, trails])
 
   // "Kofi left Home": the visits that end or begin (see news), as it happens, while in step; what a
   // history load or a change of places finds out, if it's recent.

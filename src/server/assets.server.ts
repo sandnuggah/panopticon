@@ -46,6 +46,20 @@ export async function loadTrails(token: string, assetIds: number[], minutes: num
   return trails
 }
 
+/**
+ * An asset's reports between two times (see getHistory): more of its history, before what was loaded
+ * or since a silence. One whose history fails gets none.
+ */
+export async function loadHistory(token: string, assetId: number, from: number, to: number): Promise<Trails[number]> {
+  try {
+    return (await getPositionHistory(token, assetId, new Date(from), new Date(to))).map(toTrailPoint).sort((a, b) => a.time - b.time)
+  } catch (error) {
+    if (error instanceof TraccarError && error.status === 401) throw error
+    console.warn(`No history for asset ${assetId}:`, String(error))
+    return []
+  }
+}
+
 /** Each device's latest report's time; none if Traccar can't say, so its history ends now. */
 async function latestReports(token: string): Promise<Map<number, number>> {
   try {

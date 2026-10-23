@@ -101,15 +101,28 @@ export function historyStart(minutes: number, now: number, lastReport: number | 
 }
 
 /**
- * Adds live positions (with or without a GPS fix) to the trails, keeping `minutes` of history before
- * each asset's newest (as of `now`), as it's loaded (see historyStart).
+ * History goes back further than `minutes` for the visit an asset is at (see keepFrom in presence.ts),
+ * so a long stay isn't cut as it goes on, but no further than this before now.
  */
-export function extendTrails(trails: Trails, updates: LiveUpdate[], minutes: number, now: number): Trails {
+export const MAX_EXTRA_HISTORY_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Adds live positions (with or without a GPS fix) to the trails, keeping `minutes` of history before
+ * each asset's newest (as of `now`), as it's loaded (see historyStart), and everything from `keep`
+ * (by asset: the visit it's at, see keepFrom in presence.ts).
+ */
+export function extendTrails(
+  trails: Trails,
+  updates: LiveUpdate[],
+  minutes: number,
+  now: number,
+  keep: Record<number, number> = {},
+): Trails {
   let next = trails
   for (const update of updates) {
     if (update.kind !== 'position') continue
     const time = Date.parse(update.location.fixTime)
-    const since = Math.min(time, now) - minutes * 60 * 1000
+    const since = Math.max(now - MAX_EXTRA_HISTORY_MS, Math.min(Math.min(time, now) - minutes * 60 * 1000, keep[update.id] ?? Infinity))
     const trail = next[update.id] ?? []
     const last = trail.at(-1)
     if (last && time <= last.time) continue
@@ -120,4 +133,43 @@ export function extendTrails(trails: Trails, updates: LiveUpdate[], minutes: num
     next = { ...next, [update.id]: [...trail.filter((p) => p.time >= since), point] }
   }
   return next
+}
+
+/**
+ * A report more than this long after the one before ends a silence (longer than a phone's usual interval): Traccar's live stream doesn't pass on
+ * reports older than the latest it sent (a tracker uploading what it kept while out of reach), so
+ * the reports since the one before are fetched, this long after, once it has uploaded them (see
+ * useLiveAssets). On a week of Kofi's, 3 fixes came 24–92 minutes late.
+ */
+export const MISSED_SILENCE_MS = 10 * 60 * 1000
+export const MISSED_AFTER_MS = 60 * 1000
+
+/**
+ * An asset's points with more of its history fetched later (earlier days, or reports the live stream
+ * missed: it doesn't pass on reports older than the latest it sent), together by time, each once.
+ */
+export function mergeHistory(points: TrailPoint[], more: TrailPoint[]): TrailPoint[] {
+  if (more.length === 0) return points
+  const times = new Set(points.map((point) => point.time))
+  const added = more.filter((point) => !times.has(point.time))
+  return added.length === 0 ? points : [...points, ...added].sort((a, b) => a.time - b.time)
+}
+
+/**
+ * A history loaded again (`history`), with the points the page had (`current`) from `keep` (by asset:
+ * the visit it's at, see keepFrom in presence.ts) to where the history starts: a long stay isn't cut
+ * back to the history's length when the page comes back to the tab or reconnects.
+ */
+export function keepEarlier(history: Trails, current: Trails, keep: Record<number, number>): Trails {
+  let result = history
+  for (const [key, points] of Object.entries(history)) {
+    const id = Number(key)
+    const from = keep[id]
+    const start = points[0]?.time ?? Infinity
+    // Not after the page was away for longer than the history: what came between is gone.
+    if (from === undefined || from >= start || (current[id]?.at(-1)?.time ?? -Infinity) < start) continue
+    const kept = (current[id] ?? []).filter((point) => point.time >= from && point.time < start)
+    if (kept.length > 0) result = { ...result, [id]: mergeHistory(points, kept) }
+  }
+  return result
 }
