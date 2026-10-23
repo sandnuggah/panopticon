@@ -1,13 +1,20 @@
 // Alerts: push notifications to a phone when an asset leaves or arrives at a place, or its
 // tracker goes offline, sent by panopticon's server when Traccar forwards the event (see
-// alerts.server.ts). Each phone chooses its own, per asset. No runtime imports, so Node can run
-// the tests directly.
+// alerts.server.ts); and a reminder when it hasn't been out for a while (walkReminder.ts). Each
+// phone chooses its own, per asset. No runtime imports, so Node can run the tests directly.
 
-/** What a phone wants to hear about for one asset: leaving or arriving at a place (by id), or the tracker going offline. */
-export type AlertRule = `leave:${number}` | `arrive:${number}` | 'offline'
+/**
+ * What a phone wants to hear about for one asset: leaving or arriving at a place (by id), the
+ * tracker going offline, or a walk reminder: after how many minutes since the last walk, and the
+ * quiet hours (from and until, the phone's local hours) it waits through.
+ */
+export type AlertRule = `leave:${number}` | `arrive:${number}` | 'offline' | `walk:${number}:${number}-${number}`
 
 export function isAlertRule(value: unknown): value is AlertRule {
-  return typeof value === 'string' && /^(?:(?:leave|arrive):[1-9]\d{0,15}|offline)$/.test(value)
+  return (
+    typeof value === 'string' &&
+    /^(?:(?:leave|arrive):[1-9]\d{0,15}|offline|walk:(?:60|90|120|180|240):(?:1?\d|2[0-3])-(?:1?\d|2[0-3]))$/.test(value)
+  )
 }
 
 /** Traccar event types an alert can be about. */
@@ -72,4 +79,13 @@ export function crossPlace(state: PlaceAlerts | undefined, rule: AlertRule, now:
 export function settlePlace(state: PlaceAlerts, now: number): { send: AlertRule | null; state: PlaceAlerts | undefined } {
   if (state.latest === null || state.latest === state.sent) return { send: null, state: undefined }
   return { send: state.latest, state: { sent: state.latest, sentAt: now, latest: null } }
+}
+
+/**
+ * The push message: Declarative Web Push's format, which Safari shows by itself (iOS 18.4 and
+ * later), and which the service worker (public/sw.js) shows on other browsers. `tag`: a newer
+ * alert about the same asset replaces the last one.
+ */
+export function pushMessage(title: string, body: string, url: string, tag: string) {
+  return { web_push: 8030, notification: { title, body, navigate: url, tag } }
 }

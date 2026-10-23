@@ -657,6 +657,69 @@ html.dark:has(.k-material) {
 
 /* Map markers: maplibre DOM markers (see map/markers.ts). In px, like the map's own labels: the
    map doesn't follow Dynamic Type. Above the places' pins and names, an asset at home on its pin. */
+/* An asset's alerts: quiet hours as one slider with two handles (AssetAlerts.tsx). Two range inputs
+   laid over one track: only their handles take touches, so either can be dragged where they cross. */
+.quiet-hours-track {
+  position: relative;
+  height: 28px;
+}
+
+.quiet-hours-line,
+.quiet-hours-fill {
+  position: absolute;
+  top: 12px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.quiet-hours-line {
+  left: 13px;
+  right: 13px;
+  background: rgb(128 128 128 / 0.3);
+}
+
+.quiet-hours-fill {
+  background: var(--color-primary, #4a9);
+}
+
+.quiet-hours-track input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  background: none;
+  appearance: none;
+  pointer-events: none;
+}
+
+.quiet-hours-track input[type='range']::-webkit-slider-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  appearance: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.quiet-hours-track input[type='range']::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.quiet-hours-track input[type='range']:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-primary, #4a9);
+  outline-offset: 2px;
+}
+
 .marker {
   z-index: 1;
   display: grid;

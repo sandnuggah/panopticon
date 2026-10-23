@@ -16,6 +16,8 @@ import { trackersOf } from '../lib/tracker'
 import type { LatLon } from '../lib/segments'
 import type { GoTo, Inset } from '../components/map/PlacePicker'
 import { trailOptionsOf } from '../lib/trail'
+import { alertsEndpoint } from '../lib/usePhonePush'
+import { keepPhoneWalkReminders } from '../server/alerts.functions'
 import { useAddress } from '../lib/useAddress'
 import { useLiveAssets } from '../lib/useLiveAssets'
 import { useNow } from '../lib/useNow'
@@ -252,6 +254,13 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   useEffect(() => {
     if (trailsLoaded) onTrailsLoaded()
   }, [trailsLoaded])
+  // A phone with alerts on: its walk reminders go on (the server may have restarted, their token
+  // may want renewing; see keepWalkReminders). Once per opening, and only a convenience.
+  useEffect(() => {
+    void alertsEndpoint()
+      .then((endpoint) => (endpoint ? keepPhoneWalkReminders({ data: endpoint }) : undefined))
+      .catch(() => {})
+  }, [])
   // What each asset is up to (see status.ts), for its marker and its picture in the bottom bar.
   const now = useNow(30_000)
   const statuses = useMemo(

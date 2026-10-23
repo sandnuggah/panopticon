@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { PushTarget } from '../server/webPush.server'
 
-// This phone's push subscription, for alerts (see AlertsPage.tsx): whether it can have one, and
+// This phone's push subscription, for alerts (see AssetAlerts.tsx): whether it can have one, and
 // turning it on and off. The service worker (public/sw.js) only shows the notifications.
 
 export type PhonePush =
@@ -53,6 +53,21 @@ export function usePhonePush() {
   }, [])
 
   return { state, turnOn, turnOff }
+}
+
+/**
+ * This phone's push endpoint if it has alerts on, without asking or registering anything: null
+ * without a service worker or a subscription, or when the browser doesn't answer (see check).
+ */
+export async function alertsEndpoint(): Promise<string | null> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null
+  try {
+    const registration = await withinSeconds(10, navigator.serviceWorker.getRegistration())
+    const subscription = registration && (await withinSeconds(10, registration.pushManager.getSubscription()))
+    return subscription?.endpoint ?? null
+  } catch {
+    return null
+  }
 }
 
 async function check(): Promise<PhonePush> {

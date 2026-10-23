@@ -15,6 +15,7 @@ import {
   uploadAssetImage,
 } from '../server/manage.functions'
 import type { EditResult } from '../server/manage.server'
+import { AssetAlerts } from './AssetAlerts'
 import { AssetAvatar } from './AssetAvatar'
 import { CheckIcon } from './icons'
 import { TrailSwatch } from './TrailSwatch'
@@ -257,6 +258,8 @@ export function AssetEditor({ id, listColors, canSnapToPaths, onRemoved }: Props
           </BlockFooter>
         </>
       )}
+
+      <AssetAlerts assetId={asset.id} listColors={listColors} />
 
       <TrackerSection assetId={asset.id} listColors={listColors} />
 

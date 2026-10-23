@@ -1,11 +1,11 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest, getRequestHeader } from '@tanstack/react-start/server'
 import { isAlertRule, type AlertRule } from '../lib/alerts'
-import { loadAlertSetup, savePhoneAlerts, sendTestAlert, type PhoneAlerts } from './alerts.server'
-import { withToken } from './session.server'
+import { keepWalkReminders, loadAlertSetup, savePhoneAlerts, sendTestAlert, type PhoneAlerts } from './alerts.server'
+import { sessionExpiresAt, withToken } from './session.server'
 import { isPushEndpoint, type PushTarget } from './webPush.server'
 
-/** Settings → Alerts: whether alerts work here, and this phone's (by its push endpoint, if it has one). */
+/** An asset's Alerts (on its page): whether alerts work here, and this phone's (by its push endpoint, if it has one). */
 export const getAlertSetup = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     if (input === null) return null
@@ -28,7 +28,17 @@ export const savePhoneAlertChoices = createServerFn({ method: 'POST' })
     }
     return { target: parseTarget(target), timeZone, locale, rules: byAsset }
   })
-  .handler(({ data }) => withToken((token) => savePhoneAlerts(token, { ...data, origin: requestOrigin() })))
+  .handler(({ data }) =>
+    withToken(async (token) => savePhoneAlerts(token, { ...data, origin: requestOrigin() }, (await sessionExpiresAt()) ?? Date.now())),
+  )
+
+/** On opening the app on a phone with alerts (by its push endpoint): its walk reminders go on (see keepWalkReminders). */
+export const keepPhoneWalkReminders = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    if (typeof input !== 'string' || !isPushEndpoint(input)) throw new Error('Invalid request')
+    return input
+  })
+  .handler(({ data: endpoint }) => withToken(async (token) => keepWalkReminders(token, endpoint, (await sessionExpiresAt()) ?? Date.now())))
 
 /** A test alert to this phone. */
 export const sendPhoneTestAlert = createServerFn({ method: 'POST' })

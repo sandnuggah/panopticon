@@ -1,16 +1,28 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { alertBody, alertTitle, crossPlace, ruleForEvent, settlePlace, SETTLE_MS, type AlertRule, type PlaceAlerts } from '../lib/alerts'
+import {
+  alertBody,
+  alertTitle,
+  crossPlace,
+  pushMessage,
+  ruleForEvent,
+  settlePlace,
+  SETTLE_MS,
+  type AlertRule,
+  type PlaceAlerts,
+} from '../lib/alerts'
 import { sealAlerts, unsealAlerts, type AlertEntry } from './alertsSeal.server'
 import { env } from './env.server'
 import { attempt, loadManagedAssets, type EditResult } from './manage.server'
 import { loadPlaces } from './places.server'
-import { deviceAttributes, getDevices, updateDevice } from './traccar.server'
+import { createToken, deviceAttributes, getDevices, revokeToken, updateDevice, type TraccarDevice } from './traccar.server'
+import { trackWalkReminders } from './walkReminder.server'
 import { sendPush, vapidKeys, type PushTarget } from './webPush.server'
+import { walkRuleOf } from '../lib/walkReminder'
 
 // Alerts: Traccar forwards every event to panopticon (`event.forward.url`, see README), with the
 // device and its attributes. Each device carries, sealed, the phones that want alerts for it and
 // which (alertsSeal.server.ts), so panopticon sends them without storing anything or holding a
-// Traccar login. A phone chooses its alerts in Settings → Alerts, which writes them onto the
+// Traccar login. A phone chooses its alerts on each asset's page (Alerts), which writes them onto the
 // devices with the user's own token: changing them needs the same Traccar rights as changing assets.
 
 const ATTRIBUTE = 'panopticonAlerts'
@@ -64,6 +76,9 @@ export async function loadAlertSetup(token: string, endpoint: string | null): Pr
   }
 }
 
+/** A walk reminder's token is renewed once it would expire this much sooner than a new one would. */
+const RENEW_MS = 24 * 3_600_000
+
 /** One phone's alerts: its subscription, where and how it reads them, and the rules per asset (none: off). */
 export type PhoneAlerts = {
   target: PushTarget
@@ -73,16 +88,46 @@ export type PhoneAlerts = {
   rules: Record<number, AlertRule[]>
 }
 
-/** Writes this phone's alerts onto each device whose alerts change, and drops it from the rest. */
-export function savePhoneAlerts(token: string, phone: PhoneAlerts): Promise<EditResult> {
+/**
+ * Writes this phone's alerts onto each device whose alerts change, and drops it from the rest. A
+ * walk reminder gets a Traccar token of the user's (the same for all of the phone's assets),
+ * expiring with their session (`sessionEnds`; Traccar allows no later), for the server to read the
+ * asset's history (walkReminder.server.ts); the phone's old one is revoked once none needs it.
+ */
+export function savePhoneAlerts(token: string, phone: PhoneAlerts, sessionEnds: number): Promise<EditResult> {
   const secret = env().sessionSecret
   return attempt(token, async (): Promise<EditResult> => {
-    for (const device of await getDevices(token)) {
+    const devices = await getDevices(token)
+    const mine = devices.flatMap((device) =>
+      unsealAlerts(device.alerts, device.id, secret).filter((entry) => entry.endpoint === phone.target.endpoint),
+    )
+    const old = mine.find((entry) => entry.token)
+    const wantsToken = Object.values(phone.rules).some((rules) => walkRuleOf(rules))
+    let reminderToken: Pick<AlertEntry, 'token' | 'tokenExpires'> = {}
+    if (wantsToken) {
+      reminderToken =
+        old?.token && (old.tokenExpires ?? 0) > sessionEnds - RENEW_MS
+          ? { token: old.token, tokenExpires: old.tokenExpires }
+          : { token: await createToken(token, new Date(sessionEnds)), tokenExpires: sessionEnds }
+    }
+    for (const device of devices) {
       const current = unsealAlerts(device.alerts, device.id, secret)
       const rules = phone.rules[device.id] ?? []
       const next: AlertEntry[] = current.filter((entry) => entry.endpoint !== phone.target.endpoint && !goneEndpoints.has(entry.endpoint))
-      if (rules.length > 0) next.push({ ...phone.target, origin: phone.origin, timeZone: phone.timeZone, locale: phone.locale, rules })
-      if (JSON.stringify(next) === JSON.stringify(current)) continue
+      if (rules.length > 0) {
+        next.push({
+          ...phone.target,
+          origin: phone.origin,
+          timeZone: phone.timeZone,
+          locale: phone.locale,
+          rules,
+          ...(walkRuleOf(rules) && reminderToken),
+        })
+      }
+      if (JSON.stringify(next) === JSON.stringify(current)) {
+        trackWalkReminders(device)
+        continue
+      }
       const sealed = next.length > 0 ? sealAlerts(next, device.id, secret) : null
       if (sealed && sealed.length > MAX_ATTRIBUTE_LENGTH) return { ok: false, error: 'alerts-full' }
       await updateDevice(token, device.id, (full) => {
@@ -90,9 +135,39 @@ export function savePhoneAlerts(token: string, phone: PhoneAlerts): Promise<Edit
         if (sealed) attributes[ATTRIBUTE] = sealed
         else delete attributes[ATTRIBUTE]
       })
+      trackWalkReminders({ ...device, alerts: sealed })
     }
+    // A token no reminder of this phone's uses any more.
+    if (old?.token && old.token !== reminderToken.token) await revokeToken(old.token).catch(() => {})
     return { ok: true }
   })
+}
+
+/**
+ * When the app opens on a phone with alerts: its walk reminders are known to the server again (after
+ * a restart), and their token is renewed when this session would give a later one, so reminders go
+ * on as long as the user signs in now and then. Changing the alerts needs the right to change assets;
+ * without it, they're only known again.
+ */
+export async function keepWalkReminders(token: string, endpoint: string, sessionEnds: number): Promise<void> {
+  const secret = env().sessionSecret
+  const [devices, { access }] = await Promise.all([getDevices(token), loadManagedAssets(token)])
+  const withReminder = (device: TraccarDevice) =>
+    unsealAlerts(device.alerts, device.id, secret).find((entry) => entry.endpoint === endpoint && walkRuleOf(entry.rules))
+  const stale = devices.map(withReminder).find((entry) => entry && (entry.tokenExpires ?? 0) < sessionEnds - RENEW_MS)
+  if (stale && access.canEdit) {
+    const rules = Object.fromEntries(
+      devices.map((device) => [
+        device.id,
+        unsealAlerts(device.alerts, device.id, secret).find((entry) => entry.endpoint === endpoint)?.rules ?? [],
+      ]),
+    )
+    const { endpoint: _, p256dh, auth, origin, timeZone, locale } = stale
+    // Saved as they are, which gives them a new token (see savePhoneAlerts).
+    await savePhoneAlerts(token, { target: { endpoint, p256dh, auth }, origin, timeZone, locale, rules }, sessionEnds)
+    return
+  }
+  for (const device of devices) if (withReminder(device)) trackWalkReminders(device)
 }
 
 /** "Alerts are on", straight to the phone: checks the phone's side without waiting for an event. */
@@ -129,6 +204,8 @@ export async function handleTraccarEvent(request: Request): Promise<Response> {
   if (!event || !device || typeof event.type !== 'string' || typeof event.eventTime !== 'string') return new Response(null, { status: 400 })
   if (typeof device.id !== 'number' || device.id !== event.deviceId || typeof device.name !== 'string')
     return new Response(null, { status: 400 })
+  // Any event brings the asset's walk reminders back to mind after a restart.
+  trackWalkReminders({ id: device.id, name: device.name, alerts: object(device.attributes)?.[ATTRIBUTE] })
 
   const rule = ruleForEvent({ type: event.type, geofenceId: typeof event.geofenceId === 'number' ? event.geofenceId : 0 })
   const age = Date.now() - Date.parse(event.eventTime)
@@ -193,15 +270,6 @@ async function sendAlerts({ rule, device, placeName, time }: AlertNews) {
       if (result === 'gone') goneEndpoints.add(entry.endpoint)
     }),
   )
-}
-
-/**
- * The push message: Declarative Web Push's format, which Safari shows by itself (iOS 18.4 and
- * later), and which the service worker (public/sw.js) shows on other browsers. `tag`: a newer
- * alert about the same asset replaces the last one.
- */
-function pushMessage(title: string, body: string, url: string, tag: string) {
-  return { web_push: 8030, notification: { title, body, navigate: url, tag } }
 }
 
 /** Compares secrets in constant time, whatever their lengths. */

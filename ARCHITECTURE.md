@@ -284,7 +284,7 @@ Places such as Home or Daycare, each for some of the assets, are Traccar geofenc
 
 ## Alerts
 
-Notifications on a phone when an asset leaves or arrives at one of its places, or its tracker goes offline, also while Panopticon is closed (Settings → Alerts, `AlertsPage.tsx`). Panopticon's server sends them with Web Push when Traccar forwards the event. It still stores nothing.
+Notifications on a phone when an asset leaves or arrives at one of its places, its tracker goes offline, or it hasn't been out for a while (a walk reminder, below), also while Panopticon is closed (an asset's page under Assets → Alerts, `AssetAlerts.tsx`: its own alerts, and for the device, turning them on, a test alert and turning them all off; until October 2026 a page of their own, Settings → Alerts, with every asset's). Panopticon's server sends them with Web Push when Traccar forwards the event. It still stores nothing.
 
 - **Why not Traccar's own notifications:** its push notificator (`traccar`) only sends to Traccar's Manager app, through traccar.org; the others are Telegram, email, SMS and the like. Panopticon's own notifications need Web Push, sent by panopticon.
 - **Hearing about events:** Traccar's event forwarding (`event.forward.url`) posts every event as JSON, with its position, device (and the device's attributes) and geofence, to `POST /hooks/traccar-events` (`alerts.server.ts`). It's only accepted with `Authorization: Bearer <TRACCAR_EVENTS_SECRET>` (`event.forward.header`), compared in constant time, and up to 256 KB; without the variable the route answers 404 and the Alerts page says alerts aren't set up. It always answers 204 once accepted, so Traccar doesn't retry. Events older than 15 minutes (buffered positions) are ignored.
@@ -295,6 +295,10 @@ Notifications on a phone when an asset leaves or arrives at one of its places, o
 - **Web Push** (`webPush.server.ts`, only `node:crypto`, tests including RFC 8291's example message byte for byte): the message is encrypted for the phone (RFC 8291, aes128gcm) and signed with panopticon's VAPID key (RFC 8292). The key is derived from `SESSION_SECRET`, so there's nothing to configure or store; changing the secret turns everyone's alerts off. The VAPID subject is Panopticon's address as the phone opened it, which must be `https` on a real domain: Apple's push service refuses `localhost` and test domains (checked: a real-looking subject gets as far as "BadDeviceToken" for a made-up subscription). Messages go only to Apple's, Google's, Mozilla's and Microsoft's push services (`isPushEndpoint`), so a subscription can't make the server post elsewhere. A subscription the push service says is gone (404, 410) is dropped the next time that asset's alerts are saved.
 - **The message** is in Declarative Web Push's format (`{ web_push: 8030, notification: {...} }`): Safari 18.4 and later show it themselves; the service worker (`public/sw.js`, which caches nothing) shows it elsewhere. Tapping it opens the asset's details card (`/?asset=<id>&details=true`). A newer alert about the same asset replaces the last one (`tag`).
 - **The phone's side** (`usePhonePush.ts`): **Turn on alerts on this device** registers the service worker and asks for permission on the tap (browsers only ask then). On iPhone and iPad in Safari it says to add Panopticon to the Home Screen, where push works. The iOS Simulator has no push: `getSubscription()` never answers there, so the check gives up after 10 s and says the browser can't show notifications. Turning alerts off removes the phone from every asset, then unsubscribes.
+- **Walk reminder** ("puppy mode", per phone and asset, under its other alerts): "Kofi hasn't been out for 2 hours", with when the last walk ended, how long and how far ("Last walk ended at 14:02 (35 min, 1.8 km)"). After 1, 1½, 2 (the default), 3 or 4 hours at home since the last walk, as the card and Stats count outings; not while it's out or at another place than its Home (its place called Home, or else its first). Not in quiet hours (on by default, 22–07, the phone's own time; a switch, and with it on, one slider over the day with two handles for the hours reminders may come, filled between them, the rest quiet, so quiet hours go round midnight; the handles keep an hour apart and an hour of quiet; saved once a handle has stopped for a moment; each handle a range input of its own, for the keyboard and screen readers; off is the same hour for both): one that comes due then waits until they end, and says "since 21:30" instead. Once per wait: nothing more until the next walk. The rule is `walk:<minutes>:<from>-<until>` (`lib/walkReminder.ts`, with tests).
+  - **Without an event to react to** (the dog asleep at home, the ST-904L silent), the server keeps a timer of its own (`walkReminder.server.ts`): every 5 minutes, for each asset with a reminder, it reads what's new of its last 26 hours with a Traccar token sealed with the phone's alerts, works out its outings and where it is with the app's own rules (`outings.ts`, `presence.ts`), and sends the reminder when it's due. Its places are read again every 30 minutes.
+  - **The token:** turning a reminder on makes a Traccar token of the user's (the same for all of a phone's assets), expiring with their session, as Traccar allows no later. Opening the app on a phone with alerts renews it when the session would give a later one (`keepWalkReminders`), so reminders go on as long as the user signs in now and then; turning the phone's last reminder off revokes it. It has the user's rights in Traccar (its tokens can't be limited to reading), sealed like the push subscription, so only this server can use it.
+  - **In memory, like the rest:** after a restart, an asset's reminders are known again when its alerts are saved, the app is opened on a phone with one, or Traccar forwards any event for it. Until then one can be missed, and one already sent can come again.
 - **Testing locally:** the mock Traccar forwards its live events when `FORWARD_URL` and `FORWARD_HEADER` are set (see `dev/mock-traccar.mjs`); the `panopticon-mock` launch config sets a matching mock-only `TRACCAR_EVENTS_SECRET`.
 
 ## Sharing
@@ -528,7 +532,8 @@ src/
     places.functions.ts               getPlaces, savePlaceChange, deletePlace, getPlaceVisits
     stats.functions.ts                getDayStats (an asset's walks, a day at a time)
     stats.server.ts                   works out days from Traccar's history, keeps the days that are over
-    alerts.server.ts                  alerts: the Traccar events hook, this phone's choices onto the devices
+    alerts.server.ts                  alerts: the Traccar events hook, this phone's choices onto the devices, reminder tokens
+    walkReminder.server.ts            walk reminders: the assets with one, checked every 5 minutes
     alerts.functions.ts               getAlertSetup, savePhoneAlertChoices, sendPhoneTestAlert
     alertsSeal.server.ts              sealing a device's alert choices (AES-GCM) + tests
     webPush.server.ts                 Web Push: encryption (RFC 8291), VAPID (RFC 8292), sending + tests
@@ -560,7 +565,7 @@ src/
     PlaceEditor.tsx                   a place's name, size and assets, in a card over the map
     Outings.tsx                       an asset's outings today
     PlaceBanner.tsx                   "Betty left Home", at the top of the map
-    AlertsPage.tsx                    Settings → Alerts: this phone's alerts, test, turn off
+    AssetAlerts.tsx                   an asset's alerts on its page: this phone's, test, turn off
     AssetAvatar.tsx                   picture, or initial as the fallback
     LiveIndicator.tsx                 Live / Connecting / Offline
     UpdateNotice.tsx                  Update available · Reload, after a new release
@@ -585,6 +590,7 @@ src/
     places.ts                         Place type, Traccar's WKT areas, arrivals and departures + tests
     outings.ts                        outings between bases, for the card, Stats and the map + tests
     alerts.ts                         alert rules, which events they match, their text + tests
+    walkReminder.ts                   walk reminders: their rule, quiet hours, when one is due, its text + tests
     usePhonePush.ts                   this phone's push subscription and the service worker
     segments.ts                       walking / stay / vehicle / underground, and what's happening now
     segments.test.ts                  node --test

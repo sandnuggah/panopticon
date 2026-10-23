@@ -134,8 +134,8 @@ search for. Without it, you place the circle by hand, and the address is still u
 
 ## Alerts (optional)
 
-Settings → Alerts sends notifications to a phone or computer when an asset leaves or arrives at one of its
-places, or its tracker goes offline, also while Panopticon is closed. Traccar tells panopticon about
+Alerts, on each asset's page (Settings → Assets), send notifications to a phone or computer when it leaves or
+arrives at one of its places, its tracker goes offline, or it hasn't been out for a while, also while Panopticon is closed. Traccar tells panopticon about
 each event (event forwarding), and panopticon sends the notification with Web Push. Each device
 chooses its own alerts, and they're kept with the assets in Traccar, so panopticon still stores
 nothing. On iPhone and iPad they work in the Home Screen app (iOS 16.4 or later).
@@ -160,8 +160,8 @@ push service checks the address.
    <entry key='event.forward.url'>http://panopticon:3000/hooks/traccar-events</entry>
    <entry key='event.forward.header'>Authorization: Bearer <the secret></entry>
    ```
-4. On the phone (from the Home Screen) or in a desktop browser: Settings → Alerts → **Turn on alerts on
-   this device**, and choose which. **Send a test alert** checks the device's side.
+4. On the phone (from the Home Screen) or in a desktop browser: Settings → Assets → an asset → Alerts →
+   **Turn on alerts on this device**, and choose which, on each asset's page. **Send a test alert** checks the device's side.
 
 `event.status.enable` makes Traccar record when a tracker goes offline (it doesn't by default since
 version 6.14), for the offline alert. A tracker that just goes quiet, without hanging up, counts as

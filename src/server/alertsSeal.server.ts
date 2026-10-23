@@ -20,6 +20,12 @@ export type AlertEntry = {
   timeZone: string
   locale: string
   rules: AlertRule[]
+  /**
+   * With a walk reminder: a Traccar token of the user who set it, and when it expires (ms), for the
+   * server to read the asset's history while no one has the app open (see walkReminder.server.ts).
+   */
+  token?: string
+  tokenExpires?: number
 }
 
 const VERSION = 1
@@ -48,6 +54,7 @@ export function sealAlerts(entries: AlertEntry[], deviceId: number, secret: stri
       z: entry.timeZone,
       l: entry.locale,
       r: entry.rules,
+      ...(entry.token && { t: entry.token, x: entry.tokenExpires }),
     })),
   )
   const body = Buffer.concat([cipher.update(payload, 'utf8'), cipher.final()])
@@ -78,6 +85,7 @@ export function unsealAlerts(value: unknown, deviceId: number, secret: string): 
           timeZone: item.z as string,
           locale: item.l as string,
           rules: item.r.filter(isAlertRule),
+          ...(typeof item.t === 'string' && typeof item.x === 'number' && { token: item.t, tokenExpires: item.x }),
         },
       ]
     })
