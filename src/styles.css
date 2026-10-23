@@ -737,60 +737,71 @@ html.dark:has(.k-material) {
   }
 }
 
-/* In a place's capsule (markers.ts): no name of its own (the capsule names the place). */
+/* In a place's pill (markers.ts): no name of its own (the place's label says where, the card who);
+   further out, hidden behind the place's count. */
 .marker-in-capsule .marker-label {
   visibility: hidden;
 }
 
-/* Two or more assets at one place: a pill on its pin, with the place's pin, a slot for each asset's
-   marker (laid over it, CAPSULE_SLOT wide) and the place's name; under the markers. */
+.marker-hidden {
+  display: none;
+}
+
+/* Two or more assets at one place, close in: a pill centred under its pin, a slot for each asset's
+   marker (laid over it, CAPSULE_SLOT wide); under the markers. */
 .place-capsule {
   z-index: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
   height: 52px;
-  padding: 0 14px 0 4px;
   border-radius: 26px;
   background: var(--surface);
-  color: var(--text);
   box-shadow: var(--shadow);
   pointer-events: none;
 }
 
-.place-capsule-pin {
+.place-capsule[hidden],
+.place-count[hidden] {
+  display: none;
+}
+
+/* Further out: the place's pin, as its own (.place-pin), with how many assets are at it. */
+.place-count {
+  z-index: 3;
   display: grid;
-  flex: none;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid #ffffff;
   border-radius: 50%;
   background: var(--place);
   color: #ffffff;
+  box-shadow: var(--shadow);
 }
 
-.map-dark .place-capsule-pin {
+.map-dark .place-count {
   background: #5e5ce6;
 }
 
-.place-capsule-pin svg {
-  width: 16px;
-  height: 16px;
+.place-count svg {
+  width: 14px;
+  height: 14px;
 }
 
-.place-capsule-slots {
-  flex: none;
-}
-
-.place-capsule-name {
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-/* A place with a capsule: the capsule names it, so its own label steps aside. */
-.place-label-capsuled {
-  display: none;
+.place-count-badge {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: var(--shadow);
 }
 
 .marker-dot {

@@ -6,22 +6,23 @@ import { PIN_PATH } from './placeLayers'
 // The assets' markers: maplibre DOM markers (enough for ≤5), a dot with the asset's picture or
 // initial and a name label, styled in styles.css (.marker). Greyed out when stale, ringed when
 // selected, and wearing a place's pin as a badge when the asset is at a place too small on screen to
-// show its own (see showsPin in placeLayers.ts). Two or more at one place sit in a row in a capsule
-// on its pin, each tappable (createCapsule).
+// show its own (see showsPin in placeLayers.ts). Two or more at one place are its pin with a count
+// further out (createPlaceCount), and close in sit in a row in a pill under it, each tappable (createCapsule).
 
 /** A marker moving farther than this goes there at once: a jump, not a glide across the map. */
 const GLIDE_MAX_METERS = 150
 /**
- * Assets at the same place sit in a capsule on its pin (see createCapsule): its own pin over the
- * place's, then each asset's marker in a slot this wide (px), the bigger picture kind with its ring
- * included, then the place's name.
+ * Assets at the same place, close in (see PILL_ZOOM in AssetMap.tsx), sit in a pill centred under
+ * its pin (see createCapsule): each asset's marker in a slot this wide (px), the bigger picture kind
+ * with its ring included. Further out they're the place's pin with a count (createPlaceCount).
  */
 export const CAPSULE_SLOT = 48
-/** From the capsule's pin, over the spot, to the middle of its first slot (px): half the pin, a gap, half a slot. */
-export const CAPSULE_FIRST = 15 + 6 + CAPSULE_SLOT / 2
+/** From the place's pin, at the spot, to the top of the pill (px): half the pin, and a gap. */
+export const CAPSULE_TOP = 18
+const CAPSULE_HEIGHT = 52
 
-/** Where a marker sits in its place's capsule: `index` from the left. */
-export type InCapsule = { index: number }
+/** Where a marker sits among its place's assets: `index` from the left of `count`; `close`, in the pill, else hidden behind the count. */
+export type InCapsule = { index: number; count: number; close: boolean }
 
 /** How the camera eases (maplibre's own default), so a followed marker and the map move as one. */
 export function ease(t: number): number {
@@ -68,23 +69,39 @@ export function glideMarker(marker: Marker, to: [number, number], ms: number) {
 }
 
 /**
- * A capsule for assets at one place: a pill with the place's pin, room for their markers (which sit
- * over it, see CAPSULE_SLOT), and the place's name. Decorative: each marker says where its asset is.
- * Anchored at its left, so its pin is over the place's own.
+ * The pill for assets at one place, close in: room for their markers, which sit over it (see
+ * CAPSULE_SLOT), centred under the place's pin. Decorative: each marker says where its asset is.
  */
 export function createCapsule(): HTMLElement {
   const element = document.createElement('div')
   element.className = 'place-capsule'
   element.setAttribute('aria-hidden', 'true')
-  element.innerHTML =
-    `<span class="place-capsule-pin"><svg viewBox="0 0 24 24"><path d="${PIN_PATH}" fill="currentColor" fill-rule="evenodd"/></svg></span>` +
-    '<span class="place-capsule-slots"></span><span class="place-capsule-name"></span>'
   return element
 }
 
-export function updateCapsule(element: HTMLElement, count: number, placeName: string) {
-  element.querySelector<HTMLElement>('.place-capsule-slots')!.style.width = `${count * CAPSULE_SLOT}px`
-  element.querySelector('.place-capsule-name')!.textContent = placeName
+export function updateCapsule(element: HTMLElement, count: number) {
+  element.style.width = `${count * CAPSULE_SLOT + 8}px`
+}
+
+/** Further out: the place's pin with how many assets are at it; tapping it zooms in to the pill. */
+export function createPlaceCount(onTap: () => void): HTMLElement {
+  const element = document.createElement('button')
+  element.type = 'button'
+  element.className = 'place-count'
+  element.innerHTML =
+    `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PIN_PATH}" fill="currentColor" fill-rule="evenodd"/></svg>` +
+    '<span class="place-count-badge" aria-hidden="true"></span>'
+  element.addEventListener('click', (event) => {
+    event.stopPropagation()
+    onTap()
+  })
+  return element
+}
+
+export function updatePlaceCount(element: HTMLElement, names: string[], placeName: string) {
+  element.querySelector('.place-count-badge')!.textContent = String(names.length)
+  const listed = `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+  element.setAttribute('aria-label', `${listed} at ${placeName}: zoom in`)
 }
 
 /** A marker's element; tapping it calls `onTapRef.current` with the asset's id. */
@@ -130,8 +147,10 @@ export function updateMarkerElement(
   element.querySelector<HTMLElement>('.marker-badge')!.hidden = !state.atPlace || inCapsule
   element.querySelector('.marker-initial')!.textContent = assetInitial(asset.name)
   element.querySelector('.marker-label')!.textContent = asset.name
-  const x = inCapsule ? CAPSULE_FIRST + state.capsule!.index * CAPSULE_SLOT : 0
-  element.style.translate = x ? `${x}px 0` : ''
+  const { index = 0, count = 1, close = true } = state.capsule ?? {}
+  element.classList.toggle('marker-hidden', inCapsule && !close)
+  const [x, y] = inCapsule ? [(index - (count - 1) / 2) * CAPSULE_SLOT, CAPSULE_TOP + CAPSULE_HEIGHT / 2] : [0, 0]
+  element.style.translate = x || y ? `${x}px ${y}px` : ''
   element.style.zIndex = inCapsule ? '10' : ''
 
   const image = element.querySelector<HTMLImageElement>('.marker-image')!

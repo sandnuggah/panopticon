@@ -19,9 +19,19 @@ import { resolveStyle, type MapStyle } from '../../lib/mapStyles'
 import { useSettings } from '../../lib/settings'
 import { addMyPositionLayer, createMyPositionDot, setAccuracyCircle } from './myPosition'
 import { circle } from './geometry'
-import { createCapsule, createMarkerElement, ease, glideMarker, updateCapsule, updateMarkerElement } from './markers'
+import {
+  CAPSULE_TOP,
+  createCapsule,
+  createMarkerElement,
+  createPlaceCount,
+  ease,
+  glideMarker,
+  updateCapsule,
+  updateMarkerElement,
+  updatePlaceCount,
+} from './markers'
 import { addTrailLayers, recolourTrails, setTrails } from './trailLayers'
-import { addPlaceLayers, recolourPlaces, setCapsulePlaces, setPlaces, showsPin } from './placeLayers'
+import { addPlaceLayers, recolourPlaces, setPlaces, showsPin } from './placeLayers'
 import { NO_COVER, type Cover } from '../cards'
 import { MapButtons } from './MapButtons'
 import { PlacePicker, type PickerProps } from './PlacePicker'
@@ -29,6 +39,8 @@ import { PlacePicker, type PickerProps } from './PlacePicker'
 setWorkerUrl(workerUrl)
 
 const ASSET_ZOOM = 15
+/** Assets at one place show in a pill from this zoom in; further out, as the place's pin with how many (markers.ts). */
+const PILL_ZOOM = 17
 /** How long the map takes to glide to the followed asset's new position. */
 const FOLLOW_MS = 1000
 /** How close to the middle of the map (px) a selected asset counts as centred. */
@@ -126,8 +138,10 @@ export default function AssetMap({
   const updateMarkersRef = useRef(() => {})
   const cameraPlacedRef = useRef(false)
   const [styleLoaded, setStyleLoaded] = useState(false)
-  /** The capsules of assets at one place (markers.ts), by place id. */
-  const capsulesRef = useRef(new Map<number, Marker>())
+  /** Two or more assets at one place (markers.ts), by place id: their pill, and the place's pin with how many. */
+  const groupsRef = useRef(new Map<number, { pill: Marker; count: Marker }>())
+  /** The assets in one of them. */
+  const capsuledRef = useRef(new Set<number>())
   const now = useNow(30_000)
 
   // Following the selected asset: the map keeps its latest position centred. Dragging the map pauses
@@ -287,10 +301,10 @@ export default function AssetMap({
     // From the start: the first move to a place (the place editor's jump to it) can come before the tiles.
     map.on('zoom', () => updateMarkersRef.current())
     const markers = markersRef.current
-    const capsules = capsulesRef.current
+    const groups = groupsRef.current
     return () => {
       markers.clear()
-      capsules.clear()
+      groups.clear()
       meMarkerRef.current = null
       map.remove()
       mapRef.current = null
@@ -373,37 +387,53 @@ export default function AssetMap({
         markers.delete(id)
       }
     }
-    // Two or more at one place (shown at its centre, see shownLocation): a capsule on its pin with
-    // them in a row, in the bottom bar's order, each tappable.
+    // Two or more at one place (shown at its centre, see shownLocation): close in, a pill centred
+    // under its pin with them in a row, in the bottom bar's order, each tappable; further out, its
+    // pin with how many, which zooms in when tapped.
     const atPlaces = new Map<number, number[]>()
     for (const asset of assets) {
       const place = presence[asset.id]?.place
       if (asset.location && place !== null && place !== undefined) atPlaces.set(place, [...(atPlaces.get(place) ?? []), asset.id])
     }
-    const capsuled = new Map<number, { index: number }>()
-    const capsules = capsulesRef.current
+    const capsuled = new Map<number, { index: number; count: number }>()
+    const groups = groupsRef.current
     for (const [placeId, ids] of atPlaces) {
       const place = places.find((candidate) => candidate.id === placeId)
       if (ids.length < 2 || !place) continue
-      ids.forEach((id, index) => capsuled.set(id, { index }))
-      let capsule = capsules.get(placeId)
-      if (!capsule) {
-        // Its pin (half of 30 px in from its 4 px edge) over the place's.
-        const at = assets.find((asset) => asset.id === ids[0])!.location!
-        capsule = new Marker({ element: createCapsule(), anchor: 'left', offset: [-19, 0] }).setLngLat([at.lon, at.lat]).addTo(map)
-        capsules.set(placeId, capsule)
-      }
+      ids.forEach((id, index) => capsuled.set(id, { index, count: ids.length }))
       const at = assets.find((asset) => asset.id === ids[0])!.location!
-      capsule.setLngLat([at.lon, at.lat])
-      updateCapsule(capsule.getElement(), ids.length, place.name)
+      const lngLat: [number, number] = [at.lon, at.lat]
+      let group = groups.get(placeId)
+      if (!group) {
+        const zoomIn = () => map.flyTo({ center: group!.pill.getLngLat(), zoom: Math.max(map.getZoom(), PILL_ZOOM + 0.5) })
+        group = {
+          pill: new Marker({ element: createCapsule(), anchor: 'top', offset: [0, CAPSULE_TOP] }).setLngLat(lngLat).addTo(map),
+          count: new Marker({ element: createPlaceCount(() => zoomIn()) }).setLngLat(lngLat).addTo(map),
+        }
+        groups.set(placeId, group)
+      }
+      group.pill.setLngLat(lngLat)
+      group.count.setLngLat(lngLat)
+      updateCapsule(group.pill.getElement(), ids.length)
+      updatePlaceCount(
+        group.count.getElement(),
+        ids.map((id) => assets.find((asset) => asset.id === id)!.name),
+        place.name,
+      )
     }
-    for (const [placeId, capsule] of capsules) {
+    for (const [placeId, group] of groups) {
       if ((atPlaces.get(placeId)?.length ?? 0) >= 2 && places.some((place) => place.id === placeId)) continue
-      capsule.remove()
-      capsules.delete(placeId)
+      group.pill.remove()
+      group.count.remove()
+      groups.delete(placeId)
     }
-    setCapsulePlaces(map, new Set(capsules.keys()))
+    capsuledRef.current = new Set(capsuled.keys())
     updateMarkersRef.current = () => {
+      const close = map.getZoom() >= PILL_ZOOM
+      for (const group of groups.values()) {
+        group.pill.getElement().hidden = !close
+        group.count.getElement().hidden = close
+      }
       for (const asset of assets) {
         const marker = markers.get(asset.id)
         if (!marker) continue
@@ -414,7 +444,7 @@ export default function AssetMap({
           stale: isGrey(status),
           selected: asset.id === selectedId,
           atPlace,
-          capsule: capsuled.get(asset.id),
+          capsule: capsuled.has(asset.id) ? { ...capsuled.get(asset.id)!, close } : undefined,
         })
       }
     }
@@ -437,7 +467,8 @@ export default function AssetMap({
     } else if (target) {
       const flightId = ++flightCountRef.current
       flightRef.current = flightId
-      flightZoomRef.current = Math.max(map.getZoom(), ASSET_ZOOM)
+      // An asset at a place with others shows close in, in their pill (see PILL_ZOOM).
+      flightZoomRef.current = Math.max(map.getZoom(), capsuledRef.current.has(selectedId!) ? PILL_ZOOM + 0.5 : ASSET_ZOOM)
       // The id comes back on this flight's moveend, which then lets follow updates through.
       map.flyTo({ center: [target.lon, target.lat], zoom: flightZoomRef.current }, { flightId })
     }
