@@ -39,8 +39,9 @@ How, from 2026-10-22: fast where it's safe, careful where it isn't. Each step ha
 
 ## Places and alerts
 
-- [ ] Try places on the real Traccar (`:60`): a Home for Betty, then check her arrivals and departures list (it needs reports allowed for the user) and the banner when she leaves
-- [ ] Try alerts on the real iPhone: the test alert works, and so do "Betty leaves Home" and "arrives at Home" (2026-10-11; they came twice, settled in `:61`). The offline alert hasn't come yet: Traccar only records offline events with `event.status.enable` (off by default since 6.14, now in README → Alerts). Betty showed Offline (the ST-904L hangs up when it sleeps) without an alert: check Traccar's Reports → Events for "Status online/offline"; none means the setting isn't in effect. A Traccar restart marks everything offline without an event, so test with the next sleep (and the 30 min quiet period between offline alerts)
+- [x] Tried places on the real Traccar: Home, its arrivals and departures, and the banner work (2026-10-23)
+- [x] Tried alerts on the real iPhone: the test alert and leaving and arriving at Home come through (2026-10-23)
+- [ ] The offline alert still never comes on the real setup, though the asset shows Offline. Check Traccar's Reports → Events for "Status offline" (none means `event.status.enable` isn't in effect) and the server's log when Traccar forwards one; the ST-904L hangs up when it sleeps, so a missing event is likely Traccar's side
 - [ ] Research alerts on Android: Chrome's push goes through fcm.googleapis.com (allowed), but check Firefox and Samsung Internet's push services, whether the service worker shows the Declarative Web Push message there, whether the installed app is needed, and test on a real Android phone (or an emulator with Google Play services)
 - [ ] Push alerts ("Kofi left Home") from the same presence rule as the app (lib/presence.ts), worked out on the server as reports come, instead of Traccar's geofence events a fix at a time: moved here from trail step 9, off its critical path
 - [ ] Watch for false "left Home" at the edge of a place (ST-904L fixes wander 15–25 m); the position filters below would help
@@ -75,7 +76,7 @@ How, from 2026-10-22: fast where it's safe, careful where it isn't. Each step ha
 - [x] Share as a round button beside ✕ at the top of the details card, in the same style, as in Apple Maps; Stats has the row under it, with Sharing live beside it while a link is live. Released as `:102` (2026-10-23)
 - [x] Centre first, details second: a tap on the selected asset, its picture or its marker, centres it when it's off-centre (after a drag), then opens its details; with them open, the marker deselects it and the picture centres it again. Released as `:102` (2026-10-23)
 - [x] Assets at the same place stack on its pin: the top one's label names them all ("Betty, Sixten"; "+2" for those that don't fit), the others peek out behind it; tapping the stack fans them out in a row to be tapped, and tapping one or the map folds it. Released as `:102` (2026-10-23)
-- [ ] Check `:102` on the phone: Share beside ✕, the centre-then-details taps, and a stack at Home once two assets are there together (E's phone and Kofi, say)
+- [x] Checked `:102` on the phone: Share beside ✕, the centre-then-details taps and a stack at Home work (2026-10-23)
 - [x] Trail and walks per asset: each asset's page has Trail (Off, This outing, Today, 24 hours) and Walks (Paw prints, Snap to paths), stored on the device in Traccar like its trail colour, so they're the same everywhere and for everyone who can see it; Appearance keeps the map style. Choices made under Appearance before are ignored, so each asset starts at the defaults. Released as `:104` (2026-10-23)
 - [x] Saving a trail colour, length or walk option says so on its own line under the list's footer, naming what changed ("Paw prints on."), instead of over the footer's text. Released as `:104` (2026-10-23)
 - [ ] After deploying `:104`: set Kofi's trail and walks on his page again (paw prints, trail length) if they were changed under Appearance before

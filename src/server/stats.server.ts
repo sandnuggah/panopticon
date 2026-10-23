@@ -1,10 +1,10 @@
 import { placeStays } from '../lib/presence'
 import type { LatLon } from '../lib/segments'
-import { dayStats, type Day, type DayStats } from '../lib/stats'
+import { dayStats, type BatteryReading, type Day, type DayStats } from '../lib/stats'
 import { trailProfile } from '../lib/tracker'
 import { loadPlaces } from './places.server'
 import { toTrailPoint } from './positions.server'
-import { adapterFor } from './trackers.server'
+import { adapterFor, readPosition } from './trackers.server'
 import { getDevice, getPositionHistory } from './traccar.server'
 
 // The Stats card's numbers, a day at a time: each day's positions from Traccar, worked out with the
@@ -49,7 +49,14 @@ export async function loadDayStats(token: string, assetId: number, days: Day[], 
       const points = positions.map(toTrailPoint).sort((a, b) => a.time - b.time)
       // As of the end of what was fetched: a tracker silent after its last fix there was silent (a
       // departure that settled is none, see presence.ts), not cut off.
-      const stats = dayStats(points, home, profile, placeStays(points, places, assetId, profile, end), day)
+      // Its battery as reported, oldest first: lowest and highest that day, and when it was charged.
+      const battery = positions
+        .flatMap((position): BatteryReading[] => {
+          const percent = readPosition(position).battery?.percent
+          return percent === undefined ? [] : [{ time: Date.parse(position.fixTime), percent }]
+        })
+        .sort((a, b) => a.time - b.time)
+      const stats = dayStats(points, home, profile, placeStays(points, places, assetId, profile, end), day, battery)
       results[index] = stats
       if (day.to + MARGIN_MS + SETTLED_MS <= Date.now()) {
         if (cache.size >= MAX_CACHED) cache.delete(cache.keys().next().value!)

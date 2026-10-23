@@ -5,12 +5,26 @@ import { Button, Segmented, SegmentedButton } from 'konsta/react'
 import type { Asset } from '../lib/asset'
 import { durationLabel, type Place } from '../lib/places'
 import type { LatLon } from '../lib/segments'
-import { addUp, lastDays, periodDays, previousDays, streak, type Day, type DayStats, type Period } from '../lib/stats'
+import {
+  addUp,
+  averageWalk,
+  byWeekday,
+  daysPerCharge,
+  lastDays,
+  periodDays,
+  previousDays,
+  records,
+  streak,
+  walkTimes,
+  type Day,
+  type DayStats,
+  type Period,
+} from '../lib/stats'
 import { getDayStats } from '../server/stats.functions'
 import { Backdrop, CARD_BG, CloseButton, moveFocus, pageCardClass } from './cards'
 import { StatsIcon } from './icons'
 
-/** How far back the walk streak looks. */
+/** How far back the walk streak, the records, the days of the week and the time per charge look. */
 const STREAK_DAYS = 90
 
 type Props = {
@@ -73,7 +87,7 @@ function StatsCard({
   const close = useRef<HTMLButtonElement>(null)
   const [period, setPeriod] = useState<Period>('week')
   const [loaded, setLoaded] = useState<Loaded>()
-  const [streakDays, setStreakDays] = useState<{ key: string; days: DayStats[] }>()
+  const [streakDays, setStreakDays] = useState<{ key: string; days: DayStats[]; list: Day[] }>()
   const [days, setDays] = useState<Day[]>([])
   const homeAt = home?.at ?? null
   const key = `${asset.id}:${period}:${homeAt?.lat},${homeAt?.lon}`
@@ -103,7 +117,7 @@ function StatsCard({
       .then((stats) => current && setLoaded({ key, before: stats.slice(0, before.length), period: stats.slice(before.length) }))
       .catch(() => current && setLoaded({ key, failed: true }))
       .then(() => getDayStats({ data: { assetId: asset.id, days: lastDays(STREAK_DAYS, now), home: homeAt } }))
-      .then((stats) => current && setStreakDays({ key: String(asset.id), days: stats }))
+      .then((stats) => current && setStreakDays({ key: String(asset.id), days: stats, list: lastDays(STREAK_DAYS, now) }))
       .catch(() => {})
     return () => {
       current = false
@@ -111,7 +125,8 @@ function StatsCard({
   }, [open, key])
 
   const shown = loaded?.key === key ? loaded : undefined
-  const walkStreak = streakDays?.key === String(asset.id) ? streak(streakDays.days) : undefined
+  const history = streakDays?.key === String(asset.id) ? streakDays : undefined
+  const walkStreak = history ? streak(history.days) : undefined
 
   return (
     <>
@@ -148,6 +163,7 @@ function StatsCard({
                 before={shown.before.every((day) => day.fixes > 0) ? addUp(shown.before) : null}
                 home={home?.name ?? null}
                 walkStreak={walkStreak}
+                history={history}
               />
             )}
           </div>
@@ -166,10 +182,13 @@ type NumbersProps = {
   before: DayStats | null
   home: string | null
   walkStreak: { current: number; longest: number } | undefined
+  /** The last 90 days, for the records, the days of the week and the time per charge; undefined until they've come. */
+  history: { days: DayStats[]; list: Day[] } | undefined
 }
 
-function Numbers({ name, period, days, stats, before, home, walkStreak }: NumbersProps) {
+function Numbers({ name, period, days, stats, before, home, walkStreak, history }: NumbersProps) {
   const total = addUp(stats)
+  const average = averageWalk(total)
   const when = period === 'today' ? 'today' : period === 'week' ? 'this week' : 'this month'
   // Against the same days of the week or month before; a day isn't over until it is, so not today.
   const change =
@@ -188,6 +207,12 @@ function Numbers({ name, period, days, stats, before, home, walkStreak }: Number
       <dl className="mt-5 grid grid-cols-2 gap-2">
         <Tile label="Walks" value={String(total.walks)} />
         <Tile label="Longest" value={total.walks ? distanceLabel(total.longest) : '–'} />
+        <Tile
+          label="Average walk"
+          value={average ? distanceLabel(average.meters) : '–'}
+          note={average ? durationLabel(average.ms) : undefined}
+        />
+        <Tile label="Pace" value={average?.kmh ? `${average.kmh.toLocaleString(undefined, { maximumFractionDigits: 1 })} km/h` : '–'} />
         <Tile label="Stops on walks" value={String(total.stops)} />
         <Tile
           label="Walk streak"
@@ -198,11 +223,20 @@ function Numbers({ name, period, days, stats, before, home, walkStreak }: Number
         {home && (
           <Tile label={`Furthest from ${home}`} value={total.furthest !== null && total.walks ? distanceLabel(total.furthest) : '–'} />
         )}
+        <Tile
+          label="Rides"
+          value={String(total.rides)}
+          note={total.rides ? `${distanceLabel(total.rode)}${total.underground ? `, ${total.underground} underground` : ''}` : undefined}
+        />
       </dl>
+      <WalkTimes starts={total.starts} />
+      <Battery period={period} days={days} stats={stats} history={history} />
+      {history && <LastDays history={history} longestStreak={walkStreak?.longest ?? 0} />}
       <p className="mt-4 text-sm opacity-60">
         Walks are {name}'s outings, as on the card: from leaving home (or another place, or anywhere it stayed 20 minutes or more) to
         getting back, at least 50 m out; rides aren't walked. Stops are pauses of a minute or more on a walk: sniffing, peeing, saying
-        hello. The streak counts days in a row with at least 500 m of walks, over the last 90 days.
+        hello. Pace is distance over time out walking, stops included. The streak counts days in a row with at least 500 m of walks, over
+        the last 90 days, as do the records and the days of the week.
       </p>
     </>
   )
@@ -212,11 +246,7 @@ function Numbers({ name, period, days, stats, before, home, walkStreak }: Number
 function Bars({ period, days, stats }: { period: Period; days: Day[]; stats: DayStats[] }) {
   const slots = period === 'week' ? 7 : days.length
   const most = Math.max(1, ...stats.map((day) => day.walked))
-  const label = (index: number) => {
-    if (period === 'week') return ['M', 'T', 'W', 'T', 'F', 'S', 'S'][index]
-    const date = days[index] ? new Date(days[index]!.from).getDate() : 0
-    return date === 1 || date % 7 === 0 ? String(date) : ''
-  }
+  const label = (index: number) => barLabel(period, days, index)
   return (
     <div className="mt-4" aria-hidden="true">
       <div className="flex h-24 items-end gap-1">
@@ -238,6 +268,153 @@ function Bars({ period, days, stats }: { period: Period; days: Day[]; stats: Day
       </div>
     </div>
   )
+}
+
+/** When walks leave, as a dot an hour across a day, and the hours they usually do. */
+function WalkTimes({ starts }: { starts: number[] }) {
+  if (starts.length === 0) return null
+  const { hours, usual } = walkTimes(starts)
+  const most = Math.max(...hours)
+  const hour = (h: number) => new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).format(new Date(2026, 0, 1, h))
+  return (
+    <section className="mt-6">
+      <h3 className="text-sm font-semibold opacity-60">When it walks</h3>
+      {usual.length > 0 && <p className="mt-1">Usually around {listed(usual.map(hour))}</p>}
+      <div className="mt-3 flex h-8 items-center gap-0.5" aria-hidden="true">
+        {hours.map((count, h) => (
+          <div key={h} className="flex flex-1 justify-center">
+            <span
+              className={`rounded-full ${count ? 'bg-primary' : 'bg-black/10 dark:bg-white/15'}`}
+              style={{ width: count ? 6 + (count / most) * 6 : 4, height: count ? 6 + (count / most) * 6 : 4 }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex text-xs opacity-50" aria-hidden="true">
+        {[0, 6, 12, 18].map((h) => (
+          <span key={h} className="flex-1">
+            {hour(h)}
+          </span>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/** Under a bar per day: the weekday's letter, or every seventh date of a month. */
+function barLabel(period: Period, days: Day[], index: number): string {
+  if (period === 'week') return ['M', 'T', 'W', 'T', 'F', 'S', 'S'][index]!
+  const date = days[index] ? new Date(days[index]!.from).getDate() : 0
+  return date === 1 || date % 7 === 0 ? String(date) : ''
+}
+
+/** The battery: its lowest each day of the period, and how long a charge lasts over the last 90 days. */
+function Battery({ period, days, stats, history }: { period: Period; days: Day[]; stats: DayStats[]; history: NumbersProps['history'] }) {
+  const total = addUp(stats)
+  if (!total.battery) return null
+  const perCharge = history ? daysPerCharge(history.days) : null
+  return (
+    <section className="mt-6">
+      <h3 className="text-sm font-semibold opacity-60">Battery</h3>
+      <p className="mt-1">
+        Lowest {Math.round(total.battery.low)}%{period === 'today' ? ' today' : ''}
+        {perCharge !== null && (
+          <>
+            {' · '}about {perCharge < 1.5 ? `${Math.max(1, Math.round(perCharge * 24))} hours` : `${Math.round(perCharge)} days`} per charge
+          </>
+        )}
+      </p>
+      {period !== 'today' && (
+        <div className="mt-3" aria-hidden="true">
+          <div className="flex h-12 items-end gap-1">
+            {Array.from({ length: period === 'week' ? 7 : days.length }, (_, index) => {
+              const low = stats[index]?.battery?.low
+              return (
+                <div key={index} className="flex h-full flex-1 items-end">
+                  <div
+                    className={`w-full rounded-t ${low !== undefined && low <= 20 ? 'bg-[var(--offline)]' : 'bg-black/25 dark:bg-white/30'}`}
+                    style={{ height: low !== undefined ? `${Math.max(4, low)}%` : 0 }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-1 flex gap-1 text-center text-xs opacity-50">
+            {Array.from({ length: period === 'week' ? 7 : days.length }, (_, index) => (
+              <span key={index} className="flex-1">
+                {barLabel(period, days, index)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** The last 90 days: the records, and how far it walks on each day of the week. */
+function LastDays({ history, longestStreak }: { history: NonNullable<NumbersProps['history']>; longestStreak: number }) {
+  const best = records(history.days, history.list)
+  const weekdays = byWeekday(history.days, history.list)
+  const most = Math.max(1, ...weekdays.map((day) => day.average))
+  const date = (time: number) => new Date(time).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+  const clock = (time: number) => new Date(time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  const rows: [string, string, string][] = []
+  if (best.longest) rows.push(['Longest walk', distanceLabel(best.longest.meters), date(best.longest.day)])
+  if (best.biggest) rows.push(['Biggest day', distanceLabel(best.biggest.meters), date(best.biggest.day)])
+  if (best.earliest !== null) rows.push(['Earliest walk', clock(best.earliest), date(best.earliest)])
+  if (best.latest !== null) rows.push(['Latest walk', clock(best.latest), date(best.latest)])
+  if (longestStreak > 0) rows.push(['Longest streak', daysLabel(longestStreak), ''])
+  if (rows.length === 0) return null
+  return (
+    <section className="mt-6">
+      <h3 className="text-sm font-semibold opacity-60">Last 90 days</h3>
+      <dl className="mt-2 divide-y divide-black/10 dark:divide-white/10">
+        {rows.map(([label, value, when]) => (
+          <div key={label} className="flex items-baseline justify-between gap-3 py-2">
+            <dt>{label}</dt>
+            <dd className="text-right">
+              <span className="font-semibold">{value}</span>
+              {when && <span className="ml-2 text-sm opacity-60">{when}</span>}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <h3 className="mt-5 text-sm font-semibold opacity-60">Days of the week</h3>
+      <p className="sr-only">
+        {weekdays
+          .map(
+            (day, index) =>
+              `${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][index]} ${distanceLabel(day.average)}`,
+          )
+          .join(', ')}
+      </p>
+      <div className="mt-3" aria-hidden="true">
+        <div className="flex h-16 items-end gap-2">
+          {weekdays.map((day, index) => (
+            <div key={index} className="flex h-full flex-1 items-end">
+              <div
+                className="w-full rounded-t bg-primary"
+                style={{ height: day.average ? `${Math.max(3, (day.average / most) * 100)}%` : 0 }}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="mt-1 flex gap-2 text-center text-xs opacity-50">
+          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((letter, index) => (
+            <span key={index} className="flex-1">
+              {letter}
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/** "7", "7 and 12", "7, 12 and 18". */
+function listed(items: string[]): string {
+  return items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`
 }
 
 function Tile({ label, value, note }: { label: string; value: string; note?: string }) {

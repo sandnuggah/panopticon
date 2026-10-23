@@ -7,6 +7,7 @@
 // Event forwarding, for alerts: FORWARD_URL=http://localhost:3001/hooks/traccar-events and
 // FORWARD_HEADER='Authorization: Bearer <TRACCAR_EVENTS_SECRET>' post live events there, as
 // Traccar's event.forward.url and event.forward.header do. DELAY_MS=800 makes it a slow Traccar.
+// BATTERY_DAYS=5 has the batteries run down over five days and get charged (62% by default, as in the screenshots).
 // SIXTEN_AT_HOME=1 has Sixten walk to Home instead of daycare, so two assets share Home's pin.
 // HISTORY_HOURS=720 gives Betty a month of walks for the Stats card (6 hours by default), with
 // a rest day now and then.
@@ -26,6 +27,16 @@ const PORT = Number(process.env.PORT ?? 8082)
 const STEP_MS = Number(process.env.STEP_MS ?? 5000)
 /** A slow Traccar, for trying loading screens: every API request waits this long (ms), position history three times as long. */
 const DELAY_MS = Number(process.env.DELAY_MS ?? 0)
+/** Over how many days a battery runs down before it's charged; unset, it stays at 62%. */
+const BATTERY_DAYS = Number(process.env.BATTERY_DAYS ?? 0)
+/** The battery at a time: from 100% down to 10% over BATTERY_DAYS, then charged over two hours. */
+function batteryAt(time) {
+  if (!BATTERY_DAYS) return 62
+  const cycle = BATTERY_DAYS * 86_400_000
+  const charging = 2 * 3_600_000
+  const into = ((time % (cycle + charging)) + cycle + charging) % (cycle + charging)
+  return Math.round(into < cycle ? 100 - (into / cycle) * 90 : 10 + ((into - cycle) / charging) * 90)
+}
 /** How far back Betty's history goes, in hours. */
 const HISTORY_HOURS = Number(process.env.HISTORY_HOURS ?? 6)
 
@@ -179,8 +190,8 @@ function report(deviceId, time, lat, lon, valid = true) {
       io5: valid ? String(9 + (nextPositionId % 9)) : '0',
       io6: String(16 + (nextPositionId % 12)),
       io7: '37',
-      io8: '62',
-      batteryLevel: 62,
+      io8: String(batteryAt(time)),
+      batteryLevel: batteryAt(time),
     },
   }
 }

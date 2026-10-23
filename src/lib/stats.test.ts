@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { addUp, dayStats, lastDays, NO_WALKS, periodDays, previousDays, streak, type DayStats } from './stats.ts'
+import {
+  addUp,
+  averageWalk,
+  byWeekday,
+  dayStats,
+  daysPerCharge,
+  lastDays,
+  NO_WALKS,
+  periodDays,
+  previousDays,
+  records,
+  streak,
+  walkTimes,
+  type DayStats,
+} from './stats.ts'
 import type { TrailPoint } from './trail.ts'
 
 // Made-up days: a report every 30 s, positions in metres east/north of a start point.
@@ -25,6 +39,17 @@ class Day {
   /** Walks east (west if negative) at about 4 km/h. */
   walk(meters: number) {
     const steps = Math.round(Math.abs(meters) / 33)
+    for (let i = 0; i < steps; i++) {
+      this.time += 30_000
+      this.x += meters / steps
+      this.report()
+    }
+    return this
+  }
+
+  /** A ride east, fast: a report every 30 s. */
+  ride(meters: number, seconds: number) {
+    const steps = Math.max(1, Math.round(seconds / 30))
     for (let i = 0; i < steps; i++) {
       this.time += 30_000
       this.x += meters / steps
@@ -122,10 +147,25 @@ describe('dayStats', () => {
 describe('addUp', () => {
   test('totals, with the longest walk and the furthest point of any day', () => {
     const total = addUp([
-      { walked: 2000, walks: 2, longest: 1500, walking: 1, stops: 3, furthest: 800, fixes: 100 },
-      { walked: 1000, walks: 1, longest: 1000, walking: 2, stops: 1, furthest: null, fixes: 50 },
+      { ...NO_WALKS, walked: 2000, walks: 2, longest: 1500, walking: 1, stops: 3, furthest: 800, fixes: 100, starts: [1, 2] },
+      { ...NO_WALKS, walked: 1000, walks: 1, longest: 1000, walking: 2, stops: 1, fixes: 50, starts: [3], rides: 1, rode: 900 },
+      { ...NO_WALKS, battery: { low: 40, high: 90 }, charges: [7] },
     ])
-    assert.deepEqual(total, { walked: 3000, walks: 3, longest: 1500, walking: 3, stops: 4, furthest: 800, fixes: 150 })
+    assert.deepEqual(total, {
+      walked: 3000,
+      walks: 3,
+      longest: 1500,
+      walking: 3,
+      stops: 4,
+      furthest: 800,
+      fixes: 150,
+      starts: [1, 2, 3],
+      rides: 1,
+      underground: 0,
+      rode: 900,
+      battery: { low: 40, high: 90 },
+      charges: [7],
+    })
   })
 })
 
@@ -161,5 +201,66 @@ describe('days', () => {
 
   test('the last days, ending today', () => {
     assert.deepEqual(dates(lastDays(3, now)), [12, 13, 14])
+  })
+})
+
+describe('more stats', () => {
+  test('a day knows when its walk left, and its battery: lowest, highest and a charge', () => {
+    const walked = new Day().stay(30).walk(1000).walk(-1000).stay(30).points
+    const stats = dayStats(walked, null, undefined, [], undefined, [
+      { time: 0, percent: 30 },
+      { time: 1, percent: 25 },
+      { time: 2, percent: 60 },
+      { time: 3, percent: 58 },
+    ])
+    assert.equal(stats.starts.length, 1)
+    assert.ok(stats.starts[0]! > walked[0]!.time && stats.starts[0]! < walked.at(-1)!.time)
+    assert.deepEqual(stats.battery, { low: 25, high: 60 })
+    assert.deepEqual(stats.charges, [2], 'up 35 points from its lowest')
+    // Charged from 10% to 100% over a couple of hours: one charge, then another once it's run down.
+    const ramp = [10, 35, 60, 85, 100, 90, 60, 30, 12, 50, 95].map((percent, time) => ({ time, percent }))
+    assert.deepEqual(dayStats([], null, undefined, [], undefined, ramp).charges, [1, 9])
+  })
+
+  test('a ride counts, with how far it went', () => {
+    const stats = dayStats(new Day().stay(30).walk(300).ride(3000, 180).walk(300).stay(30).points, null)
+    assert.equal(stats.rides, 1)
+    assert.ok(Math.abs(stats.rode - 3000) < 200, `rode ${stats.rode}`)
+    assert.equal(stats.underground, 0)
+  })
+
+  test('an average walk: how far, how long, how fast', () => {
+    assert.deepEqual(averageWalk({ ...NO_WALKS, walks: 2, walked: 4000, walking: 3_600_000 }), { meters: 2000, ms: 1_800_000, kmh: 4 })
+    assert.equal(averageWalk(NO_WALKS), null)
+  })
+
+  test('the hours walks usually leave: the busy ones, more than either side', () => {
+    const at = (hour: number, minute = 0) => new Date(2026, 9, 14, hour, minute).getTime()
+    const { hours, usual } = walkTimes([at(7), at(7, 20), at(7, 40), at(8), at(12), at(12, 30), at(18), at(18, 10), at(23)])
+    assert.equal(hours[7], 3)
+    assert.deepEqual(usual, [7, 12, 18], 'one walk at 23 is no habit')
+  })
+
+  test('records, the days of the week, and how long a charge lasts', () => {
+    const list = lastDays(3, new Date(2026, 9, 14, 15).getTime())
+    const at = (index: number, hour: number) => list[index]!.from + hour * 3_600_000
+    const days: DayStats[] = [
+      { ...day(3000), walks: 1, longest: 3000, fixes: 10, starts: [at(0, 9)], charges: [at(0, 20)] },
+      { ...day(5000), walks: 2, longest: 2600, fixes: 10, starts: [at(1, 6), at(1, 22)] },
+      { ...day(0), charges: [at(2, 8)] },
+    ]
+    const best = records(days, list)
+    assert.deepEqual(best.longest, { meters: 3000, day: list[0]!.from })
+    assert.deepEqual(best.biggest, { meters: 5000, day: list[1]!.from })
+    assert.equal(best.earliest, at(1, 6))
+    assert.equal(best.latest, at(1, 22))
+    // 12–14 October 2026: a Monday, Tuesday and Wednesday; the Wednesday had no fixes, so it isn't counted.
+    assert.deepEqual(byWeekday(days, list).slice(0, 3), [
+      { average: 3000, days: 1 },
+      { average: 5000, days: 1 },
+      { average: 0, days: 0 },
+    ])
+    assert.equal(daysPerCharge(days), 1.5, '20:00 to 08:00 two days on')
+    assert.equal(daysPerCharge([days[0]!]), null)
   })
 })
