@@ -72,6 +72,8 @@ How, from 2026-10-22: fast where it's safe, careful where it isn't. Each step ha
 - [x] Watched the loading screen on the phone: it shows its progress, and the slow loads came from the connection (Tailscale through an exit node), not the app (2026-10-18)
 - [x] The selected asset is centred in the part of the map that's visible: above the details card on a phone, beside the side panels on a wide screen, above the bottom bar and the live link page's panel. A followed asset glides along as a card opens and closes. Released as `:73` (2026-10-18)
 - [x] Checked `:73` on the phone: the asset stays in view above the details card (2026-10-18)
+- [ ] Share at the top of the details card, next to ✕: a round button the same size and style as ✕ (`CloseButton` in cards.tsx: 44 px, a light grey circle) with the share icon, like the share and close buttons at the top of Apple Maps' place card. Stats then has the row to itself (or sits with Sharing live), and the Share card still opens from it; it moves its focus back to the new button when it closes. Check the name still has room beside two buttons at the largest text size
+- [ ] A selected asset that's off-centre (after dragging the map) is centred by the first tap on its picture in the bottom bar, and only the next tap opens its details. Today the second tap does both at once (`tapAsset` in routes/index.tsx), so the details card can open over an asset still sliding into view. "Centred" as the marker tap already measures it (within 12 px of the middle of the visible map, or being followed); the map's marker could do the same (centre, then details) instead of deselecting, with ✕ or tapping the map to deselect
 
 ## Stats
 
