@@ -4,7 +4,8 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // maplibre looks for its worker next to its own file, which breaks once bundled.
 // Let Vite bundle the worker and hand maplibre the resulting same-origin URL.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
-import { isStale, type Asset } from '../../lib/asset'
+import type { Asset } from '../../lib/asset'
+import { assetStatus, isGrey, type AssetStatus } from '../../lib/status'
 import { parkFromRings, type Park } from '../../lib/parks'
 import type { Place } from '../../lib/places'
 import type { Presence } from '../../lib/presence'
@@ -80,6 +81,8 @@ type Props = {
   places?: Place[]
   /** Where each asset is as its places go (see presence.ts), for the place it wears as a badge when zoomed out. */
   presence?: Record<number, Presence>
+  /** What each asset is up to (see status.ts), greyed out when lost; without, from its last report alone (live link pages). */
+  statuses?: Record<number, AssetStatus>
   /** While a place is being added or changed (PlaceEditor): the circle to place, and which place it is. */
   picker?: (PickerProps & { placeId?: number }) | null
 }
@@ -104,6 +107,7 @@ export default function AssetMap({
   cover = NO_COVER,
   places = NO_PLACES,
   presence = NOWHERE,
+  statuses,
   picker = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -365,11 +369,12 @@ export default function AssetMap({
         if (!marker) continue
         // At a place too small on screen to show its own pin: the asset wears it.
         const atPlace = places.find((place) => place.id === presence[asset.id]?.place && !showsPin(map, place))?.name
-        updateMarkerElement(marker.getElement(), asset, { stale: isStale(asset, now), selected: asset.id === selectedId, atPlace })
+        const status = statuses?.[asset.id] ?? assetStatus(asset, { presence: presence[asset.id] }, now)
+        updateMarkerElement(marker.getElement(), asset, { stale: isGrey(status), selected: asset.id === selectedId, atPlace })
       }
     }
     updateMarkersRef.current()
-  }, [assets, selectedId, now, places, presence])
+  }, [assets, selectedId, now, places, presence, statuses])
 
   // First render: show the selected asset, or fit all assets. Afterwards: fly to each new selection.
   useEffect(() => {

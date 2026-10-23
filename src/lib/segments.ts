@@ -196,16 +196,25 @@ export type Activity = 'vehicle' | 'underground'
 /** Staying put right now: since when, and whether that's when it began or only when the points do. */
 export type Stay = { since: number; began: boolean }
 
-/** A stay this long is a base (home, daycare, the office): the outings are between them. */
+/** A stay this long is a base (a friend's, the office), as a visit to one of the asset's places is however short. */
 const BASE_STAY_MS = 20 * 60 * 1000
 
 /**
+ * Whether a piece is a base the outings are between (see outings.ts): a visit to one of the asset's
+ * places, however short (back home for a minute between walks, as its presence says), or a stay of
+ * BASE_STAY_MS or more anywhere else, `until` when it ended (a tracker asleep there: when it next
+ * reported, see outingsOf).
+ */
+export function isBase(piece: TrailPiece | undefined, until = piece?.kind === 'stay' ? piece.to : 0): boolean {
+  return piece?.kind === 'stay' && (!!piece.atPlace || until - piece.from >= BASE_STAY_MS)
+}
+
+/**
  * When the asset's latest outing began, for drawing it in front of the older ones: the end of the
- * last stay of at least BASE_STAY_MS before its latest movement. Staying somewhere that long right
- * now ends that outing; it doesn't start a new one. Null when there's no such stay: it's all one outing.
+ * last base (see isBase) before its latest movement. Being at a base right now ends that outing; it
+ * doesn't start a new one. Null when there's no base: it's all one outing.
  */
 export function latestOutingStart(pieces: TrailPiece[]): number | null {
-  const isBase = (piece: TrailPiece | undefined) => piece?.kind === 'stay' && piece.to - piece.from >= BASE_STAY_MS
   const end = isBase(pieces.at(-1)) ? pieces.length - 1 : pieces.length
   for (let index = end - 1; index >= 0; index--) {
     const piece = pieces[index]!

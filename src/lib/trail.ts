@@ -20,16 +20,23 @@ export type TrailPoint = {
 /** Oldest point first, per asset id. */
 export type Trails = Record<number, TrailPoint[]>
 
-/** How much trail to draw: minutes back from now (0 turns trails off), or everything since midnight. */
-export type TrailLength = number | 'today'
+/**
+ * How much trail to draw: minutes back from now (0 turns trails off), everything since midnight, or
+ * each asset's latest outing (see latestOutingStart in segments.ts and shownTrails in trailGeometry.ts).
+ */
+export type TrailLength = number | 'today' | 'outing'
 
-/** The lengths offered in settings: the last walk, parts of the day, the whole day, and "today". */
-export const TRAIL_OPTIONS: readonly TrailLength[] = [0, 60, 360, 720, 1440, 'today']
-export const DEFAULT_TRAIL: TrailLength = 60
+/**
+ * The lengths offered in settings. This outing, the default, is the walk under way or the last one:
+ * with an hour, Kofi's map showed no trail in 76% of quarter-hours, nearly all of them asleep at home.
+ */
+export const TRAIL_OPTIONS: readonly TrailLength[] = [0, 'outing', 'today', 1440]
+export const DEFAULT_TRAIL: TrailLength = 'outing'
 export const MAX_TRAIL_MINUTES = 1440
 
-/** "1 hour", "6 hours", "Today", "Off": the trail length as the app shows it. */
+/** "This outing", "Today", "24 hours", "Off": the trail length as the app shows it. */
 export function trailLabel(length: TrailLength): string {
+  if (length === 'outing') return 'This outing'
   if (length === 'today') return 'Today'
   if (length === 0) return 'Off'
   if (length < 60) return `${length} minutes`
@@ -37,26 +44,29 @@ export function trailLabel(length: TrailLength): string {
   return hours === 1 ? '1 hour' : `${hours} hours`
 }
 
-/** Where the trail starts (ms since epoch), or null when trails are off. "Today" is local midnight. */
-export function trailStart(length: TrailLength, now: number): number | null {
+/**
+ * Where the trail starts (ms since epoch), or null when trails are off. "Today" is local midnight;
+ * "outing" starts with each asset's latest outing (see shownTrails in trailGeometry.ts).
+ */
+export function trailStart(length: TrailLength, now: number): number | 'outing' | null {
+  if (length === 'outing') return 'outing'
   if (length === 'today') return new Date(now).setHours(0, 0, 0, 0)
   return length === 0 ? null : now - length * 60 * 1000
 }
 
-/** How many minutes back a trail goes: a day at most, which also covers "today". */
+/** How many minutes back a trail goes: a day at most, which also covers "today" and an outing. */
 export function trailMinutes(length: TrailLength): number {
-  return length === 'today' ? MAX_TRAIL_MINUTES : length
+  return length === 'today' || length === 'outing' ? MAX_TRAIL_MINUTES : length
 }
 
 /**
- * The option closest to a saved value, since the options change over time: by ratio, so a
- * 5-minute trail becomes an hour rather than off. Undefined when it isn't a trail length at all.
+ * The option for a saved value, since the options change over time: an hour or less (as the default
+ * was until October 2026) is this outing, longer is 24 hours. Undefined when it isn't a trail length.
  */
 export function nearestTrail(value: unknown): TrailLength | undefined {
-  if (value === 'today' || value === 0) return value
+  if (value === 'today' || value === 'outing' || value === 0) return value
   if (typeof value !== 'number' || !(value > 0)) return undefined
-  const lengths = TRAIL_OPTIONS.filter((option): option is number => typeof option === 'number' && option > 0)
-  return lengths.reduce((best, option) => (Math.abs(Math.log(option / value)) < Math.abs(Math.log(best / value)) ? option : best))
+  return value <= 60 ? 'outing' : MAX_TRAIL_MINUTES
 }
 /**
  * History always covers at least this much, to tell what an asset is doing right now and how long

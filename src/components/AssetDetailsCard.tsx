@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react'
-import { contactIsNewerThanFix, isStale, statusLabel, type Asset } from '../lib/asset'
+import { contactIsNewerThanFix, type Asset } from '../lib/asset'
+import type { Outing } from '../lib/outings'
 import type { Place } from '../lib/places'
 import type { Presence } from '../lib/presence'
 import type { Activity, Stay } from '../lib/segments'
+import { assetStatus, isGrey, type AssetStatus } from '../lib/status'
 import { useNow } from '../lib/useNow'
 import { AssetAvatar } from './AssetAvatar'
 import { BatteryGauge } from './BatteryGauge'
 import { CARD_BG, CloseButton, moveFocus, SCROLLS, SIDE_PANEL_MAX_HEIGHT, sidePanel, sidePanelClosed, useCover, type Cover } from './cards'
-import { PlaceVisits } from './PlaceVisits'
+import { Outings } from './Outings'
 import { RelativeTime } from './RelativeTime'
 import { Share } from './Share'
 import { Stats } from './Stats'
@@ -21,6 +23,8 @@ type Props = {
   stay: Stay | undefined
   /** Where it is as its places go (see presence.ts): at one, since when, or out since it left one. */
   presence: Presence | undefined
+  /** Its outings today (see outings.ts). */
+  outings: Outing[]
   /** Its street address, when known. */
   address: string | undefined
   /** The user's places: shown instead of the address while it's at one, with its arrivals and departures. */
@@ -37,14 +41,16 @@ type Props = {
  * tapping its picture in the bottom bar a second time. No backdrop: the map stays in view and can
  * be moved. Absolute inside the map screen, like the Settings card (see BottomBar.tsx).
  */
-export function AssetDetailsCard({ asset, activity, stay, presence, address, places, onTop, onClose, onCover }: Props) {
+export function AssetDetailsCard({ asset, activity, stay, presence, outings, address, places, onTop, onClose, onCover }: Props) {
   const open = asset !== undefined
   const card = useRef<HTMLElement>(null)
   useCover(card, open, onCover)
   const closeButton = useRef<HTMLButtonElement>(null)
   // While the card slides away it keeps showing what it showed.
-  const last = useRef<{ asset: Asset; activity?: Activity; stay?: Stay; presence?: Presence; address?: string }>(undefined)
-  if (asset) last.current = { asset, activity, stay, presence, address }
+  const last = useRef<{ asset: Asset; activity?: Activity; stay?: Stay; presence?: Presence; outings: Outing[]; address?: string }>(
+    undefined,
+  )
+  if (asset) last.current = { asset, activity, stay, presence, outings, address }
   const shown = last.current
 
   // Focus moves to ✕ as the card opens, and back to what had it (the asset's picture in the bottom
@@ -90,6 +96,7 @@ function Details({
   activity,
   stay,
   presence,
+  outings,
   address,
   places,
   open,
@@ -98,6 +105,7 @@ function Details({
   activity?: Activity
   stay?: Stay
   presence?: Presence
+  outings: Outing[]
   address?: string
   places: Place[]
   open: boolean
@@ -106,16 +114,16 @@ function Details({
   const percent = asset.battery?.percent
   // Where it is, as Find My says it: "Home" rather than the street address.
   const at = presence?.place != null ? places.find((place) => place.id === presence.place) : undefined
-  const hasPlaces = places.some((place) => place.assetIds.includes(asset.id))
+  const status = assetStatus(asset, { presence, stay, activity }, now)
   return (
     <>
       <div className="flex items-center gap-3 pr-12">
-        <AssetAvatar asset={asset} stale={isStale(asset, now)} />
+        <AssetAvatar asset={asset} stale={isGrey(status)} />
         <div className="min-w-0 flex-1">
           <h2 className="text-2xl font-bold break-words">{asset.name}</h2>
           <div className="flex flex-wrap items-center gap-x-1.5 text-sm opacity-60">
-            <StatusDot status={asset.status} />
-            {statusLabel(asset.status)}
+            <StatusDot status={status} />
+            {statusText(status, places, now)}
             {percent !== undefined && (
               <>
                 <span aria-hidden="true">·</span>
@@ -145,7 +153,7 @@ function Details({
         {percent === undefined && asset.battery?.volts !== undefined && <p className="opacity-60">Battery {asset.battery.volts} V</p>}
       </div>
       <Share asset={asset} address={address} active={open} beside={<Stats asset={asset} places={places} active={open} />} />
-      {hasPlaces && <PlaceVisits assetId={asset.id} places={places} placeIds={asset.placeIds} />}
+      {asset.location && <Outings outings={outings} now={now} />}
     </>
   )
 }
@@ -188,13 +196,25 @@ function Summary({
   )
 }
 
-function StatusDot({ status }: { status: Asset['status'] }) {
+/** Green while it's moving or resting, as expected; orange when something's off. */
+function StatusDot({ status }: { status: AssetStatus }) {
+  const fine = status.kind === 'moving' || status.kind === 'resting'
   return (
     <span
-      className={`inline-block size-2 shrink-0 rounded-full ${status === 'online' ? 'bg-[var(--online)]' : 'bg-[var(--offline)]'}`}
+      className={`inline-block size-2 shrink-0 rounded-full ${fine ? 'bg-[var(--online)]' : 'bg-[var(--offline)]'}`}
       aria-hidden="true"
     />
   )
+}
+
+/** "Moving", "Resting at Home", "No GPS since 14:02", "Lost contact since 23:42 yesterday". */
+function statusText(status: AssetStatus, places: Place[], now: number): string {
+  if (status.kind === 'unknown') return 'No location yet'
+  if (status.kind === 'moving') return 'Moving'
+  if (status.kind === 'no-gps') return `No GPS since ${whenLabel(status.since, now)}`
+  if (status.kind === 'lost') return `Lost contact since ${whenLabel(status.since, now)}`
+  const place = status.place !== null ? places.find((candidate) => candidate.id === status.place) : undefined
+  return place ? `Resting at ${place.name}` : 'Resting'
 }
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })

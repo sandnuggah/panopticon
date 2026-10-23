@@ -334,5 +334,5 @@ export function useLiveAssets(
   // Each asset where its trail can trust it to be, and at its place's centre while it's at one (see shownLocation).
   const shownAssetsNow = useMemo(() => shownAssets(assets, trails, where, places), [assets, trails, where, places])
 
-  return { assets: shownAssetsNow, trails: shown, trailsLoaded, activities, stays, presence: where, status, updateAvailable }
+  return { assets: shownAssetsNow, trails: shown, views, trailsLoaded, activities, stays, presence: where, status, updateAvailable }
 }

@@ -17,13 +17,14 @@ import {
 
 describe('nearestTrail', () => {
   test('keeps offered lengths', () => {
-    for (const length of [0, 60, 360, 1440, 'today'] as const) assert.equal(nearestTrail(length), length)
+    for (const length of [0, 'outing', 'today', 1440] as const) assert.equal(nearestTrail(length), length)
   })
 
-  test('moves removed lengths to the closest one, never to off', () => {
-    assert.equal(nearestTrail(5), 60)
-    assert.equal(nearestTrail(30), 60)
-    assert.equal(nearestTrail(180), 360)
+  test('moves removed lengths to this outing (an hour or less) or 24 hours, never to off', () => {
+    assert.equal(nearestTrail(5), 'outing')
+    assert.equal(nearestTrail(60), 'outing')
+    assert.equal(nearestTrail(360), 1440)
+    assert.equal(nearestTrail(720), 1440)
   })
 
   test('ignores anything else', () => {
@@ -44,6 +45,7 @@ describe('trailStart', () => {
 
   test('off has no start', () => {
     assert.equal(trailStart(0, now), null)
+    assert.equal(trailStart('outing', now), 'outing', 'each asset its own (see shownTrails)')
   })
 })
 

@@ -1,14 +1,11 @@
-import { classifyTrail, DEFAULT_TRAIL_PROFILE, distance, type LatLon, type TrailProfile } from './segments.ts'
+import { outingsOf, walkLength } from './outings.ts'
+import { classifyTrail, DEFAULT_TRAIL_PROFILE, distance, type LatLon, type PlaceStay, type TrailProfile } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
-// Stats for an asset (the Stats card): its walks day by day, worked out with the map's own rules
-// (segments.ts), from its Traccar history. Nothing leaves the user's own servers. No runtime imports
-// beyond segments.ts, so Node can run the tests directly.
-
-/** A walk must get at least this far from where it started, as for Snap to paths (matching.ts). */
-const MIN_WALK_METERS = 75
-/** Points closer than this to the previous kept one are jitter, left out of a walk's length. */
-const JITTER_METERS = 15
+// Stats for an asset (the Stats card): its outings day by day, the same ones as on its card and the
+// map (outings.ts), worked out with the map's own rules (segments.ts) from its Traccar history.
+// Nothing leaves the user's own servers. No runtime imports beyond segments.ts and outings.ts, so
+// Node can run the tests directly.
 /**
  * A stop on a walk: fixes for at least this long within this distance of the first of them. A
  * 20-second pee between two fixes 30 s apart leaves no trace; sniffing, peeing and saying hello for
@@ -20,8 +17,9 @@ const STOP_METERS = 20
 export const STREAK_MIN_METERS = 500
 
 /**
- * One day's walks. Distances in metres, times in ms; `furthest` is from Home, null without one.
- * `fixes`: how many GPS fixes the day had, so a day the tracker wasn't there for shows as such.
+ * One day's outings (`walks`, as the card calls them) and the walking on them. Distances in metres,
+ * times in ms; `furthest` is from Home, null without one. `fixes`: how many GPS fixes the day had,
+ * so a day the tracker wasn't there for shows as such.
  */
 export type DayStats = {
   walked: number
@@ -41,22 +39,27 @@ export type Day = { from: number; to: number }
 export type Period = 'today' | 'week' | 'month'
 
 /**
- * The walks in one day's points: moves between stays (as the map draws them, short stops part of
- * the walk) that get at least 75 m from where they started, without rides.
+ * The outings in one day's points (see outingsOf), with the asset's visits to its places (`visits`,
+ * see placeStays in presence.ts): how many walked that left that day, how far they walked (the longest, one outing's), how long
+ * they were out, the stops on the way, and how far from Home they got.
  */
-export function dayStats(points: TrailPoint[], home: LatLon | null, profile: TrailProfile = DEFAULT_TRAIL_PROFILE): DayStats {
+export function dayStats(
+  points: TrailPoint[],
+  home: LatLon | null,
+  profile: TrailProfile = DEFAULT_TRAIL_PROFILE,
+  visits: PlaceStay[] = [],
+): DayStats {
   const stats = { ...NO_WALKS, fixes: points.filter((point) => point.valid).length }
-  for (const piece of classifyTrail(points, { profile })) {
-    if (piece.kind !== 'move') continue
-    const fixes = piece.points
-    if (!fixes.some((fix) => distance(fixes[0]!, fix) >= MIN_WALK_METERS)) continue
-    const length = walkLength(fixes)
-    stats.walks++
-    stats.walked += length
-    stats.longest = Math.max(stats.longest, length)
-    stats.walking += fixes.at(-1)!.time - fixes[0]!.time
-    stats.stops += countStops(fixes)
-    if (home) stats.furthest = Math.max(stats.furthest ?? 0, ...fixes.map((fix) => distance(home, fix)))
+  const last = points.at(-1)?.time ?? 0
+  for (const outing of outingsOf(classifyTrail(points, { visits, profile }))) {
+    const fixes = outing.walks.flat()
+    // Counted on the day it left (not again after midnight), if it walked: not a drive to daycare.
+    if (outing.began && outing.walks.length > 0) stats.walks++
+    stats.walked += outing.walked
+    stats.longest = Math.max(stats.longest, outing.walked)
+    stats.walking += (outing.to ?? last) - outing.from
+    stats.stops += outing.walks.reduce((sum, walk) => sum + countStops(walk), 0)
+    if (home && fixes.length > 0) stats.furthest = Math.max(stats.furthest ?? 0, ...fixes.map((fix) => distance(home, fix)))
   }
   return stats
 }
@@ -139,18 +142,6 @@ function startOfDay(time: number): Date {
   const day = new Date(time)
   day.setHours(0, 0, 0, 0)
   return day
-}
-
-function walkLength(fixes: TrailPoint[]): number {
-  let length = 0
-  let kept = fixes[0]!
-  for (const fix of fixes.slice(1)) {
-    const step = distance(kept, fix)
-    if (step < JITTER_METERS && fix !== fixes.at(-1)) continue
-    length += step
-    kept = fix
-  }
-  return length
 }
 
 function countStops(fixes: TrailPoint[]): number {

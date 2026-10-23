@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
-import { isStale, type Asset } from '../lib/asset'
-import { useNow } from '../lib/useNow'
+import type { Asset } from '../lib/asset'
+import { isGrey, type AssetStatus } from '../lib/status'
 import { AssetAvatar } from './AssetAvatar'
 import { LocationIcon } from './icons'
 import { UserInitial } from './UserInitial'
@@ -8,8 +8,9 @@ import { UserInitial } from './UserInitial'
 type Props = {
   /** The signed-in user, whose initial is the Settings button. */
   userName: string
-  /** The assets on the map, each as its picture. */
+  /** The assets on the map, each as its picture, greyed out when lost (see status.ts). */
   assets: Asset[]
+  statuses: Record<number, AssetStatus>
   selectedId: number | undefined
   /** A picture was tapped: select and centre that asset, or, when it's selected, show its details. */
   onAssetTap: (id: number) => void
@@ -31,6 +32,7 @@ type Props = {
 export function BottomBar({
   userName,
   assets,
+  statuses,
   selectedId,
   onAssetTap,
   showMe,
@@ -39,7 +41,6 @@ export function BottomBar({
   onOpenSettings,
   settingsButton,
 }: Props) {
-  const now = useNow(30_000)
   const { scroller, fadeStyle } = useEdgeFade(assets.length)
   const surface =
     'shadow-lg ios:bg-ios-light-surface-1 ios:dark:bg-ios-dark-surface-1 material:bg-md-light-surface-2 material:dark:bg-md-dark-surface-2'
@@ -73,7 +74,7 @@ export function BottomBar({
                   aria-label={selected ? `${asset.name}: details` : `Show ${asset.name}`}
                   onClick={() => onAssetTap(asset.id)}
                 >
-                  <AssetAvatar asset={asset} size="bar" stale={isStale(asset, now)} />
+                  <AssetAvatar asset={asset} size="bar" stale={!!statuses[asset.id] && isGrey(statuses[asset.id]!)} />
                 </button>
               )
             })}

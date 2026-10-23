@@ -18,6 +18,9 @@ import type { GoTo, Inset } from '../components/map/PlacePicker'
 import { useSettings } from '../lib/settings'
 import { useAddress } from '../lib/useAddress'
 import { useLiveAssets } from '../lib/useLiveAssets'
+import { useNow } from '../lib/useNow'
+import { assetStatus, type AssetStatus } from '../lib/status'
+import { outingsOf, todaysOutings } from '../lib/outings'
 import { useSnappedWalks } from '../lib/useSnappedWalks'
 import { getAssets } from '../server/assets.functions'
 import { getUser } from '../server/auth.functions'
@@ -242,7 +245,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
     if (!place || !asset) return
     setBanner({ text: visitSentence(asset.name, visit, place.name), time: visit.time, key: Date.now(), assetId: asset.id })
   }
-  const { assets, trails, trailsLoaded, activities, stays, presence, status, updateAvailable } = useLiveAssets(
+  const { assets, trails, views, trailsLoaded, activities, stays, presence, status, updateAvailable } = useLiveAssets(
     loaderData.assets,
     settingsLoaded ? settings.trail : null,
     places,
@@ -251,6 +254,18 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   useEffect(() => {
     if (trailsLoaded) onTrailsLoaded()
   }, [trailsLoaded])
+  // What each asset is up to (see status.ts), for its marker and its picture in the bottom bar.
+  const now = useNow(30_000)
+  const statuses = useMemo(
+    () =>
+      Object.fromEntries(
+        assets.map((asset): [number, AssetStatus] => [
+          asset.id,
+          assetStatus(asset, { presence: presence[asset.id], stay: stays[asset.id], activity: activities[asset.id] }, now),
+        ]),
+      ),
+    [assets, presence, stays, activities, now],
+  )
   // Parks in the map's tiles (null until the map is ready), where walks are snapped more strictly. The
   // map tells after every move, mostly of the same parks: those keep the walks as they are.
   const [parks, setParks] = useState<Park[] | null>(null)
@@ -259,6 +274,9 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
   const snappedWalks = useSnappedWalks(trails, loaderData.mapOptions.canSnapToPaths && settings.snapToPaths, parks, trackers)
   const selected = assets.find((asset) => asset.id === selectedId)
   const address = useAddress(selected)
+  // The selected asset's outings today, for its card (see outings.ts), from all of its trail.
+  const selectedView = selectedId !== undefined ? views[selectedId] : undefined
+  const outings = useMemo(() => (selectedView ? todaysOutings(outingsOf(selectedView.pieces, now), now) : []), [selectedView, now])
 
   // What the cards cover of the map: the selected asset is centred in the rest.
   const [detailsCover, setDetailsCover] = useState(NO_COVER)
@@ -378,6 +396,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
               cover={mapCover}
               places={places}
               presence={presence}
+              statuses={statuses}
               picker={
                 editing && place !== undefined
                   ? {
@@ -408,6 +427,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
         activity={selectedId !== undefined ? activities[selectedId] : undefined}
         stay={selectedId !== undefined ? stays[selectedId] : undefined}
         presence={selectedId !== undefined ? presence[selectedId] : undefined}
+        outings={outings}
         address={address}
         places={places}
         onTop={cardView === undefined}
@@ -417,6 +437,7 @@ function MapScreen({ data: loaderData, user, loadingTrails, onMapLoad, onTrailsL
       <BottomBar
         userName={user.name}
         assets={assets}
+        statuses={statuses}
         selectedId={selectedId}
         onAssetTap={tapAsset}
         showMe={showMe}

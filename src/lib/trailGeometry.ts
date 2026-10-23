@@ -6,7 +6,7 @@ import type { How } from './snap.ts'
 import { DEFAULT_TRAIL_COLOR } from './trailColors.ts'
 import type { SnappedLine, SnappedLines } from './snapLines.ts'
 import { trailProfile, type TrackerKind } from './tracker.ts'
-import type { TrailPoint, Trails } from './trail.ts'
+import { MAX_TRAIL_MINUTES, type TrailPoint, type Trails } from './trail.ts'
 
 // What the map draws of the trail (see trailLayers.ts), worked out here without maplibre, so Node can
 // run it: the tests, and the trail replay (dev/replay.ts) that scores what the map shows over time.
@@ -120,12 +120,15 @@ export function quietAssets(trails: Trails, trackers: Record<number, TrackerKind
   })
 }
 
-/** Each trail drawn from `start` on (see trailFrom); none when trails are off (`start` null). */
-export function shownTrails(views: TrailViews, start: number | null): TrailViews {
+/**
+ * Each trail drawn from `start` on (see trailFrom); none when trails are off (`start` null). With
+ * 'outing', each from where its latest outing began (see latestOutingStart), a day back at most.
+ */
+export function shownTrails(views: TrailViews, start: number | 'outing' | null): TrailViews {
   const shown: TrailViews = {}
   if (start === null) return shown
   for (const [id, view] of Object.entries(views)) {
-    const trail = trailFrom(view, firstShown(view.pieces, start))
+    const trail = trailFrom(view, firstShown(view.pieces, startOf(view, start)))
     if (trail) shown[Number(id)] = trail
   }
   return shown
@@ -135,11 +138,17 @@ export function shownTrails(views: TrailViews, start: number | null): TrailViews
  * What shownTrails depends on, as a string, for keeping its result while the trail's start moves on
  * but the same pieces are drawn (see firstShown): each asset's first piece drawn.
  */
-export function shownKey(views: TrailViews, start: number | null): string {
+export function shownKey(views: TrailViews, start: number | 'outing' | null): string {
   if (start === null) return 'off'
   return Object.entries(views)
-    .map(([id, view]) => `${id}:${firstShown(view.pieces, start)}`)
+    .map(([id, view]) => `${id}:${firstShown(view.pieces, startOf(view, start))}`)
     .join(' ')
+}
+
+/** Where a trail drawn from `start` starts: for its latest outing, where that began, a day back at most. */
+function startOf(view: TrailView, start: number | 'outing'): number {
+  if (start !== 'outing') return start
+  return Math.max(view.outing ?? view.oldest, view.newest - MAX_TRAIL_MINUTES * 60 * 1000)
 }
 
 /**

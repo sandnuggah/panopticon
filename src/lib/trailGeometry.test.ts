@@ -191,6 +191,21 @@ describe('trailViews and shownTrails', () => {
     )
   })
 
+  test('this outing: from the stay it set off from, since the last long stay; at that stay, the outing that ended there', () => {
+    const day = new Trip().stay(30).walk(20).stay(30).walk(10).stay(5).walk(10)
+    const views = trailViews({ 1: day.points }, [], {})
+    const shown = shownTrails(views, 'outing')[1]!
+    // From the second long stay on: the walk after it, the short stop and the walk under way.
+    assert.deepEqual(kinds(shown.pieces), ['stay', 'move', 'stay', 'move'])
+    assert.ok(shown.oldest > day.at(40), 'not the first walk')
+    const home = new Trip().stay(30).walk(20).stay(40)
+    assert.deepEqual(
+      kinds(shownTrails(trailViews({ 1: home.points }, [], {}), 'outing')[1]!.pieces),
+      ['stay', 'move', 'stay'],
+      'back at a long stay: the walk there',
+    )
+  })
+
   test('with trails off, none; an asset with nothing since the start, or no fix at all, none either', () => {
     assert.deepEqual(shownTrails(trailViews({ 1: trip.points }, [], {}), null), {})
     assert.equal(shownKey(trailViews({ 1: trip.points }, [], {}), null), 'off')

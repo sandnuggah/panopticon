@@ -46,6 +46,32 @@ class Day {
 const day = (walked: number): DayStats => ({ ...NO_WALKS, walked })
 
 describe('dayStats', () => {
+  test('counts outings, as the card lists them: a stop on the way is part of one, a visit home ends it', () => {
+    // Out to the park, ten minutes there, and back: one outing (it was two walks).
+    assert.equal(dayStats(new Day().stay(30).walk(500).stay(10).walk(-500).stay(30).points, null).walks, 1)
+    // Out and back, home for a minute, out and back again: two (it was one walk).
+    const points = new Day().stay(30).walk(300).walk(-300).stay(1).walk(300).walk(-300).stay(30).points
+    const home = (from: number, to: number) => ({
+      from: points[from]!.time,
+      to: points[to]!.time,
+      center: { lat: START.lat, lon: START.lon },
+    })
+    const back = points.findIndex((point, index) => index > 60 && point.lon === START.lon)
+    const visits = [home(0, 59), home(back, back + 2), home(points.length - 60, points.length - 1)]
+    assert.equal(dayStats(points, null, undefined, visits).walks, 2)
+  })
+
+  test('an outing under way at midnight counts on the day it left, its walking on each day it walked', () => {
+    // The day begins out, walking home: walked that day, but counted the day before.
+    const points = new Day().walk(-500).stay(30).points
+    const home = [
+      { from: points.at(-60)!.time, to: points.at(-1)!.time, center: { lat: START.lat, lon: START.lon - 500 / METERS_PER_DEGREE_LON } },
+    ]
+    const stats = dayStats(points, null, undefined, home)
+    assert.equal(stats.walks, 0)
+    assert.ok(stats.walked > 400, `walked ${stats.walked}`)
+  })
+
   test('a walk out and back from home: its length, time, how far it got', () => {
     const points = new Day().stay(30).walk(1000).walk(-1000).stay(30).points
     const stats = dayStats(points, { lat: START.lat, lon: START.lon })

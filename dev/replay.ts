@@ -20,7 +20,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
-import { isStale, type Asset } from '../src/lib/asset.ts'
+import type { Asset } from '../src/lib/asset.ts'
+import { assetStatus, isGrey } from '../src/lib/status.ts'
 import { applyUpdates } from '../src/lib/live.ts'
 import { matchableWalks, otherWalks } from '../src/lib/matching.ts'
 import { placeCenter, placeOf, withinArea, type Place } from '../src/lib/places.ts'
@@ -246,13 +247,13 @@ const { values, positionals } = parseArgs({
     events: { type: 'boolean', default: false },
   },
 })
-const lengths = values.trail.split(',').map((value): TrailLength => (value === 'today' ? 'today' : Number(value)))
+const lengths = values.trail.split(',').map((value): TrailLength => (value === 'today' || value === 'outing' ? value : Number(value)))
 const reload = values.reload === undefined ? null : Number(values.reload)
 const unavailable = values.unavailable === undefined || Number(values.unavailable) === 0 ? undefined : Number(values.unavailable)
 const bad = (value: number | undefined) => value !== undefined && !(Number.isFinite(value) && value > 0)
 if (
   positionals.length !== 1 ||
-  lengths.some((length) => length !== 'today' && !(Number.isFinite(length) && length >= 0)) ||
+  lengths.some((length) => typeof length === 'number' && !(Number.isFinite(length) && length >= 0)) ||
   bad(reload ?? undefined) ||
   (unavailable !== undefined && !(unavailable >= 0 && unavailable < 1)) ||
   (values.from !== undefined && Number.isNaN(Date.parse(values.from))) ||
@@ -545,8 +546,8 @@ async function replay(length: TrailLength): Promise<Score> {
       })
     // "Here since": at a place, since it came; elsewhere, at a stop the map draws.
     const where = presence ? { [id]: presence } : {}
-    const since =
-      presence?.place != null ? presence.since : (currentStays(trails, length, now, { [id]: asset.tracker }, where)[id]?.since ?? null)
+    const stay = currentStays(trails, length, now, { [id]: asset.tracker }, where)[id]
+    const since = presence?.place != null ? presence.since : (stay?.since ?? null)
 
     // Departures and arrivals as they become known (not those the page found when it opened), and the
     // banners the app shows when where it is changes.
@@ -592,7 +593,8 @@ async function replay(length: TrailLength): Promise<Score> {
     const frame: Frame = {
       time,
       kind,
-      from: from ?? Infinity,
+      // Each asset's outing starts where its view does.
+      from: from === 'outing' ? (view?.oldest ?? Infinity) : (from ?? Infinity),
       newest: view?.newest ?? 0,
       recorded: new Segments(recorded),
       // As the map draws them: not at a place, under its pin (see toTrailFeatures).
@@ -767,7 +769,8 @@ async function replay(length: TrailLength): Promise<Score> {
         ? (trails[id] ?? []).findLast((point) => point.valid && point.lat === marker.lat && point.lon === marker.lon)
         : undefined
     const walking = isWalking(trails[id] ?? [], time, places)
-    const grey = isStale(asset, now)
+    // Lost, as the marker and the bottom bar have it (see status.ts).
+    const grey = isGrey(assetStatus(asset, { presence: presence ?? undefined, stay }, now))
     account = (minutes) => {
       if (grey) s.greyMinutes += minutes
       if (walking) s.card.walkingMinutes += minutes

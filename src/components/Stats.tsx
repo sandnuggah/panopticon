@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { distanceLabel } from '../lib/outings'
 import { createPortal } from 'react-dom'
 import { Button, Segmented, SegmentedButton } from 'konsta/react'
 import type { Asset } from '../lib/asset'
@@ -199,8 +200,9 @@ function Numbers({ name, period, days, stats, before, home, walkStreak }: Number
         )}
       </dl>
       <p className="mt-4 text-sm opacity-60">
-        Walks are {name}'s moves between stays that got at least 75 m away; rides aren't counted. Stops are pauses of a minute or more on a
-        walk: sniffing, peeing, saying hello. The streak counts days in a row with at least 500 m of walks, over the last 90 days.
+        Walks are {name}'s outings, as on the card: from leaving home (or another place, or anywhere it stayed 20 minutes or more) to
+        getting back, at least 50 m out; rides aren't walked. Stops are pauses of a minute or more on a walk: sniffing, peeing, saying
+        hello. The streak counts days in a row with at least 500 m of walks, over the last 90 days.
       </p>
     </>
   )
@@ -258,12 +260,6 @@ function homeOf(asset: Asset, places: Place[]): { name: string; at: LatLon } | n
   const lat = area.ring.reduce((sum, point) => sum + point.lat, 0) / area.ring.length
   const lon = area.ring.reduce((sum, point) => sum + point.lon, 0) / area.ring.length
   return { name: place.name, at: { lat, lon } }
-}
-
-/** "850 m", "21.4 km". */
-function distanceLabel(metres: number): string {
-  if (metres < 1000) return `${Math.round(metres / 10) * 10} m`
-  return `${(metres / 1000).toLocaleString('en', { maximumFractionDigits: 1, minimumFractionDigits: metres < 100_000 ? 1 : 0 })} km`
 }
 
 function daysLabel(days: number): string {

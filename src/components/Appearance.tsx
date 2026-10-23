@@ -56,7 +56,8 @@ export function Appearance({ listColors, styles, defaultStyle, canSnapToPaths }:
         ))}
       </List>
       <BlockFooter>
-        How much recent movement the map draws behind each asset. Today is everything since midnight. Saved in this browser only.
+        How much recent movement the map draws behind each asset. This outing is the walk under way, or the last one: since it left home,
+        daycare or anywhere it stayed 20 minutes or more. Today is everything since midnight. Saved in this browser only.
       </BlockFooter>
       <BlockTitle>Walks</BlockTitle>
       <List strong inset colors={listColors}>
