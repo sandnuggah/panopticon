@@ -2,6 +2,7 @@ import { stayHopId, walkId } from './matching.ts'
 import type { Place } from './places.ts'
 import { placeStays, quietAfter } from './presence.ts'
 import { classifyTrail, latestOutingStart, withDots, type LatLon, type StayDot, type TrailPiece } from './segments.ts'
+import { laneOut, type LaneLine } from './lanes.ts'
 import type { How } from './snap.ts'
 import { DEFAULT_TRAIL_COLOR } from './trailColors.ts'
 import type { SnappedLine, SnappedLines } from './snapLines.ts'
@@ -238,11 +239,20 @@ type Position = [number, number]
 
 /**
  * `older`: in an outing before the latest one, drawn in the background; `guess`: a way nobody saw (see
- * GUESSES), or a hop between two dots.
+ * GUESSES), or a hop between two dots; `lane`: beside other walks along the same street (see lanes.ts).
  */
 export type TrailFeature = {
   type: 'Feature'
-  properties: { id: number; kind: string; color: string; opacity: number; minutes?: number; older?: boolean; guess?: boolean }
+  properties: {
+    id: number
+    kind: string
+    color: string
+    opacity: number
+    minutes?: number
+    older?: boolean
+    guess?: boolean
+    lane?: number
+  }
   geometry: { type: 'LineString'; coordinates: Position[] } | { type: 'Point'; coordinates: Position }
 }
 
@@ -260,6 +270,9 @@ export function toTrailFeatures(
 ): { trail: TrailFeatures; paws: TrailFeatures } {
   const trail: TrailFeature[] = []
   const paws: TrailFeature[] = []
+  // All the walking, of every asset, laid out in lanes together (see lanes.ts).
+  type Walk = { id: number; color: string; opacity: number; older: boolean; hop: boolean }
+  const walking: LaneLine<Walk>[] = []
   for (const [key, view] of Object.entries(trails)) {
     const id = Number(key)
     const { walks, rides, dots, opacity, outing } = drawTrail(view, lines[id])
@@ -273,14 +286,8 @@ export function toTrailFeatures(
     for (const walk of walks) {
       const end = walk.points.at(-1)!.time
       const older = end < outing
-      // Each walk at the opacity of its end; stretches of it seen or guessed, cut where that changes.
-      const guess = (k: number) => walk.hop || GUESSES.has(walk.points[k]!.how!)
-      for (let i = 0; i < walk.points.length - 1;) {
-        let j = i + 1
-        while (j + 1 < walk.points.length && guess(j + 1) === guess(i + 1)) j++
-        trail.push(line('move', walk.points.slice(i, j + 1), end, { ...(older && { older }), ...(guess(i + 1) && { guess: true }) }))
-        i = j
-      }
+      // Each walk at the opacity of its end.
+      walking.push({ points: walk.points, data: { id, color, opacity: opacity(end), older, hop: walk.hop } })
       if (!older) paws.push(line('move', walk.points, end))
     }
     for (const ride of rides) trail.push(line(ride.kind, ride.points, ride.points.at(-1)!.time))
@@ -291,6 +298,28 @@ export function toTrailFeatures(
         properties: { id, kind: 'stay', color, opacity: opacity(dot.to), minutes: dot.ms / 60_000 },
         geometry: { type: 'Point', coordinates: [dot.center.lon, dot.center.lat] },
       })
+    }
+  }
+  // Each walk's stretches in a lane, cut again where they turn from seen to guessed or back.
+  for (const { points, data, lane } of laneOut(walking)) {
+    const guess = (k: number) => data.hop || GUESSES.has(points[k]!.how!)
+    for (let i = 0; i < points.length - 1;) {
+      let j = i + 1
+      while (j + 1 < points.length && guess(j + 1) === guess(i + 1)) j++
+      trail.push({
+        type: 'Feature',
+        properties: {
+          id: data.id,
+          kind: 'move',
+          color: data.color,
+          opacity: data.opacity,
+          ...(data.older && { older: true }),
+          ...(guess(i + 1) && { guess: true }),
+          ...(lane !== 0 && { lane }),
+        },
+        geometry: { type: 'LineString', coordinates: points.slice(i, j + 1).map((point) => [point.lon, point.lat]) },
+      })
+      i = j
     }
   }
   return {

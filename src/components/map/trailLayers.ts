@@ -7,8 +7,9 @@ import { DEFAULT_TRAIL_COLOR, TRAIL_COLORS, trailColorOf } from '../../lib/trail
 // what's drawn where): walking as a line, or as paw prints close up (Appearance → Paw prints); rides
 // through their fixes, dashed, and dotted where they went without GPS (underground); stays as dots,
 // bigger the longer they were. The latest outing in front, with a casing; older ones behind it as one
-// layer, so where walks overlap (the street home, every day) it's no darker; ways nobody saw thinner
-// and lighter. All of it under the map's labels. Markers are DOM elements, so they always sit above.
+// layer; walks along the same street side by side, like a metro map's lines (lanes.ts), so the
+// street home, walked every day, shows each walk; ways nobody saw thinner and lighter. All of it
+// under the map's labels. Markers are DOM elements, so they always sit above.
 
 const TRAILS = 'trails'
 const OLDER = 'trails-older'
@@ -22,6 +23,8 @@ const PAW_IMAGE = 'paw-prints'
 const PAW_ZOOM = 16.5
 /** Older outings, as one layer: faint enough to stay behind the latest, clear enough to see on a park. */
 const OLDER_OPACITY = 0.4
+/** Between walks side by side along a street (see lanes.ts), pixels. */
+const LANE_GAP = 1.5
 /** A guess (see trailGeometry.ts) at this much of the line's opacity. */
 const GUESS_OPACITY = 0.6
 
@@ -71,6 +74,16 @@ export function addTrailLayers(map: MapLibreMap) {
     18,
     ['case', guess, 3 + extra, 5.5 + extra],
   ]
+  // Walks along the same street side by side (see lanes.ts): a lane is a line's width and LANE_GAP apart.
+  const lane: ExpressionSpecification = [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    12,
+    ['*', ['coalesce', ['get', 'lane'], 0], 2.5 + LANE_GAP],
+    18,
+    ['*', ['coalesce', ['get', 'lane'], 0], 5.5 + LANE_GAP],
+  ]
   map.addSource(TRAILS, { type: 'geojson', data: empty.trail })
   addLayer({
     id: OLDER,
@@ -79,6 +92,7 @@ export function addTrailLayers(map: MapLibreMap) {
     filter: ['all', kind('move'), older],
     layout: lineLayout,
     paint: {
+      'line-offset': lane,
       'line-color': color,
       'line-width': width(0),
       'line-opacity': ['case', guess, GUESS_OPACITY, 1],
@@ -118,7 +132,12 @@ export function addTrailLayers(map: MapLibreMap) {
     source: TRAILS,
     filter: ['all', kind('move'), ['!', older], ['!', guess]],
     layout: lineLayout,
-    paint: { 'line-color': casingColor(map), 'line-width': width(3), 'line-opacity': ['get', 'opacity'] },
+    paint: {
+      'line-offset': lane,
+      'line-color': casingColor(map),
+      'line-width': width(3),
+      'line-opacity': ['get', 'opacity'],
+    },
   })
   addLayer({
     id: TRAILS,
@@ -127,13 +146,14 @@ export function addTrailLayers(map: MapLibreMap) {
     filter: ['all', kind('move'), ['!', older]],
     layout: lineLayout,
     paint: {
+      'line-offset': lane,
       'line-color': color,
       'line-width': width(0),
       'line-opacity': ['*', ['get', 'opacity'], ['case', guess, GUESS_OPACITY, 1]],
     },
   })
-  // Stays on top of the lines that run through them: a dot with a white ring, 5 px across a short
-  // stop up to 9 px for an hour or more. White, like a location dot's, since the map can be light or
+  // Stays on top of the lines that run through them: a dot with a white ring, of radius 5 px for a
+  // short stop up to 9 px for an hour or more. White, like a location dot's, since the map can be light or
   // dark whatever the device's mode (Settings → Map style).
   addLayer({
     id: STAYS,

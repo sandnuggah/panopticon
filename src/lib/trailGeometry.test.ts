@@ -410,7 +410,9 @@ describe('toTrailFeatures', () => {
       .filter((feature) => feature.properties.kind === 'move')
       .map((feature) => feature.geometry.coordinates as number[][])
     assert.equal(lines.length, 1)
-    assert.equal(lines[0]!.length, walk.points.length)
+    // With points every 10 m between its own, for lanes (see lanes.ts).
+    assert.ok(lines[0]!.length >= walk.points.length)
+    assert.deepEqual(lines[0]!.at(-1), [walk.points.at(-1)!.lon, walk.points.at(-1)!.lat])
     assert.deepEqual(lines[0]![0], [walk.points[0]!.lon, walk.points[0]!.lat], 'longitude first')
     assert.equal(paws.features.length, 1)
     assert.equal(paws.features[0]!.geometry.coordinates.length, walk.points.length)

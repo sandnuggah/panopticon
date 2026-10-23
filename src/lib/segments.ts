@@ -209,16 +209,26 @@ export function isBase(piece: TrailPiece | undefined, until = piece?.kind === 's
   return piece?.kind === 'stay' && (!!piece.atPlace || until - piece.from >= BASE_STAY_MS)
 }
 
+/** When a piece begins. */
+function pieceStart(piece: TrailPiece): number {
+  return piece.kind === 'move' ? piece.points[0]!.time : piece.kind === 'stay' ? piece.from : piece.from.time
+}
+
 /**
  * When the asset's latest outing began, for drawing it in front of the older ones: the end of the
  * last base (see isBase) before its latest movement. Being at a base right now ends that outing; it
  * doesn't start a new one. Null when there's no base: it's all one outing.
  */
 export function latestOutingStart(pieces: TrailPiece[]): number | null {
-  const end = isBase(pieces.at(-1)) ? pieces.length - 1 : pieces.length
+  // As outings.ts has them: a stay lasts until the next piece begins (a tracker asleep there).
+  const base = (index: number) => {
+    const [piece, next] = [pieces[index], pieces[index + 1]]
+    return piece?.kind === 'stay' && isBase(piece, next ? Math.max(piece.to, pieceStart(next)) : piece.to)
+  }
+  const end = base(pieces.length - 1) ? pieces.length - 1 : pieces.length
   for (let index = end - 1; index >= 0; index--) {
     const piece = pieces[index]!
-    if (piece.kind === 'stay' && isBase(piece)) return piece.to
+    if (piece.kind === 'stay' && base(index)) return piece.to
   }
   return null
 }

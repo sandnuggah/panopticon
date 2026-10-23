@@ -1,6 +1,6 @@
-// The trail's colours to choose from (Appearance → Trail colour), each in a shade for a day map and
-// one for a night map: the map style can be light or dark whatever the device's mode. None of them
-// is the places' purple (--place), so a pin never reads as part of the trail.
+// The trail's colours to choose from (each asset's, on its page under Assets), each in a shade for a
+// day map and one for a night map: the map style can be light or dark whatever the device's mode.
+// None of them is the places' purple (--place), so a pin never reads as part of the trail.
 
 export type TrailColor = { id: string; name: string; day: string; night: string }
 
