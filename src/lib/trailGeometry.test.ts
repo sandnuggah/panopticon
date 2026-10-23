@@ -342,6 +342,24 @@ describe('drawTrail', () => {
 })
 
 describe('toTrailFeatures', () => {
+  test('no dot at a place: its pin is there', () => {
+    const at = (east: number) => ({ lat: START.lat, lon: START.lon + east / METERS_PER_DEGREE_LON })
+    const stays: TrailView = {
+      pieces: [
+        { kind: 'stay', center: at(0), radius: 10, from: START.time, to: START.time + 30 * 60_000, atPlace: true },
+        { kind: 'stay', center: at(500), radius: 10, from: START.time + 40 * 60_000, to: START.time + 60 * 60_000 },
+      ],
+      oldest: START.time,
+      newest: START.time + 60 * 60_000,
+      outing: null,
+    }
+    const dots = toTrailFeatures({ 1: stays }, {}).trail.features.filter((feature) => feature.properties.kind === 'stay')
+    assert.deepEqual(
+      dots.map((dot) => (dot.geometry as { coordinates: number[] }).coordinates[0]),
+      [at(500).lon],
+    )
+  })
+
   test('walks in pieces of three hops for fading, joined end to end, and whole for paw prints; stays as dots', () => {
     const trail = view(new Trip().stay(10).walk(10).stay(10))
     const { trail: features, paws } = toTrailFeatures({ 1: trail }, {})

@@ -595,7 +595,8 @@ async function replay(length: TrailLength): Promise<Score> {
       from: from ?? Infinity,
       newest: view?.newest ?? 0,
       recorded: new Segments(recorded),
-      dots: (recorded?.dots ?? []).map((dot) => ({ at: xy(dot.center), to: dot.to })),
+      // As the map draws them: not at a place, under its pin (see toTrailFeatures).
+      dots: (recorded?.dots ?? []).filter((dot) => !dot.atPlace).map((dot) => ({ at: xy(dot.center), to: dot.to })),
       walks: (shown?.walks ?? []).map((walk) => ({
         key: walk.key,
         // A hop between two stays is drawn at one time: its span is from the one stay to the other.

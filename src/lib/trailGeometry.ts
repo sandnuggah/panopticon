@@ -253,7 +253,8 @@ export function toTrailFeatures(trails: TrailViews, lines: SnappedLines = {}): {
       paws.push(line('move', walk.points, walk.points.at(-1)!.time))
     }
     for (const ride of rides) trail.push(line(ride.kind, ride.points, ride.points.at(-1)!.time))
-    for (const dot of dots) {
+    // Not at a place: its pin is there (see placeLayers.ts), and walks run to its way in.
+    for (const dot of dots.filter((dot) => !dot.atPlace)) {
       trail.push({
         type: 'Feature',
         properties: { id, kind: 'stay', opacity: opacity(dot.to), minutes: dot.ms / 60_000 },

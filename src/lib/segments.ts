@@ -213,8 +213,11 @@ export function latestOutingStart(pieces: TrailPiece[]): number | null {
   return null
 }
 
-/** A dot drawn on the map for one or more stays (see stayDots): where, when last, and how long in all. */
-export type StayDot = { center: LatLon; to: number; ms: number }
+/**
+ * A dot on the map for one or more stays (see stayDots): where, when last, and how long in all;
+ * `atPlace`: at one of the asset's places, whose pin is drawn there instead.
+ */
+export type StayDot = { center: LatLon; to: number; ms: number; atPlace?: boolean }
 
 /**
  * Stays as dots on the map. A stay this close to a longer one's dot (back at the same place later,
@@ -233,7 +236,9 @@ export function stayDots(stays: { center: LatLon; from: number; to: number; atPl
     const stay = stays[index]!
     const near = dots.findIndex((dot) => distance(dot.center, stay.center) <= STAY_DOT_JOIN_METERS)
     if (near < 0) {
-      dotOf[index] = dots.push({ center: stay.center, to: stay.to, ms: stay.to - stay.from }) - 1
+      const dot: StayDot = { center: stay.center, to: stay.to, ms: stay.to - stay.from }
+      if (stay.atPlace) dot.atPlace = true
+      dotOf[index] = dots.push(dot) - 1
     } else {
       const dot = dots[near]!
       dots[near] = { ...dot, to: Math.max(dot.to, stay.to), ms: dot.ms + stay.to - stay.from }
