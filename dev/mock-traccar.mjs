@@ -605,21 +605,6 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(204)
     return res.end()
   }
-  if (key === 'GET /api/reports/events') {
-    const deviceIds = url.searchParams.getAll('deviceId').map(Number)
-    const types = url.searchParams.getAll('type')
-    const from = Date.parse(url.searchParams.get('from') ?? '')
-    const to = Date.parse(url.searchParams.get('to') ?? '')
-    return json(
-      res,
-      200,
-      events.filter((event) => {
-        const time = Date.parse(event.eventTime)
-        return deviceIds.includes(event.deviceId) && (types.length === 0 || types.includes(event.type)) && time >= from && time <= to
-      }),
-    )
-  }
-
   if (key === 'GET /api/server/geocode') {
     const lat = Number(url.searchParams.get('latitude'))
     return text(res, 200, lat > 59.35 ? 'Storviltsgatan 5, Stockholm' : 'Ringvägen 12, Stockholm')

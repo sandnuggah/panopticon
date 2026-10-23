@@ -72,6 +72,27 @@ describe('dayStats', () => {
     assert.ok(stats.walked > 400, `walked ${stats.walked}`)
   })
 
+  test('with the hours around midnight: a stop across it seen whole, each outing on the day it left', () => {
+    // Out to a friend's, 30 minutes there across midnight, and back: one outing each day.
+    const points = new Day().stay(30).walk(500).stay(30).walk(-500).stay(30).points
+    const there = points.filter((point) => Math.abs(point.lon - points[0]!.lon) * METERS_PER_DEGREE_LON > 480)
+    const midnight = there[Math.floor(there.length / 2)]!.time
+    const [before, after] = [
+      { from: midnight - 86_400_000, to: midnight },
+      { from: midnight, to: midnight + 86_400_000 },
+    ]
+    assert.equal(dayStats(points, null, undefined, [], before).walks, 1)
+    assert.equal(dayStats(points, null, undefined, [], after).walks, 1)
+    // Each day's half of the stop alone (15 minutes) is no base: the walk home was an outing under way.
+    assert.equal(
+      dayStats(
+        points.filter((point) => point.time >= midnight),
+        null,
+      ).walks,
+      0,
+    )
+  })
+
   test('a walk out and back from home: its length, time, how far it got', () => {
     const points = new Day().stay(30).walk(1000).walk(-1000).stay(30).points
     const stats = dayStats(points, { lat: START.lat, lon: START.lon })

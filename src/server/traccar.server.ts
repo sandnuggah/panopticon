@@ -66,15 +66,6 @@ export type TraccarGeofence = {
 /** Attributes to set on a geofence, or null to remove; others are kept. */
 export type GeofenceAttributes = Record<string, string | null>
 
-/** An event Traccar recorded, such as a device entering a geofence. */
-export type TraccarEvent = {
-  type: string
-  eventTime: string
-  deviceId: number
-  /** 0 when the event isn't about a geofence. */
-  geofenceId: number
-}
-
 // No parameter properties: Node strips the types of this module for the trail replay (dev/replay.ts).
 export class TraccarError extends Error {
   readonly status?: number
@@ -381,13 +372,6 @@ export async function linkGeofence(token: string, deviceId: number, geofenceId: 
   await ensureOk(response, `${linked ? 'POST' : 'DELETE'} /api/permissions`)
 }
 
-/** Events of these types for one device between two times. Traccar records them whether or not anyone is notified. */
-export async function getEvents(token: string, deviceId: number, types: string[], from: Date, to: Date): Promise<TraccarEvent[]> {
-  const query = new URLSearchParams({ deviceId: String(deviceId), from: from.toISOString(), to: to.toISOString() })
-  for (const type of types) query.append('type', type)
-  return parseList(await getJson(`/api/reports/events?${query}`, token), parseEvent)
-}
-
 /**
  * The address at a point from Traccar's reverse geocoder (`geocoder.*` in traccar.xml), or null when
  * it has none there. Fails like any other call when geocoding is off ("Reverse geocoding is not enabled").
@@ -546,16 +530,6 @@ function parseGeofence(value: unknown): TraccarGeofence {
     name: optionalString(value, 'name', 'geofence') ?? '',
     area: optionalString(value, 'area', 'geofence') ?? '',
     attributes: isObject(value.attributes) ? value.attributes : {},
-  }
-}
-
-function parseEvent(value: unknown): TraccarEvent {
-  if (!isObject(value)) throw unexpected('event is not an object')
-  return {
-    type: string(value, 'type', 'event'),
-    eventTime: string(value, 'eventTime', 'event'),
-    deviceId: number(value, 'deviceId', 'event'),
-    geofenceId: typeof value.geofenceId === 'number' ? value.geofenceId : 0,
   }
 }
 

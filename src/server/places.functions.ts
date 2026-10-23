@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import type { LatLon } from '../lib/segments'
 import { searchAddress } from './geocode.server'
-import { loadPlaces, loadVisits, removePlace, savePlace, type PlaceChange } from './places.server'
+import { loadPlaces, removePlace, savePlace, type PlaceChange } from './places.server'
 import { withToken } from './session.server'
 
 // Traccar stores geofence names in a 128-character column.
@@ -57,14 +57,6 @@ export const deletePlace = createServerFn({ method: 'POST' })
     return id
   })
   .handler(({ data: id }) => withToken((token) => removePlace(token, id)))
-
-/** An asset's latest arrivals and departures, for its details card. */
-export const getPlaceVisits = createServerFn({ method: 'GET' })
-  .validator((input: unknown) => {
-    if (!isId(input)) throw new Error('Invalid request')
-    return input
-  })
-  .handler(({ data: assetId }) => withToken((token) => loadVisits(token, assetId)))
 
 function fields(input: unknown): Record<string, unknown> {
   if (typeof input !== 'object' || input === null) throw new Error('Invalid request')

@@ -173,24 +173,6 @@ export function visitSentence(assetName: string, visit: Pick<PlaceVisit, 'arrive
   return `${assetName} ${visit.arrived ? 'arrived at' : 'left'} ${placeName}`
 }
 
-/**
- * An asset's arrivals and departures as the details card lists them, newest first: arriving at a
- * place, or being out. A departure is how long the asset was out, until its next arrival anywhere,
- * or still out (`until` null).
- */
-export type VisitRow =
-  { kind: 'arrived'; placeId: number; time: string } | { kind: 'out'; placeId: number; time: string; until: string | null }
-
-/** Arrivals and departures, newest first, as rows: each departure with the arrival that ended it. */
-export function visitRows(visits: Pick<PlaceVisit, 'placeId' | 'arrived' | 'time'>[]): VisitRow[] {
-  return visits.map((visit, index) => {
-    if (visit.arrived) return { kind: 'arrived', placeId: visit.placeId, time: visit.time }
-    // The arrival just after it: the nearest arrival above it in the list.
-    const next = visits.slice(0, index).findLast((other) => other.arrived)
-    return { kind: 'out', placeId: visit.placeId, time: visit.time, until: next?.time ?? null }
-  })
-}
-
 /** How long, briefly: "49 min", "2 h 5 min", "1 d 3 h". At least a minute. */
 export function durationLabel(ms: number): string {
   const minutes = Math.max(1, Math.round(ms / 60_000))

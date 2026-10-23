@@ -18,6 +18,8 @@ const MAX_CACHED = 20_000
 const PARALLEL = 4
 /** A day this long over can't change any more (late reports from a tracker that was offline aside). */
 const SETTLED_MS = 60 * 60 * 1000
+/** Each day is worked out with this much either side, so what's around midnight is seen whole (see dayStats). */
+const MARGIN_MS = 3 * 60 * 60 * 1000
 
 const cache = new Map<string, DayStats>()
 
@@ -40,13 +42,18 @@ export async function loadDayStats(token: string, assetId: number, days: Day[], 
         results[index] = kept
         continue
       }
-      const positions = await getPositionHistory(token, assetId, new Date(day.from), new Date(day.to))
+      const positions = await getPositionHistory(
+        token,
+        assetId,
+        new Date(day.from - MARGIN_MS),
+        new Date(Math.min(day.to + MARGIN_MS, Date.now())),
+      )
       // Read as its kind of tracker reports (see trackers.server.ts).
       const profile = trailProfile(adapterFor(positions.find((position) => position.protocol)?.protocol).kind)
       const points = positions.map(toTrailPoint).sort((a, b) => a.time - b.time)
-      const stats = dayStats(points, home, profile, placeStays(points, places, assetId, profile))
+      const stats = dayStats(points, home, profile, placeStays(points, places, assetId, profile), day)
       results[index] = stats
-      if (day.to + SETTLED_MS <= Date.now()) {
+      if (day.to + MARGIN_MS + SETTLED_MS <= Date.now()) {
         if (cache.size >= MAX_CACHED) cache.delete(cache.keys().next().value!)
         cache.set(key, stats)
       }

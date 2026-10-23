@@ -1,26 +1,12 @@
-import {
-  ADDRESS_ATTRIBUTE,
-  circleWkt,
-  parseArea,
-  placeCenter,
-  placeOf,
-  WAY_IN_ATTRIBUTE,
-  wayInAttribute,
-  type Place,
-  type PlaceVisit,
-} from '../lib/places'
+import { ADDRESS_ATTRIBUTE, circleWkt, parseArea, placeCenter, placeOf, WAY_IN_ATTRIBUTE, wayInAttribute, type Place } from '../lib/places'
 import type { LatLon } from '../lib/segments'
 import { attempt, type EditResult } from './manage.server'
-import { createGeofence, deleteGeofence, getDevices, getEvents, getGeofences, linkGeofence, updateGeofence } from './traccar.server'
+import { createGeofence, deleteGeofence, getDevices, getGeofences, linkGeofence, updateGeofence } from './traccar.server'
 import { findWayIn } from './wayIn.server'
 
 // Places are Traccar geofences linked to devices. Traccar does the work: it checks every position
 // against the device's geofences (a position's `geofenceIds`) and records geofenceEnter and
 // geofenceExit events. Traccar enforces who may change them (see manage.server.ts).
-
-/** How far back an asset's arrivals and departures are shown, and how many. */
-const VISITS_DAYS = 7
-const MAX_VISITS = 10
 
 /** The user's places that panopticon can show (circles and simple polygons), with the assets linked to each. */
 export async function loadPlaces(token: string): Promise<Place[]> {
@@ -91,16 +77,4 @@ export function removePlace(token: string, id: number): Promise<EditResult> {
     await deleteGeofence(token, id)
     return { ok: true }
   })
-}
-
-/** An asset's latest arrivals and departures, newest first, from Traccar's events. */
-export async function loadVisits(token: string, assetId: number): Promise<PlaceVisit[]> {
-  const to = new Date()
-  const from = new Date(to.getTime() - VISITS_DAYS * 24 * 3600_000)
-  const events = await getEvents(token, assetId, ['geofenceEnter', 'geofenceExit'], from, to)
-  return events
-    .filter((event) => event.geofenceId > 0)
-    .map((event) => ({ assetId, placeId: event.geofenceId, arrived: event.type === 'geofenceEnter', time: event.eventTime }))
-    .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
-    .slice(0, MAX_VISITS)
 }

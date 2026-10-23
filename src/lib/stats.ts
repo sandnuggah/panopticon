@@ -1,4 +1,4 @@
-import { outingsOf, walkedOuting } from './outings.ts'
+import { outingsOf, walkedOuting, walkLength } from './outings.ts'
 import { classifyTrail, DEFAULT_TRAIL_PROFILE, distance, type LatLon, type PlaceStay, type TrailProfile } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
 
@@ -48,19 +48,27 @@ export function dayStats(
   home: LatLon | null,
   profile: TrailProfile = DEFAULT_TRAIL_PROFILE,
   visits: PlaceStay[] = [],
+  day?: Day,
 ): DayStats {
-  const stats = { ...NO_WALKS, fixes: points.filter((point) => point.valid).length }
+  // With `day`, the points go some hours either side of it, so what's around midnight is seen whole
+  // (a stay from 23:45 to 00:15 is as long as it was): an outing counts on the day it left, and its
+  // walking on each day it walked.
+  const inDay = (time: number) => !day || (time >= day.from && time < day.to)
+  const stats = { ...NO_WALKS, fixes: points.filter((point) => point.valid && inDay(point.time)).length }
   const last = points.at(-1)?.time ?? 0
   for (const outing of outingsOf(classifyTrail(points, { visits, profile }))) {
     // A drive to daycare is no walk, nor time out walking.
     if (!walkedOuting(outing)) continue
-    const fixes = outing.walks.flat()
+    const walks = outing.walks.map((walk) => walk.filter((fix) => inDay(fix.time))).filter((walk) => walk.length > 0)
+    const fixes = walks.flat()
     // Counted on the day it left (not again after midnight).
-    if (outing.began) stats.walks++
-    stats.walked += outing.walked
-    stats.longest = Math.max(stats.longest, outing.walked)
-    stats.walking += (outing.to ?? last) - outing.from
-    stats.stops += outing.walks.reduce((sum, walk) => sum + countStops(walk), 0)
+    if (day ? inDay(outing.from) : outing.began) stats.walks++
+    const walked = walks.reduce((sum, walk) => sum + walkLength(walk), 0)
+    stats.walked += walked
+    stats.longest = Math.max(stats.longest, day && !inDay(outing.from) ? 0 : outing.walked)
+    const [from, to] = [Math.max(outing.from, day?.from ?? -Infinity), Math.min(outing.to ?? last, day?.to ?? Infinity)]
+    stats.walking += Math.max(0, to - from)
+    stats.stops += walks.reduce((sum, walk) => sum + countStops(walk), 0)
     if (home && fixes.length > 0) stats.furthest = Math.max(stats.furthest ?? 0, ...fixes.map((fix) => distance(home, fix)))
   }
   return stats
