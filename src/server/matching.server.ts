@@ -1,7 +1,17 @@
 import type { MatchablePoint } from '../lib/matching'
 import type { LatLon } from '../lib/segments'
 import { distance } from '../lib/segments'
-import { drawWalk, routeFits, strayCandidates, strayed, timedWalk, type DrawnWalk, type Point, type SnappedPoint } from '../lib/snap'
+import {
+  drawWalk,
+  noDetour,
+  routeFits,
+  strayCandidates,
+  strayed,
+  timedWalk,
+  type DrawnWalk,
+  type Point,
+  type SnappedPoint,
+} from '../lib/snap'
 import type { SnapAnswer } from '../lib/snapLines'
 import { env } from './env.server'
 
@@ -119,13 +129,25 @@ async function strays(url: string, points: MatchablePoint[], line: LatLon[], bre
  */
 async function routeUnseen(url: string, points: MatchablePoint[], walk: DrawnWalk): Promise<SnappedPoint[] | null> {
   const routes = await Promise.all(walk.unseen.map((k) => walkingRoute(url, walk.points[k]!, walk.points[k + 1]!)))
+  const noDetours = await Promise.all(
+    walk.detours.map(async ({ leg, length }) => {
+      const [a, b] = [walk.points[leg]!, walk.points[leg + 1]!]
+      return noDetour(a, b, (await route(url, a, b)) ?? [], length)
+    }),
+  )
   // Nothing changed: drawn as recorded. With fixes left out, though, it's drawn without them.
   if (!walk.snapped && !walk.strayed && routes.every((route) => route === null)) return null
-  return timedWalk(points, walk, routes)
+  return timedWalk(points, walk, routes, noDetours)
 }
 
 /** Valhalla's walking route between two points, if it fits a leg nobody saw (see routeFits in snap.ts). */
 async function walkingRoute(url: string, from: Point, to: Point): Promise<LatLon[] | null> {
+  const way = await route(url, from, to)
+  return way && routeFits(from, to, way) ? way : null
+}
+
+/** Valhalla's walking route between two points, or null when there's none. */
+async function route(url: string, from: Point, to: Point): Promise<LatLon[] | null> {
   const response = await fetch(`${url}/route`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -137,8 +159,7 @@ async function walkingRoute(url: string, from: Point, to: Point): Promise<LatLon
   if (!response.ok) throw new Error(`route: HTTP ${response.status}`)
   const body = (await response.json()) as { trip?: { legs?: { shape?: string }[] } }
   const shape = body.trip?.legs?.[0]?.shape
-  const route = shape ? decodePolyline6(shape) : []
-  return routeFits(from, to, route) ? route : null
+  return shape ? decodePolyline6(shape) : []
 }
 
 /** Valhalla's shapes are Google-style encoded polylines with 6 decimals. */

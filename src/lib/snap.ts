@@ -31,6 +31,17 @@ const TIE_METERS = 5
 const DETOUR_FACTOR = 1.5
 const DETOUR_METERS = 20
 /**
+ * ...unless there's no shorter way to walk: the line no longer than Valhalla's walking route between
+ * the two feet this many times, plus DETOUR_ROUTE_METERS, is the way the dog went (round a corner, along
+ * a bridge), and followed after all (see noDetour), if it's at most NO_DETOUR_FACTOR times as far as
+ * straight. Farther, one of the two fixes is likelier off across a block than the dog round it: on a
+ * week of Kofi's, of 8 such cuts, the 4 at 1.6–1.9 times were round a corner or along the bridge, the
+ * 4 at 2.5–3.5 times down the steps to the park and back, round a block a courtyard fix was in, and the like.
+ */
+const DETOUR_ROUTE_FACTOR = 1.2
+const DETOUR_ROUTE_METERS = 10
+const NO_DETOUR_FACTOR = 2
+/**
  * Legs nobody saw: between a stay and the first or last fix (the tracker asleep, or waking up on the
  * way), and to a fix marked `unseen`. The way is a guess there, and the way along paths is a
  * better one than straight across (a bridge, a building, a slope in between), so these follow the
@@ -50,8 +61,9 @@ const ANCHOR_METERS = 50
  * than STRAY_FAR_METERS from any (a courtyard, a block, water: on a week of Kofi's, fixes in the
  * courtyards north of Home 26–40 m from a way, in the canal 33 m). They're left out (see strayed).
  * In a park, away from every way is the grass: kept. More in a row, the matcher may be the one that's
- * wrong: kept. And where the dog stood a while (`stood`), that's no jump: kept (on a week of Kofi's,
- * 9 fixes over 3.5 minutes were left out this way, after the map had shown them).
+ * wrong: kept. And where the dog stood a while (`stood`), that's no jump: kept, with the fixes in the
+ * same run off the line (on a week of Kofi's, 9 fixes over 3.5 minutes were left out this way, after
+ * the map had shown them).
  */
 const STRAY_FIXES = 2
 const STRAY_NEAR_WAY_METERS = 10
@@ -77,9 +89,19 @@ export type SnappedPoint = { lat: number; lon: number; time: number; how: How }
  * a fix or its foot on the line; -1 for the line's own vertices) and how the way to it was drawn
  * (`how`). `snapped`: some of it follows the line. `strayed`: some fixes were left out. `unseen`: the
  * legs still straight across where nobody saw the way, by the index in `points` of each leg's start,
- * for a route.
+ * for a route. `detours`: the legs cut straight across a detour, the same way, with the line's way
+ * between them (`way`, its vertices) and how long it is, in case it's no detour (see noDetour).
  */
-export type DrawnWalk = { points: Point[]; source: number[]; how: How[]; snapped: boolean; strayed: boolean; unseen: number[] }
+export type DrawnWalk = {
+  points: Point[]
+  source: number[]
+  how: How[]
+  snapped: boolean
+  strayed: boolean
+  unseen: number[]
+  detours: Detour[]
+}
+export type Detour = { leg: number; way: Point[]; length: number }
 
 /**
  * The walk as drawn: the matched line along the stretches where at least MIN_RUN fixes in a row lie
@@ -96,8 +118,14 @@ export function drawWalk(
 ): DrawnWalk {
   const feet = feetOnLine(points, line, breaks)
   const snapped = snappedFixes(points, feet, strays)
-  const along = points.map((_, index) => 0)
-  for (let k = 1; k < points.length; k++) along[k] = along[k - 1]! + metres(points[k - 1]!, points[k]!)
+  // How far the dog went, from fix to fix: strays aside, as it never went out to them.
+  const along = points.map(() => 0)
+  let previous = -1
+  points.forEach((point, k) => {
+    if (strays.has(k)) return
+    along[k] = previous < 0 ? 0 : along[previous]! + metres(points[previous]!, point)
+    previous = k
+  })
 
   const drawn: Point[] = []
   // The index of the point each drawn point stands for: a fix, its foot, or -1 for the line's own vertices.
@@ -114,6 +142,7 @@ export function drawWalk(
     source.push(index)
     how.push(way)
   }
+  const detours: Detour[] = []
   const kept = points.map((_, index) => index).filter((index) => !strays.has(index))
   for (let n = 0; n < kept.length;) {
     const i = kept[n]!
@@ -135,6 +164,7 @@ export function drawWalk(
       if (index < row.length - 2 && behind(feet![k]!, feet![last]!)) return
       const way = lineBetween(line, feet![last]!, feet![k]!, along[k]! - along[last]!, isUnseen(points, last, k), breaks)
       const leg: How = way.followed ? 'matched' : 'cut'
+      if (way.detour) detours.push({ leg: drawn.length - 1, way: way.detour.vertices, length: way.detour.length })
       for (const point of way.points) {
         const source = point === feet![last]!.point ? last : point === feet![k]!.point ? k : -1
         emit(point, source, source === last ? arriving : leg)
@@ -153,21 +183,31 @@ export function drawWalk(
     how[k + 1] = 'unseen'
     if (metres(drawn[k]!, drawn[k + 1]!) >= MIN_ROUTE_METERS) unseen.push(k)
   }
-  return { points: drawn, source, how, snapped: snapped.some(Boolean), strayed: strays.size > 0, unseen }
+  // A leg that turns out nobody saw (a stay, or an unseen fix, merged into a foot before it) gets a route, not the line.
+  const cut = detours.filter((detour) => how[detour.leg + 1] !== 'unseen')
+  return { points: drawn, source, how, snapped: snapped.some(Boolean), strayed: strays.size > 0, unseen, detours: cut }
 }
 
 /**
  * The walk as drawn (see drawWalk) with its legs nobody saw along a walking route where there is one
- * (`routes`, by leg, as in `walk.unseen`), and when each point was: a point standing for one of the
+ * (`routes`, by leg, as in `walk.unseen`) and the line followed after all where it was no detour
+ * (`noDetours`, as in `walk.detours`), and when each point was: a point standing for one of the
  * walk's points at that point's time, the rest in between by how far along the way they are.
  */
-export function timedWalk(points: (Point & { time: number })[], walk: DrawnWalk, routes: (Point[] | null)[]): SnappedPoint[] {
+export function timedWalk(
+  points: (Point & { time: number })[],
+  walk: DrawnWalk,
+  routes: (Point[] | null)[],
+  noDetours: boolean[] = [],
+): SnappedPoint[] {
   const timed: { lat: number; lon: number; time: number | null; how: How }[] = []
+  const followed = (k: number) => walk.detours.find((detour, index) => detour.leg === k && noDetours[index])
   walk.points.forEach((point, k) => {
-    const routed = k > 0 && !!routes[walk.unseen.indexOf(k - 1)]
+    const how = k > 0 && routes[walk.unseen.indexOf(k - 1)] ? 'routed' : k > 0 && followed(k - 1) ? 'matched' : walk.how[k]!
     const source = walk.source[k]!
-    timed.push({ lat: point.lat, lon: point.lon, time: source >= 0 ? points[source]!.time : null, how: routed ? 'routed' : walk.how[k]! })
+    timed.push({ lat: point.lat, lon: point.lon, time: source >= 0 ? points[source]!.time : null, how })
     for (const step of routes[walk.unseen.indexOf(k)] ?? []) timed.push({ lat: step.lat, lon: step.lon, time: null, how: 'routed' })
+    for (const step of followed(k)?.way ?? []) timed.push({ lat: step.lat, lon: step.lon, time: null, how: 'matched' })
   })
   // Between two points with times, by distance; before the first or after the last, theirs.
   const along = timed.map(() => 0)
@@ -201,12 +241,14 @@ export function snapAlong(points: Point[], line: Point[]): Point[] | null {
 export function strayCandidates(points: Point[], line: Point[], breaks: ReadonlySet<number> = new Set()): number[][] {
   const feet = feetOnLine(points, line, breaks)
   if (!feet) return []
-  const off = (index: number) => !points[index]!.anchor && !points[index]!.stood && feet[index]!.off > ON_PATH_METERS
+  const off = (index: number) => !points[index]!.anchor && feet[index]!.off > ON_PATH_METERS
   const groups: number[][] = []
   for (let i = 0; i < points.length;) {
     let j = i
     while (j < points.length && off(j)) j++
-    if (j > i && j - i <= STRAY_FIXES) groups.push(points.slice(i, j).map((_, k) => i + k))
+    // Where the dog stood a while, neither it nor the fixes either side of it in the run jumped there.
+    const stood = points.slice(i, j).some((point) => point.stood)
+    if (j > i && j - i <= STRAY_FIXES && !stood) groups.push(points.slice(i, j).map((_, k) => i + k))
     i = Math.max(j, i + 1)
   }
   return groups
@@ -276,7 +318,7 @@ function lineBetween(
   went: number,
   unseen: boolean,
   breaks: ReadonlySet<number> = new Set(),
-): { points: Point[]; followed: boolean } {
+): { points: Point[]; followed: boolean; detour?: { vertices: Point[]; length: number } } {
   const cut = { points: [start.point, end.point], followed: false }
   if (behind(end, start)) return cut
   // Across a break between two of Valhalla's trips: straight, as recorded.
@@ -285,7 +327,11 @@ function lineBetween(
   const way = [start.point, ...vertices, end.point]
   const length = way.slice(1).reduce((sum, point, index) => sum + metres(way[index]!, point), 0)
   // With the later foot, so each fix on the line is a point of it, at the fix's time (see timedWalk).
-  return length > tooLong(went, unseen) ? cut : { points: [...vertices, end.point], followed: true }
+  if (length <= tooLong(went, unseen)) return { points: [...vertices, end.point], followed: true }
+  // A leg nobody saw gets a route of its own (see routeFits); a detour may turn out none (see noDetour).
+  const same = (a: Point, b: Point) => a.lat === b.lat && a.lon === b.lon
+  const between = vertices.filter((vertex) => !same(vertex, start.point) && !same(vertex, end.point))
+  return unseen ? cut : { ...cut, detour: { vertices: between, length } }
 }
 
 /** How long a way between two points `went` metres apart may be before it's a detour. */
@@ -298,6 +344,17 @@ function isUnseen(points: Point[], from: number, to: number): boolean {
   if (points[from]!.anchor || points[to]!.anchor) return true
   for (let k = from + 1; k <= to; k++) if (points[k]!.unseen) return true
   return false
+}
+
+/**
+ * Whether the line cut across as a detour between two feet (`length` long) is no detour after all:
+ * about as long as the walking route between them (`route`, counting the bits from the feet to it),
+ * the shortest way there, and not too far round (see DETOUR_ROUTE_FACTOR).
+ */
+export function noDetour(a: Point, b: Point, route: Point[], length: number): boolean {
+  if (route.length === 0 || length > metres(a, b) * NO_DETOUR_FACTOR) return false
+  const way = route.slice(1).reduce((sum, point, index) => sum + metres(route[index]!, point), 0)
+  return length <= (metres(a, route[0]!) + way + metres(route.at(-1)!, b)) * DETOUR_ROUTE_FACTOR + DETOUR_ROUTE_METERS
 }
 
 /**

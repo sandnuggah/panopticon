@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { MAX_POINTS_PER_WALK, matchableWalks, otherWalks, stayHopId, walkId } from './matching.ts'
+import { MAX_POINTS_PER_WALK, matchableWalks, otherWalks, stayHopId, walkId, walkSignature } from './matching.ts'
 import { DEFAULT_TRAIL_PROFILE } from './segments.ts'
 import type { TrailPiece } from './segments.ts'
 import type { TrailPoint } from './trail.ts'
@@ -63,10 +63,13 @@ describe('matchableWalks', () => {
         fix(121, 2, 10),
       ],
     }
+    const points = matchableWalks([move])[0]!.points
     assert.deepEqual(
-      matchableWalks([move])[0]!.points.map((point) => !!point.stood),
+      points.map((point) => !!point.stood),
       [false, true, false, false, false],
     )
+    // A new version of the walk, to be snapped again.
+    assert.notEqual(walkSignature(points), walkSignature(points.map(({ stood, ...point }) => point)))
   })
 
   test('wandering about without going anywhere is no walk', () => {

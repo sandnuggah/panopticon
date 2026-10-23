@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { drawWalk, routeFits, snapAlong, strayCandidates, strayed, timedWalk, type Point } from './snap.ts'
+import { drawWalk, noDetour, routeFits, snapAlong, strayCandidates, strayed, timedWalk, type Point } from './snap.ts'
 
 // Positions in metres east/north of a start point; the matched line is a path going east, then north.
 const START = { lat: 59.31, lon: 18.07 }
@@ -211,9 +211,20 @@ describe('drawWalk', () => {
     assert.equal(drawWalk(walk, PATH, new Set([2])).snapped, true)
   })
 
-  test('where the dog stood a while is no stray', () => {
+  test('where the dog stood a while is no stray, nor are the fixes either side of it off the line', () => {
     const walk = [at(10, 2), at(40, -3), { ...at(70, -40), stood: true }, at(100, 3), at(130, -4)]
     assert.deepEqual(strayCandidates(walk, PATH), [])
+    const run = [at(0, 2), at(30, -3), at(60, 30), { ...at(70, 32), stood: true }, at(80, 30), at(110, 1), at(140, -2)]
+    assert.deepEqual(strayCandidates(run, PATH), [])
+  })
+
+  test('across a stray left out, how far the dog went is from the fix before it to the one after', () => {
+    // A 100 m loop round a block for a 30 m step; the stray 30 m north would make it 67 m.
+    const line = [at(-100, 0), at(0, 0), at(0, -35), at(30, -35), at(30, 0), at(150, 0)]
+    const walk = [at(-30, 0), at(0, 0), at(15, 30), at(30, 0), at(60, 0)]
+    const drawn = drawWalk(walk, line, new Set([2]))
+    assert.ok(!drawn.points.some((point) => metres(point).join() === '0,-35'), 'cut across, not round')
+    assert.equal(drawn.detours.length, 1)
   })
 
   test('three fixes off the line in a row are no strays', () => {
@@ -224,6 +235,18 @@ describe('drawWalk', () => {
   test('in a park too, a fix may stray: off the line is more than 20 m off it, anywhere', () => {
     const walk = [at(10, 2), at(40, -12), at(70, -30), at(100, 12), at(130, -4)].map((point) => ({ ...point, park: true }))
     assert.deepEqual(strayCandidates(walk, PATH), [[2]])
+  })
+
+  test('a detour is none when about as long as the walking route, and at most twice as far as straight', () => {
+    // 40 m apart; round a block, 75 m. A route of 65 m and of 75 m: the shortest way; of 40 m, a detour.
+    const [a, b] = [at(0, 0), at(40, 0)]
+    const route = (length: number) => [a, at(0, (length - 40) / 2), at(40, (length - 40) / 2), b]
+    assert.equal(noDetour(a, b, route(75), 75), true)
+    assert.equal(noDetour(a, b, route(55), 75), true, 'within 1.2 times plus 10 m')
+    assert.equal(noDetour(a, b, route(50), 75), false)
+    assert.equal(noDetour(a, b, route(40), 75), false)
+    assert.equal(noDetour(a, b, route(100), 100), false, 'over twice as far as straight')
+    assert.equal(noDetour(a, b, [], 80), false, 'no route')
   })
 
   test('a route fits up to twice as far plus 20 m, counting the bits from the points to it', () => {
@@ -258,6 +281,31 @@ describe('how it was drawn, and when', () => {
     const drawn = drawWalk(walk, detour)
     assert.deepEqual(drawn.how, ['recorded', 'matched', 'matched', 'cut', 'matched', 'matched', 'matched'])
     assert.deepEqual(drawn.source, [0, 1, 2, 3, -1, 4, 5], 'the fixes, or their feet, they stand for; -1 for the line')
+  })
+
+  test('a leg nobody saw is no detour: it gets a route', () => {
+    // The second fix's foot falls on the first's, so the leg from it starts at the first, a stay.
+    const line = [at(0, 0), at(27, -18), at(41, 7), at(58, -8)]
+    const fixes: Point[] = [at(0, 0), { ...at(2, 6), unseen: true }, at(24, 14), at(38, 9), at(58, 9)]
+    const drawn = drawWalk(fixes, line)
+    assert.ok(drawn.detours.every((detour) => !drawn.unseen.includes(detour.leg)))
+  })
+
+  test("a detour cut across is followed after all where it's no detour", () => {
+    const detour = [at(0, 0), at(50, 0), at(65, -35), at(80, 0), at(150, 0)]
+    const walk = [at(10, 2), at(30, -3), at(50, 1), at(73, -12), at(95, 2), at(120, -1)]
+    const drawn = drawWalk(walk, detour)
+    assert.equal(drawn.detours.length, 1)
+    assert.ok(Math.abs(drawn.detours[0]!.length - 62) < 1, 'the line round, from foot to foot')
+    assert.deepEqual(drawn.detours[0]!.way.map(metres), [[65, -35]], 'between the feet')
+    const cut = timedWalk(timed(walk), drawn, [], [false])
+    assert.ok(cut.some((point) => point.how === 'cut'))
+    const followed = timedWalk(timed(walk), drawn, [], [true])
+    assert.ok(!followed.some((point) => point.how === 'cut'))
+    assert.ok(
+      followed.some((point) => metres(point).join() === '65,-35' && point.how === 'matched'),
+      'down to the street and back',
+    )
   })
 
   test('a leg nobody saw is unseen, or routed where there was a route', () => {
